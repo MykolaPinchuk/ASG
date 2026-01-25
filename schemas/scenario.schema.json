@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scenario.schema.json",
+  "title": "ASG Scenario (MVP v0)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "startingPlayer", "players", "settings", "map", "initialState"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "startingPlayer": { "$ref": "#/$defs/PlayerId" },
+    "players": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["P1", "P2"],
+      "properties": {
+        "P1": { "$ref": "#/$defs/PlayerDefinition" },
+        "P2": { "$ref": "#/$defs/PlayerDefinition" }
+      }
+    },
+    "settings": { "$ref": "#/$defs/ScenarioSettings" },
+    "map": { "$ref": "#/$defs/MapDefinition" },
+    "initialState": { "$ref": "#/$defs/InitialState" }
+  },
+  "$defs": {
+    "PlayerId": { "type": "string", "enum": ["P1", "P2"] },
+    "Owner": { "type": "string", "enum": ["P1", "P2", "Neutral"] },
+    "NodeId": { "type": "string", "minLength": 1 },
+    "PlayerDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hq"],
+      "properties": { "hq": { "$ref": "#/$defs/NodeId" } }
+    },
+    "ScenarioSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turnCapPlies",
+        "actionBudget",
+        "baseIncome",
+        "reinforceCostPerStrength",
+        "combatVarianceFraction"
+      ],
+      "properties": {
+        "turnCapPlies": { "type": "integer", "minimum": 1 },
+        "actionBudget": { "type": "integer", "minimum": 0 },
+        "baseIncome": { "type": "integer", "minimum": 0 },
+        "reinforceCostPerStrength": { "type": "integer", "minimum": 1 },
+        "combatVarianceFraction": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "MapNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "x", "y", "owner", "supplyYield"],
+      "properties": {
+        "id": { "$ref": "#/$defs/NodeId" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "owner": { "$ref": "#/$defs/Owner" },
+        "supplyYield": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "Edge": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/NodeId" }
+    },
+    "MapDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/MapNode" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/Edge" } }
+      }
+    },
+    "PlayerSupply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["P1", "P2"],
+      "properties": {
+        "P1": { "type": "integer", "minimum": 0 },
+        "P2": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "Forces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["P1", "P2"],
+      "properties": {
+        "P1": { "type": "integer", "minimum": 0 },
+        "P2": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "NodeForces": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/Forces" }
+    },
+    "InitialState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["playerSupply", "nodeForces"],
+      "properties": {
+        "playerSupply": { "$ref": "#/$defs/PlayerSupply" },
+        "nodeForces": { "$ref": "#/$defs/NodeForces" }
+      }
+    }
+  }
+}
+
