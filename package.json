@@ -15,6 +15,8 @@
     "agent:stub": "tsx src/cli/stubAgentServer.ts"
     ,
     "agent:server": "tsx src/cli/agentServer.ts"
+    ,
+    "agent:list-models": "tsx src/cli/listModels.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

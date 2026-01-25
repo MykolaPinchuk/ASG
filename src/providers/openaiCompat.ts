@@ -128,14 +128,36 @@ export async function openAiCompatAct(params: {
 }): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
   const { request, scenario, adjacency, args } = params;
 
-  const baseUrl = args.get("--base-url") ?? process.env.ASG_OPENAI_BASE_URL ?? "";
-  const apiKey = args.get("--api-key") ?? process.env.ASG_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
-  const model = args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? "";
+  const providerName = (args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "openai").toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  const baseUrl =
+    args.get("--base-url") ??
+    process.env[`ASG_${providerName}_BASE_URL`] ??
+    process.env.ASG_OPENAI_BASE_URL ??
+    "";
+  const apiKey =
+    args.get("--api-key") ??
+    process.env[`ASG_${providerName}_API_KEY`] ??
+    process.env.ASG_OPENAI_API_KEY ??
+    process.env.OPENAI_API_KEY ??
+    "";
+  const model =
+    args.get("--model") ??
+    process.env[`ASG_${providerName}_MODEL`] ??
+    process.env.ASG_OPENAI_MODEL ??
+    "";
   const timeoutMs = Number.parseInt(args.get("--timeout-ms") ?? process.env.ASG_OPENAI_TIMEOUT_MS ?? "8000", 10);
   const temperature = Number.parseFloat(args.get("--temperature") ?? process.env.ASG_OPENAI_TEMPERATURE ?? "0.2");
   const maxTokens = Number.parseInt(args.get("--max-tokens") ?? process.env.ASG_OPENAI_MAX_TOKENS ?? "300", 10);
-  const referer = args.get("--referer") ?? process.env.ASG_OPENAI_REFERER ?? "";
-  const title = args.get("--title") ?? process.env.ASG_OPENAI_TITLE ?? "ASG";
+  const referer =
+    args.get("--referer") ??
+    process.env[`ASG_${providerName}_REFERER`] ??
+    process.env.ASG_OPENAI_REFERER ??
+    "";
+  const title =
+    args.get("--title") ??
+    process.env[`ASG_${providerName}_TITLE`] ??
+    process.env.ASG_OPENAI_TITLE ??
+    "ASG";
 
   if (!baseUrl) throw new Error("openai_compat requires --base-url (e.g. https://openrouter.ai/api/v1)");
   if (!apiKey) throw new Error("openai_compat requires --api-key (or ASG_OPENAI_API_KEY/OPENAI_API_KEY)");

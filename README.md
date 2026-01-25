@@ -42,8 +42,16 @@ Run the agent server with `openai_compat` and point it at an OpenAI-compatible e
 Keys stay local (env vars / `secrets/`), never committed.
 
 Example (OpenRouter):
-- `export ASG_OPENAI_API_KEY='...'`
-- `npm run agent:server -- --provider openai_compat --base-url https://openrouter.ai/api/v1 --model openai/gpt-4o-mini`
+- `export ASG_OPENROUTER_API_KEY='...'`
+- `npm run agent:server -- --provider openai_compat --provider-name openrouter --base-url https://openrouter.ai/api/v1 --model <model_id>`
+
+List models from a provider (requires provider access; some endpoints need an API key):
+- `npm run agent:list-models -- --provider openrouter --base-url https://openrouter.ai/api/v1 --format text --limit 50`
+
+Provider-specific env vars (optional convenience):
+- `ASG_OPENROUTER_BASE_URL`, `ASG_OPENROUTER_API_KEY`, `ASG_OPENROUTER_MODEL`
+- `ASG_CHUTES_BASE_URL`, `ASG_CHUTES_API_KEY`, `ASG_CHUTES_MODEL`
+- `ASG_NANOGPT_BASE_URL`, `ASG_NANOGPT_API_KEY`, `ASG_NANOGPT_MODEL`
 
 ## Agent triggers
 - `Onboard` — deterministic onboarding
