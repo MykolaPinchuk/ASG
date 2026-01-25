@@ -32,9 +32,18 @@ Start here (in order):
 The match runner can call an external agent over HTTP (`POST /act`) per `docs/planning/AGENT_API_SPEC.md`.
 
 - Start a local stub agent server (no API keys needed): `npm run agent:stub`
+- Start the full agent server (supports `stub` + `openai_compat`): `npm run agent:server -- --provider stub`
 - Run a match vs the agent:
   - `npm run match -- --seed 1 --p1 greedy --p2 agent --agent-url http://127.0.0.1:8787`
   - Optional: log raw request/response per ply under `runs/`: add `--agent-log-dir runs/agent_io`
+
+### Real LLM (OpenAI-compatible providers)
+Run the agent server with `openai_compat` and point it at an OpenAI-compatible endpoint (e.g. OpenRouter).
+Keys stay local (env vars / `secrets/`), never committed.
+
+Example (OpenRouter):
+- `export ASG_OPENAI_API_KEY='...'`
+- `npm run agent:server -- --provider openai_compat --base-url https://openrouter.ai/api/v1 --model openai/gpt-4o-mini`
 
 ## Agent triggers
 - `Onboard` — deterministic onboarding

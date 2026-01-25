@@ -13,6 +13,8 @@
     "batch": "tsx src/cli/runBatch.ts",
     "report": "tsx src/cli/reportBatch.ts",
     "agent:stub": "tsx src/cli/stubAgentServer.ts"
+    ,
+    "agent:server": "tsx src/cli/agentServer.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

@@ -30,6 +30,7 @@ Keep this file short. Update it only when something important changes.
 - `src/cli/reportBatch.ts` — batch metrics report (`npm run report`).
 - `src/controllers/httpAgentController.ts` — HTTP agent controller (`--p1/--p2 agent` with `--agent-url`).
 - `src/cli/stubAgentServer.ts` — local stub agent (`npm run agent:stub`).
+- `src/cli/agentServer.ts` — agent server with providers (`npm run agent:server`).
 
 ## Local-only directories (ignored)
 - `secrets/` — local credentials (see `secrets/README.md`).
