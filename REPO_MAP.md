@@ -13,6 +13,8 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/MVP_SPEC.md` — normative MVP rules/spec (source of truth).
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.
 - `docs/planning/ROADMAP.md` — post-MVP direction.
+- `docs/adr/0002-v0-stack-and-repo-layout.md` — proposed v0 stack/layout decision.
+- `docs/adr/0003-v0-determinism-and-replay-contract.md` — proposed v0 determinism/replay contract.
 - `scenarios/scenario_01.json` — initial scenario data.
 - `schemas/replay.schema.json` — replay JSON schema.
 - `schemas/agent_api.schema.json` — agent API schema (post-MVP v0).
@@ -33,4 +35,3 @@ Keep this file short. Update it only when something important changes.
 
 ## New important files since last cycle
 - (path) — (purpose)
-

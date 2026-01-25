@@ -14,6 +14,8 @@ v0 setup + planning: repo scaffold is in place; next step is to confirm v0 imple
 - Version branch set: currently on `v0`.
 - Initial setup commit:
   - `b6aeff4` — `agent00: checkpoint(workflow): initial v0 repo scaffold`
+- Planning checkpoint commit:
+  - `877afde` — `agent00: checkpoint(docs): add v0 decision ADRs`
 - Agentic workflow scaffold added:
   - `agents.md`, `business_context.md`, `repo_workflow.md`, `onboarding.md`, `REPO_MAP.md`
   - `.codex/skills/`, `agent_logs/`, `docs/adr/0001-agentic-workflow-protocol.md`
@@ -32,6 +34,7 @@ v0 setup + planning: repo scaffold is in place; next step is to confirm v0 imple
    - `docs/adr/0002-v0-stack-and-repo-layout.md`
    - `docs/adr/0003-v0-determinism-and-replay-contract.md`
 2) Agent01: start MVP v0 implementation (M0/M1) per `docs/planning/IMPLEMENTATION_PLAN.md`.
+3) Agent01: update `agent_logs/current.md` `id:` to `agent01` at the start of the cycle.
 
 ### Open questions
 - None blocking (once ADRs above are approved).
