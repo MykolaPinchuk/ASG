@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ASG Replay Viewer</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #101a33;
+        --text: #e8eefc;
+        --muted: #9fb0d0;
+        --p1: #4ea1ff;
+        --p2: #ff5a73;
+        --neutral: #8c97b2;
+        --edge: rgba(232, 238, 252, 0.18);
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 12px 16px;
+        border-bottom: 1px solid rgba(232, 238, 252, 0.12);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      #controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #controls label {
+        font-size: 12px;
+        color: var(--muted);
+        margin-right: 6px;
+      }
+      #controls select,
+      #controls input[type="file"] {
+        font-size: 12px;
+        color: var(--text);
+      }
+      #layout {
+        height: calc(100% - 50px);
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 12px;
+        padding: 12px;
+        box-sizing: border-box;
+      }
+      #mapWrap {
+        background: var(--panel);
+        border: 1px solid rgba(232, 238, 252, 0.12);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      #map {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #side {
+        background: var(--panel);
+        border: 1px solid rgba(232, 238, 252, 0.12);
+        border-radius: 10px;
+        padding: 10px;
+        overflow: auto;
+      }
+      .block {
+        margin-bottom: 12px;
+      }
+      .block h2 {
+        margin: 0 0 6px 0;
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid rgba(232, 238, 252, 0.16);
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>ASG Replay Viewer</h1>
+      <div id="controls">
+        <input id="fileInput" type="file" accept="application/json" />
+        <span class="pill" id="status">No replay loaded</span>
+        <div>
+          <label for="viewMode">View</label>
+          <select id="viewMode">
+            <option value="Omni">Omni</option>
+            <option value="P1">P1 POV</option>
+            <option value="P2">P2 POV</option>
+          </select>
+        </div>
+        <div>
+          <label for="timeMode">State</label>
+          <select id="timeMode">
+            <option value="after">After</option>
+            <option value="before">Before</option>
+          </select>
+        </div>
+        <div style="min-width: 320px">
+          <input id="turnSlider" type="range" min="-1" max="-1" value="-1" step="1" style="width: 100%" />
+          <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--muted)">
+            <span>Start</span>
+            <span id="turnLabel">—</span>
+            <span>End</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div id="layout">
+      <div id="mapWrap"><svg id="map" viewBox="0 0 800 600"></svg></div>
+      <div id="side">
+        <div class="block">
+          <h2>Turn</h2>
+          <pre id="turnInfo">Load a replay JSON to begin.</pre>
+        </div>
+        <div class="block">
+          <h2>Rationale</h2>
+          <pre id="rationale">—</pre>
+        </div>
+        <div class="block">
+          <h2>Actions</h2>
+          <pre id="actions">—</pre>
+        </div>
+        <div class="block">
+          <h2>Events</h2>
+          <pre id="events">—</pre>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      /** @type {any | null} */
+      let replay = null;
+      /** @type {Record<string, any> | null} */
+      let nodeEls = null;
+
+      const fileInput = document.getElementById("fileInput");
+      const statusEl = document.getElementById("status");
+      const slider = document.getElementById("turnSlider");
+      const turnLabel = document.getElementById("turnLabel");
+      const viewMode = document.getElementById("viewMode");
+      const timeMode = document.getElementById("timeMode");
+
+      const turnInfo = document.getElementById("turnInfo");
+      const rationale = document.getElementById("rationale");
+      const actions = document.getElementById("actions");
+      const events = document.getElementById("events");
+
+      const svg = document.getElementById("map");
+
+      function ownerColor(owner) {
+        if (owner === "P1") return getComputedStyle(document.documentElement).getPropertyValue("--p1");
+        if (owner === "P2") return getComputedStyle(document.documentElement).getPropertyValue("--p2");
+        return getComputedStyle(document.documentElement).getPropertyValue("--neutral");
+      }
+
+      function clearSvg() {
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+      }
+
+      function buildMap() {
+        clearSvg();
+        nodeEls = {};
+
+        const nodes = replay.scenario.map.nodes;
+        const edges = replay.scenario.map.edges;
+
+        const xs = nodes.map((n) => n.x);
+        const ys = nodes.map((n) => n.y);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        const pad = 60;
+
+        const w = 800;
+        const h = 600;
+        const spanX = Math.max(1, maxX - minX);
+        const spanY = Math.max(1, maxY - minY);
+        const scale = Math.min((w - 2 * pad) / spanX, (h - 2 * pad) / spanY);
+
+        const pos = (x, y) => {
+          const sx = pad + (x - minX) * scale;
+          const sy = pad + (maxY - y) * scale;
+          return { x: sx, y: sy };
+        };
+
+        // Edges
+        for (const [a, b] of edges) {
+          const na = nodes.find((n) => n.id === a);
+          const nb = nodes.find((n) => n.id === b);
+          if (!na || !nb) continue;
+          const pa = pos(na.x, na.y);
+          const pb = pos(nb.x, nb.y);
+
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", pa.x);
+          line.setAttribute("y1", pa.y);
+          line.setAttribute("x2", pb.x);
+          line.setAttribute("y2", pb.y);
+          line.setAttribute("stroke", getComputedStyle(document.documentElement).getPropertyValue("--edge"));
+          line.setAttribute("stroke-width", "2");
+          svg.appendChild(line);
+        }
+
+        // Nodes
+        for (const n of nodes) {
+          const p = pos(n.x, n.y);
+          const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+
+          const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          circle.setAttribute("cx", p.x);
+          circle.setAttribute("cy", p.y);
+          circle.setAttribute("r", "18");
+          circle.setAttribute("fill", ownerColor(n.owner));
+          circle.setAttribute("stroke", "rgba(232,238,252,0.25)");
+          circle.setAttribute("stroke-width", "2");
+          g.appendChild(circle);
+
+          const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          label.setAttribute("x", p.x);
+          label.setAttribute("y", p.y - 24);
+          label.setAttribute("text-anchor", "middle");
+          label.setAttribute("fill", "rgba(232,238,252,0.85)");
+          label.setAttribute("font-size", "11");
+          label.textContent = n.id;
+          g.appendChild(label);
+
+          const forces = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          forces.setAttribute("x", p.x);
+          forces.setAttribute("y", p.y + 5);
+          forces.setAttribute("text-anchor", "middle");
+          forces.setAttribute("fill", "rgba(11,16,32,0.95)");
+          forces.setAttribute("font-size", "12");
+          forces.setAttribute("font-weight", "700");
+          forces.textContent = "0|0";
+          g.appendChild(forces);
+
+          const yieldText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          yieldText.setAttribute("x", p.x);
+          yieldText.setAttribute("y", p.y + 26);
+          yieldText.setAttribute("text-anchor", "middle");
+          yieldText.setAttribute("fill", "rgba(232,238,252,0.7)");
+          yieldText.setAttribute("font-size", "11");
+          yieldText.textContent = n.supplyYield > 0 ? `+${n.supplyYield}` : "";
+          g.appendChild(yieldText);
+
+          svg.appendChild(g);
+          nodeEls[n.id] = { circle, forces, yieldText };
+        }
+      }
+
+      function getFrame(index) {
+        if (!replay) return null;
+        if (index < 0) {
+          const first = replay.turns[0];
+          return { kind: "before", turn: null, viewState: first?.observations?.P1 ?? null };
+        }
+        const turn = replay.turns[index];
+        if (!turn) return null;
+
+        const vm = viewMode.value;
+        const tm = timeMode.value;
+
+        if (tm === "before") {
+          if (vm === "P1") return { kind: "before", turn, viewState: turn.observations.P1 };
+          if (vm === "P2") return { kind: "before", turn, viewState: turn.observations.P2 };
+          return { kind: "before", turn, viewState: turn.observations.P1 };
+        }
+
+        // After: MVP uses omniscient stateAfter for all view modes.
+        return { kind: "after", turn, viewState: turn.stateAfter };
+      }
+
+      function render(index) {
+        const frame = getFrame(index);
+        if (!frame || !frame.viewState || !nodeEls) return;
+
+        const nodes = frame.viewState.nodes;
+        for (const [id, el] of Object.entries(nodeEls)) {
+          const n = nodes[id];
+          if (!n) continue;
+          el.circle.setAttribute("fill", ownerColor(n.owner));
+          const p1 = n.forces?.P1 ?? 0;
+          const p2 = n.forces?.P2 ?? 0;
+          el.forces.textContent = `${p1}|${p2}`;
+        }
+
+        if (index < 0) {
+          turnInfo.textContent = `Initial state (ply 0)`;
+          rationale.textContent = "—";
+          actions.textContent = "—";
+          events.textContent = "—";
+          turnLabel.textContent = "Start";
+          return;
+        }
+
+        const t = frame.turn;
+        turnLabel.textContent = `Ply ${t.ply} (${t.player})`;
+
+        const supplyLine = `Supply: P1=${frame.viewState.supplies?.P1 ?? "?"} P2=${frame.viewState.supplies?.P2 ?? "?"}`;
+        turnInfo.textContent = `${turnLabel.textContent}\n${supplyLine}\nResult: ${replay.result.type === "win" ? `WIN ${replay.result.winner}` : "DRAW"}`;
+
+        rationale.textContent = t.rationaleText ?? "—";
+        actions.textContent = JSON.stringify(t.actions, null, 2);
+        events.textContent = JSON.stringify(t.events, null, 2);
+      }
+
+      function setReplay(r) {
+        replay = r;
+        statusEl.textContent = `${replay.scenario.name} (${replay.turns.length} plies)`;
+        slider.min = "-1";
+        slider.max = String(replay.turns.length - 1);
+        slider.value = "-1";
+        buildMap();
+        render(-1);
+      }
+
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const r = JSON.parse(text);
+          setReplay(r);
+        } catch (e) {
+          statusEl.textContent = "Failed to load replay";
+          console.error(e);
+        }
+      });
+
+      for (const el of [slider, viewMode, timeMode]) {
+        el.addEventListener("input", () => render(Number.parseInt(slider.value, 10)));
+      }
+    </script>
+  </body>
+</html>
+

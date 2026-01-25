@@ -1,0 +1,8 @@
+# Used by context-manager-1/sync_context.py to generate `agents.md` and `business_context.md`.
+
+instructions:
+  - global
+  - codex-workflow
+business:
+  - biz-global
+

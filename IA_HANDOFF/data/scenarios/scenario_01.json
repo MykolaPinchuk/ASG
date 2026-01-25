@@ -1,0 +1,59 @@
+{
+  "id": "scenario_01",
+  "name": "Two Lanes, Two Resources",
+  "startingPlayer": "P1",
+  "players": {
+    "P1": { "hq": "p1_hq" },
+    "P2": { "hq": "p2_hq" }
+  },
+  "settings": {
+    "turnCapPlies": 30,
+    "actionBudget": 4,
+    "baseIncome": 2,
+    "reinforceCostPerStrength": 1,
+    "combatVarianceFraction": 0.35
+  },
+  "map": {
+    "nodes": [
+      { "id": "p1_hq", "x": -6, "y": 0, "owner": "P1", "supplyYield": 0 },
+      { "id": "p1_bridge", "x": -4, "y": 0, "owner": "P1", "supplyYield": 0 },
+      { "id": "p1_n", "x": -4, "y": 2, "owner": "P1", "supplyYield": 0 },
+      { "id": "p1_s", "x": -4, "y": -2, "owner": "P1", "supplyYield": 0 },
+
+      { "id": "p2_hq", "x": 6, "y": 0, "owner": "P2", "supplyYield": 0 },
+      { "id": "p2_bridge", "x": 4, "y": 0, "owner": "P2", "supplyYield": 0 },
+      { "id": "p2_n", "x": 4, "y": 2, "owner": "P2", "supplyYield": 0 },
+      { "id": "p2_s", "x": 4, "y": -2, "owner": "P2", "supplyYield": 0 },
+
+      { "id": "mid_n", "x": 0, "y": 2, "owner": "Neutral", "supplyYield": 0 },
+      { "id": "mid_s", "x": 0, "y": -2, "owner": "Neutral", "supplyYield": 0 },
+      { "id": "res_n", "x": 0, "y": 4, "owner": "Neutral", "supplyYield": 2 },
+      { "id": "res_s", "x": 0, "y": -4, "owner": "Neutral", "supplyYield": 2 }
+    ],
+    "edges": [
+      ["p1_hq", "p1_bridge"],
+      ["p1_bridge", "p1_n"],
+      ["p1_bridge", "p1_s"],
+
+      ["p2_hq", "p2_bridge"],
+      ["p2_bridge", "p2_n"],
+      ["p2_bridge", "p2_s"],
+
+      ["p1_n", "mid_n"],
+      ["p2_n", "mid_n"],
+      ["mid_n", "res_n"],
+
+      ["p1_s", "mid_s"],
+      ["p2_s", "mid_s"],
+      ["mid_s", "res_s"]
+    ]
+  },
+  "initialState": {
+    "playerSupply": { "P1": 0, "P2": 0 },
+    "nodeForces": {
+      "p1_hq": { "P1": 10, "P2": 0 },
+      "p2_hq": { "P1": 0, "P2": 10 }
+    }
+  }
+}
+

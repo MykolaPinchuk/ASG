@@ -1,0 +1,371 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "replay.schema.json",
+  "title": "ASG Replay (MVP v0)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "createdAt", "seed", "scenario", "turns", "result"],
+  "properties": {
+    "version": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "seed": { "type": "integer" },
+    "scenario": { "$ref": "#/$defs/ScenarioDefinition" },
+    "turns": { "type": "array", "items": { "$ref": "#/$defs/TurnRecord" } },
+    "result": { "$ref": "#/$defs/GameResult" }
+  },
+  "$defs": {
+    "PlayerId": { "type": "string", "enum": ["P1", "P2"] },
+    "Owner": { "type": "string", "enum": ["P1", "P2", "Neutral"] },
+    "LocationId": { "type": "string", "minLength": 1 },
+
+    "Forces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["P1", "P2"],
+      "properties": {
+        "P1": { "type": "integer", "minimum": 0 },
+        "P2": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "Supply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["P1", "P2"],
+      "properties": {
+        "P1": { "type": "integer", "minimum": 0 },
+        "P2": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "GameSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turnCapPlies",
+        "actionBudget",
+        "baseIncome",
+        "reinforceCostPerStrength",
+        "combatVarianceFraction"
+      ],
+      "properties": {
+        "turnCapPlies": { "type": "integer", "minimum": 1 },
+        "actionBudget": { "type": "integer", "minimum": 0 },
+        "baseIncome": { "type": "integer", "minimum": 0 },
+        "reinforceCostPerStrength": { "type": "integer", "minimum": 1 },
+        "combatVarianceFraction": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+
+    "ScenarioPlayerDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hq"],
+      "properties": { "hq": { "$ref": "#/$defs/LocationId" } }
+    },
+
+    "ScenarioNodeDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "x", "y", "owner", "supplyYield"],
+      "properties": {
+        "id": { "$ref": "#/$defs/LocationId" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "owner": { "$ref": "#/$defs/Owner" },
+        "supplyYield": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "ScenarioEdge": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": [{ "$ref": "#/$defs/LocationId" }, { "$ref": "#/$defs/LocationId" }]
+    },
+
+    "ScenarioMapDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ScenarioNodeDefinition" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/ScenarioEdge" } }
+      }
+    },
+
+    "ScenarioInitialState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["playerSupply", "nodeForces"],
+      "properties": {
+        "playerSupply": { "$ref": "#/$defs/Supply" },
+        "nodeForces": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/Forces" }
+        }
+      }
+    },
+
+    "ScenarioDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "startingPlayer", "players", "settings", "map", "initialState"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "startingPlayer": { "$ref": "#/$defs/PlayerId" },
+        "players": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["P1", "P2"],
+          "properties": {
+            "P1": { "$ref": "#/$defs/ScenarioPlayerDefinition" },
+            "P2": { "$ref": "#/$defs/ScenarioPlayerDefinition" }
+          }
+        },
+        "settings": { "$ref": "#/$defs/GameSettings" },
+        "map": { "$ref": "#/$defs/ScenarioMapDefinition" },
+        "initialState": { "$ref": "#/$defs/ScenarioInitialState" }
+      }
+    },
+
+    "NodeState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "x", "y", "owner", "supplyYield", "forces"],
+      "properties": {
+        "id": { "$ref": "#/$defs/LocationId" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "owner": { "$ref": "#/$defs/Owner" },
+        "supplyYield": { "type": "integer", "minimum": 0 },
+        "forces": { "$ref": "#/$defs/Forces" }
+      }
+    },
+
+    "GameState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenarioId", "ply", "activePlayer", "supplies", "nodes"],
+      "properties": {
+        "scenarioId": { "type": "string", "minLength": 1 },
+        "ply": { "type": "integer", "minimum": 0 },
+        "activePlayer": { "$ref": "#/$defs/PlayerId" },
+        "supplies": { "$ref": "#/$defs/Supply" },
+        "nodes": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/NodeState" }
+        }
+      }
+    },
+
+    "Observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["player", "ply", "activePlayer", "supplies", "nodes"],
+      "properties": {
+        "player": { "$ref": "#/$defs/PlayerId" },
+        "ply": { "type": "integer", "minimum": 0 },
+        "activePlayer": { "$ref": "#/$defs/PlayerId" },
+        "supplies": { "$ref": "#/$defs/Supply" },
+        "nodes": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/NodeState" }
+        }
+      }
+    },
+
+    "Action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": { "type": { "const": "pass" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "amount"],
+          "properties": {
+            "type": { "const": "reinforce" },
+            "amount": { "type": "integer", "minimum": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "from", "to", "amount"],
+          "properties": {
+            "type": { "const": "move" },
+            "from": { "$ref": "#/$defs/LocationId" },
+            "to": { "$ref": "#/$defs/LocationId" },
+            "amount": { "type": "integer", "minimum": 1 }
+          }
+        }
+      ]
+    },
+
+    "GameResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "winner", "reason"],
+          "properties": {
+            "type": { "const": "win" },
+            "winner": { "$ref": "#/$defs/PlayerId" },
+            "reason": { "const": "hq_captured" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "reason"],
+          "properties": {
+            "type": { "const": "draw" },
+            "reason": { "const": "turn_cap" }
+          }
+        }
+      ]
+    },
+
+    "Event": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "player", "amount", "supplyAfter"],
+          "properties": {
+            "type": { "const": "income" },
+            "player": { "$ref": "#/$defs/PlayerId" },
+            "amount": { "type": "integer" },
+            "supplyAfter": { "type": "integer", "minimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "player", "action", "message"],
+          "properties": {
+            "type": { "const": "invalid_action" },
+            "player": { "$ref": "#/$defs/PlayerId" },
+            "action": { "$ref": "#/$defs/Action" },
+            "message": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "player", "location", "amount", "supplyAfter", "strengthAfter"],
+          "properties": {
+            "type": { "const": "reinforce" },
+            "player": { "$ref": "#/$defs/PlayerId" },
+            "location": { "$ref": "#/$defs/LocationId" },
+            "amount": { "type": "integer", "minimum": 1 },
+            "supplyAfter": { "type": "integer", "minimum": 0 },
+            "strengthAfter": { "type": "integer", "minimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "player",
+            "from",
+            "to",
+            "amount",
+            "fromStrengthAfter",
+            "toStrengthAfter"
+          ],
+          "properties": {
+            "type": { "const": "move" },
+            "player": { "$ref": "#/$defs/PlayerId" },
+            "from": { "$ref": "#/$defs/LocationId" },
+            "to": { "$ref": "#/$defs/LocationId" },
+            "amount": { "type": "integer", "minimum": 1 },
+            "fromStrengthAfter": { "type": "integer", "minimum": 0 },
+            "toStrengthAfter": { "type": "integer", "minimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "location",
+            "attacker",
+            "defender",
+            "attackerStrengthBefore",
+            "defenderStrengthBefore",
+            "attackerWinProb",
+            "varianceBound",
+            "noise",
+            "delta",
+            "winner",
+            "winnerStrengthAfter"
+          ],
+          "properties": {
+            "type": { "const": "combat" },
+            "location": { "$ref": "#/$defs/LocationId" },
+            "attacker": { "$ref": "#/$defs/PlayerId" },
+            "defender": { "$ref": "#/$defs/PlayerId" },
+            "attackerStrengthBefore": { "type": "integer", "minimum": 1 },
+            "defenderStrengthBefore": { "type": "integer", "minimum": 1 },
+            "attackerWinProb": { "type": "number", "minimum": 0, "maximum": 1 },
+            "varianceBound": { "type": "integer", "minimum": 1 },
+            "noise": { "type": "integer" },
+            "delta": { "type": "integer" },
+            "winner": { "$ref": "#/$defs/PlayerId" },
+            "winnerStrengthAfter": { "type": "integer", "minimum": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "location", "newOwner"],
+          "properties": {
+            "type": { "const": "capture" },
+            "location": { "$ref": "#/$defs/LocationId" },
+            "newOwner": { "$ref": "#/$defs/Owner" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "result"],
+          "properties": {
+            "type": { "const": "game_end" },
+            "result": { "$ref": "#/$defs/GameResult" }
+          }
+        }
+      ]
+    },
+
+    "TurnRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ply", "player", "observations", "actions", "events", "stateAfter"],
+      "properties": {
+        "ply": { "type": "integer", "minimum": 0 },
+        "player": { "$ref": "#/$defs/PlayerId" },
+        "observations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["P1", "P2"],
+          "properties": {
+            "P1": { "$ref": "#/$defs/Observation" },
+            "P2": { "$ref": "#/$defs/Observation" }
+          }
+        },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
+        "rationaleText": { "type": "string" },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/Event" } },
+        "stateAfter": { "$ref": "#/$defs/GameState" }
+      }
+    }
+  }
+}
+

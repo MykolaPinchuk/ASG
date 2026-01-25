@@ -1,0 +1,44 @@
+# Node
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+
+# Secrets (never commit)
+.env
+.envrc
+.direnv/
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Repo-local secrets (never commit)
+secrets/**
+!secrets/
+!secrets/README.md
+
+# Runs / artifacts (never commit)
+runs/**
+!runs/**/
+!runs/**/summary.md
+!runs/**/report.md
+artifacts/
+outputs/
+tmp/
+
+# Game outputs (default: keep out of git)
+replays/**

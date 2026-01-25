@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent_api.schema.json",
+  "title": "ASG Agent API (v0)",
+  "$defs": {
+    "PlayerId": { "type": "string", "enum": ["P1", "P2"] },
+    "Action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": { "type": { "const": "pass" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "amount"],
+          "properties": {
+            "type": { "const": "reinforce" },
+            "amount": { "type": "integer", "minimum": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "from", "to", "amount"],
+          "properties": {
+            "type": { "const": "move" },
+            "from": { "type": "string", "minLength": 1 },
+            "to": { "type": "string", "minLength": 1 },
+            "amount": { "type": "integer", "minimum": 1 }
+          }
+        }
+      ]
+    },
+    "AgentRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api_version", "match_id", "player", "scenario_id", "ply", "action_budget", "observation"],
+      "properties": {
+        "api_version": { "type": "string", "minLength": 1 },
+        "match_id": { "type": "string", "minLength": 1 },
+        "player": { "$ref": "#/$defs/PlayerId" },
+        "scenario_id": { "type": "string", "minLength": 1 },
+        "ply": { "type": "integer", "minimum": 0 },
+        "action_budget": { "type": "integer", "minimum": 0 },
+        "observation": { "type": "object" }
+      }
+    },
+    "AgentResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api_version", "actions"],
+      "properties": {
+        "api_version": { "type": "string", "minLength": 1 },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
+        "rationale_text": { "type": "string" }
+      }
+    }
+  },
+  "oneOf": [{ "$ref": "#/$defs/AgentRequest" }, { "$ref": "#/$defs/AgentResponse" }]
+}
+
