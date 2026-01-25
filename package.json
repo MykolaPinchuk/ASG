@@ -8,7 +8,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "validate:scenario": "tsx src/cli/validateScenario.ts scenarios/scenario_01.json",
     "match": "tsx src/cli/runMatch.ts",
-    "validate:replay": "tsx src/cli/validateReplay.ts"
+    "validate:replay": "tsx src/cli/validateReplay.ts",
+    "check:determinism": "tsx src/cli/checkDeterminism.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

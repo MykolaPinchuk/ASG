@@ -19,6 +19,13 @@ Start here (in order):
 - `schemas/replay.schema.json` — replay validation schema
 - `schemas/agent_api.schema.json` — agent HTTP wire schema (future)
 
+## Quickstart (run + watch)
+- Install deps: `npm install`
+- Run a match (writes JSON under `replays/`): `npm run match -- --seed 1 --p1 greedy --p2 random`
+- Validate replay: `npm run validate:replay -- replays/<file>.json`
+- Check determinism (same seed/actions ⇒ same replay, ignoring `createdAt`): `npm run check:determinism -- --seed 1 --p1 greedy --p2 random`
+- Open the viewer: `viewer/index.html` and load the replay file via file picker (or drag/drop).
+
 ## Agent triggers
 - `Onboard` — deterministic onboarding
 - `checkpoint` — safe checkpoint commit
@@ -27,4 +34,3 @@ Start here (in order):
 ## Context manager integration
 To generate `agents.md` and `business_context.md`:
 - `python /path/to/context-manager-1/sync_context.py --repo /path/to/ASG`
-
