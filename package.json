@@ -6,13 +6,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "validate:scenario": "tsx src/cli/validateScenario.ts scenarios/scenario_01.json"
+    "validate:scenario": "tsx src/cli/validateScenario.ts scenarios/scenario_01.json",
+    "match": "tsx src/cli/runMatch.ts",
+    "validate:replay": "tsx src/cli/validateReplay.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",
     "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }
-

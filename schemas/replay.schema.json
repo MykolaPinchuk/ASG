@@ -81,7 +81,8 @@
       "type": "array",
       "minItems": 2,
       "maxItems": 2,
-      "items": [{ "$ref": "#/$defs/LocationId" }, { "$ref": "#/$defs/LocationId" }]
+      "prefixItems": [{ "$ref": "#/$defs/LocationId" }, { "$ref": "#/$defs/LocationId" }],
+      "items": false
     },
 
     "ScenarioMapDefinition": {
@@ -368,4 +369,3 @@
     }
   }
 }
-

@@ -1,4 +1,5 @@
 import * as Ajv2020Module from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
 import { readFile } from "node:fs/promises";
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -8,6 +9,7 @@ const ajv = new Ajv2020Module.Ajv2020({
   strict: true,
   validateSchema: true,
 });
+(addFormats as unknown as (ajvInstance: unknown) => void)(ajv);
 
 export async function validateJsonFileWithSchema<T>(
   jsonPath: string,
