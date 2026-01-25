@@ -7,9 +7,9 @@
     "P2": { "hq": "p2_hq" }
   },
   "settings": {
-    "turnCapPlies": 30,
-    "actionBudget": 4,
-    "baseIncome": 2,
+    "turnCapPlies": 60,
+    "actionBudget": 6,
+    "baseIncome": 3,
     "reinforceCostPerStrength": 1,
     "combatVarianceFraction": 0.35
   },
@@ -45,7 +45,8 @@
 
       ["p1_s", "mid_s"],
       ["p2_s", "mid_s"],
-      ["mid_s", "res_s"]
+      ["mid_s", "res_s"],
+      ["mid_n", "mid_s"]
     ]
   },
   "initialState": {
@@ -56,4 +57,3 @@
     }
   }
 }
-
