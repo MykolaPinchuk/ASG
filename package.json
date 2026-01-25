@@ -10,7 +10,9 @@
     "match": "tsx src/cli/runMatch.ts",
     "validate:replay": "tsx src/cli/validateReplay.ts",
     "check:determinism": "tsx src/cli/checkDeterminism.ts",
-    "batch": "tsx src/cli/runBatch.ts"
+    "batch": "tsx src/cli/runBatch.ts",
+    "report": "tsx src/cli/reportBatch.ts",
+    "agent:stub": "tsx src/cli/stubAgentServer.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

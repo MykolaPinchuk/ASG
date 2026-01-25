@@ -15,6 +15,7 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/ROADMAP.md` — post-MVP direction.
 - `docs/adr/0002-v0-stack-and-repo-layout.md` — proposed v0 stack/layout decision.
 - `docs/adr/0003-v0-determinism-and-replay-contract.md` — proposed v0 determinism/replay contract.
+- `viewer/index.html` — replay viewer (load `replays/*.json`).
 - `scenarios/scenario_01.json` — initial scenario data.
 - `schemas/replay.schema.json` — replay JSON schema.
 - `schemas/agent_api.schema.json` — agent API schema (post-MVP v0).
@@ -26,6 +27,9 @@ Keep this file short. Update it only when something important changes.
 
 ## Utility scripts
 - `scripts/sanitize_runs_markdown.py` — replace embedded images in `runs/**/{summary,report}.md` with links.
+- `src/cli/reportBatch.ts` — batch metrics report (`npm run report`).
+- `src/controllers/httpAgentController.ts` — HTTP agent controller (`--p1/--p2 agent` with `--agent-url`).
+- `src/cli/stubAgentServer.ts` — local stub agent (`npm run agent:stub`).
 
 ## Local-only directories (ignored)
 - `secrets/` — local credentials (see `secrets/README.md`).

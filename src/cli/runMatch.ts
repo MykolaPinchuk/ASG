@@ -5,10 +5,11 @@ import { createInitialState } from "../game/engine.js";
 import { runMatch } from "../game/match.js";
 import { GreedyBot } from "../controllers/greedyBot.js";
 import { RandomBot } from "../controllers/randomBot.js";
+import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import type { Controller } from "../controllers/controller.js";
 
-type ControllerName = "greedy" | "random";
+type ControllerName = "greedy" | "random" | "agent";
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -31,8 +32,30 @@ function controllerFromName(params: {
   seed: number;
   adjacency: Record<string, string[]>;
   scenario: Parameters<typeof createAdjacency>[0];
+  agent?: {
+    url: string;
+    timeoutMs: number;
+    apiVersion: string;
+    matchId: string;
+    logDir?: string;
+  };
+  player: "P1" | "P2";
 }): Controller {
   if (params.name === "random") return new RandomBot({ seed: params.seed, adjacency: params.adjacency, scenario: params.scenario });
+  if (params.name === "agent") {
+    if (!params.agent?.url) throw new Error("Controller=agent requires --agent-url");
+    return new HttpAgentController({
+      url: params.agent.url,
+      apiVersion: params.agent.apiVersion,
+      matchId: params.agent.matchId,
+      scenarioId: params.scenario.id,
+      player: params.player,
+      actionBudget: params.scenario.settings.actionBudget,
+      timeoutMs: params.agent.timeoutMs,
+      maxResponseBytes: 256_000,
+      logDir: params.agent.logDir,
+    });
+  }
   return new GreedyBot({ adjacency: params.adjacency, scenario: params.scenario });
 }
 
@@ -43,6 +66,10 @@ async function main() {
   const p1 = (args.get("--p1") ?? "greedy") as ControllerName;
   const p2 = (args.get("--p2") ?? "greedy") as ControllerName;
   const seed = Number.parseInt(args.get("--seed") ?? "1", 10);
+  const agentUrl = args.get("--agent-url");
+  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "2000", 10);
+  const agentApiVersion = args.get("--agent-api-version") ?? "0.1";
+  const agentLogDir = args.get("--agent-log-dir") ?? undefined;
 
   const scenario = await loadScenarioFromFile(scenarioPath);
   const adjacency = createAdjacency(scenario);
@@ -50,9 +77,25 @@ async function main() {
 
   createInitialState(ctx);
 
+  const matchId = args.get("--match-id") ?? `${scenario.id}_seed${seed}`;
+
   const controllers: Record<"P1" | "P2", Controller> = {
-    P1: controllerFromName({ name: p1, seed: seed + 101, adjacency, scenario }),
-    P2: controllerFromName({ name: p2, seed: seed + 202, adjacency, scenario }),
+    P1: controllerFromName({
+      name: p1,
+      seed: seed + 101,
+      adjacency,
+      scenario,
+      agent: agentUrl ? { url: agentUrl, timeoutMs: agentTimeoutMs, apiVersion: agentApiVersion, matchId, logDir: agentLogDir } : undefined,
+      player: "P1",
+    }),
+    P2: controllerFromName({
+      name: p2,
+      seed: seed + 202,
+      adjacency,
+      scenario,
+      agent: agentUrl ? { url: agentUrl, timeoutMs: agentTimeoutMs, apiVersion: agentApiVersion, matchId, logDir: agentLogDir } : undefined,
+      player: "P2",
+    }),
   };
 
   const replay = await runMatch({ ctx, controllers, seed });
@@ -72,4 +115,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-

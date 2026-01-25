@@ -24,7 +24,17 @@ Start here (in order):
 - Run a match (writes JSON under `replays/`): `npm run match -- --seed 1 --p1 greedy --p2 random`
 - Validate replay: `npm run validate:replay -- replays/<file>.json`
 - Check determinism (same seed/actions ⇒ same replay, ignoring `createdAt`): `npm run check:determinism -- --seed 1 --p1 greedy --p2 random`
+- Batch run (quick win/draw rate glance): `npm run batch -- --start 1 --count 20 --p1 greedy --p2 greedy`
+- Batch report (more metrics): `npm run report -- --start 1 --count 50 --p1 greedy --p2 greedy --format text`
 - Open the viewer: `viewer/index.html` and load the replay file via file picker (or drag/drop).
+
+## Agent integration (HTTP)
+The match runner can call an external agent over HTTP (`POST /act`) per `docs/planning/AGENT_API_SPEC.md`.
+
+- Start a local stub agent server (no API keys needed): `npm run agent:stub`
+- Run a match vs the agent:
+  - `npm run match -- --seed 1 --p1 greedy --p2 agent --agent-url http://127.0.0.1:8787`
+  - Optional: log raw request/response per ply under `runs/`: add `--agent-log-dir runs/agent_io`
 
 ## Agent triggers
 - `Onboard` — deterministic onboarding

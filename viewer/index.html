@@ -204,6 +204,31 @@
         color: rgba(232, 238, 252, 0.95);
         margin-bottom: 6px;
       }
+      #tooltip {
+        position: absolute;
+        display: none;
+        pointer-events: none;
+        z-index: 5;
+        background: rgba(11, 16, 32, 0.92);
+        border: 1px solid rgba(232, 238, 252, 0.16);
+        border-radius: 10px;
+        padding: 8px 10px;
+        max-width: 320px;
+        color: rgba(232, 238, 252, 0.92);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      }
+      #tooltipTitle {
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      #tooltipBody {
+        font-size: 12px;
+        line-height: 1.3;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: rgba(232, 238, 252, 0.86);
+      }
       .row {
         display: flex;
         align-items: center;
@@ -225,6 +250,17 @@
         <input id="fileInput" type="file" accept="application/json" />
         <span class="pill" id="status">No replay loaded</span>
         <button id="helpBtn" title="Toggle explanation panel">Help</button>
+        <button id="playBtn" title="Autoplay (Space)">Play</button>
+        <div class="row">
+          <label for="speed">Speed</label>
+          <select id="speed">
+            <option value="0.25">0.25×</option>
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </div>
 
         <div class="row">
           <label for="viewMode">View</label>
@@ -263,6 +299,10 @@
     <div id="layout">
       <div id="mapWrap">
         <div id="dropHint">Drop a replay JSON here</div>
+        <div id="tooltip">
+          <div id="tooltipTitle"></div>
+          <div id="tooltipBody"></div>
+        </div>
         <div class="mapLegend" id="mapLegend" style="display: none">
           <div class="mapLegendTitle">Legend</div>
           <div class="legendRow">
@@ -347,6 +387,11 @@
       const helpBtn = document.getElementById("helpBtn");
       const helpBlock = document.getElementById("helpBlock");
       const mapLegend = document.getElementById("mapLegend");
+      const playBtn = document.getElementById("playBtn");
+      const speedSelect = document.getElementById("speed");
+      const tooltip = document.getElementById("tooltip");
+      const tooltipTitle = document.getElementById("tooltipTitle");
+      const tooltipBody = document.getElementById("tooltipBody");
 
       const turnInfo = document.getElementById("turnInfo");
       const nodeInfo = document.getElementById("nodeInfo");
@@ -355,6 +400,9 @@
       const events = document.getElementById("events");
 
       const svg = document.getElementById("map");
+      const mapWrap = document.getElementById("mapWrap");
+
+      let autoplayTimer = null;
 
       function setHelpVisible(visible) {
         helpBlock.style.display = visible ? "block" : "none";
@@ -364,6 +412,57 @@
         const visible = helpBlock.style.display !== "none";
         setHelpVisible(!visible);
       });
+
+      function isPlaying() {
+        return autoplayTimer !== null;
+      }
+
+      function updatePlayButton() {
+        playBtn.textContent = isPlaying() ? "Pause" : "Play";
+        playBtn.disabled = !replay;
+      }
+
+      function autoplayIntervalMs() {
+        const factor = Number.parseFloat(speedSelect.value || "1");
+        const base = 650;
+        return Math.max(60, Math.floor(base / (Number.isFinite(factor) && factor > 0 ? factor : 1)));
+      }
+
+      function stopAutoplay() {
+        if (autoplayTimer) {
+          clearInterval(autoplayTimer);
+          autoplayTimer = null;
+        }
+        updatePlayButton();
+      }
+
+      function startAutoplay() {
+        if (!replay) return;
+        stopAutoplay();
+        autoplayTimer = setInterval(() => {
+          const idx = Number.parseInt(slider.value, 10);
+          if (idx >= replay.turns.length) {
+            stopAutoplay();
+            return;
+          }
+          slider.value = String(clampIndex(idx + 1));
+          render();
+        }, autoplayIntervalMs());
+        updatePlayButton();
+      }
+
+      playBtn.addEventListener("click", () => {
+        if (!replay) return;
+        if (isPlaying()) stopAutoplay();
+        else startAutoplay();
+      });
+
+      speedSelect.addEventListener("input", () => {
+        if (!isPlaying()) return;
+        startAutoplay();
+      });
+
+      updatePlayButton();
 
       function ownerColor(owner) {
         const css = getComputedStyle(document.documentElement);
@@ -469,6 +568,9 @@
             selectedNodeId = n.id;
             renderSelectedNode();
           });
+          circle.addEventListener("mouseenter", () => showTooltipForNode(n.id));
+          circle.addEventListener("mouseleave", () => hideTooltip());
+          circle.addEventListener("mousemove", (evt) => moveTooltip(evt));
           g.appendChild(circle);
 
           const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -571,11 +673,13 @@
         if (!replay) {
           prevBtn.disabled = true;
           nextBtn.disabled = true;
+          updatePlayButton();
           return;
         }
         const idx = Number.parseInt(slider.value, 10);
         prevBtn.disabled = idx <= 0;
         nextBtn.disabled = idx >= replay.turns.length;
+        updatePlayButton();
       }
 
       function formatAction(a) {
@@ -655,6 +759,54 @@
             }
           }
         }
+      }
+
+      function moveTooltip(evt) {
+        if (!tooltip || tooltip.style.display === "none") return;
+        const rect = mapWrap.getBoundingClientRect();
+        const x = evt.clientX - rect.left + 12;
+        const y = evt.clientY - rect.top + 12;
+        tooltip.style.left = `${Math.min(x, rect.width - 20)}px`;
+        tooltip.style.top = `${Math.min(y, rect.height - 20)}px`;
+      }
+
+      function hideTooltip() {
+        tooltip.style.display = "none";
+      }
+
+      function nodeLine(label, n) {
+        if (!n) return `${label}: (missing)`;
+        const f1 = n.forces?.P1 ?? "?";
+        const f2 = n.forces?.P2 ?? "?";
+        return `${label}: owner=${n.owner}, forces P1=${f1} P2=${f2}, yield=${n.supplyYield}`;
+      }
+
+      function showTooltipForNode(nodeId) {
+        if (!replay) return;
+        const sliderIndex = Number.parseInt(slider.value, 10) - 1;
+        const turn = replay.turns[Math.max(0, sliderIndex)];
+        const tm = timeMode.value;
+        const vm = viewMode.value;
+
+        const beforeOmni = sliderIndex < 0 ? computeInitialState(replay.scenario) : beforeStateForIndex(sliderIndex);
+        const afterOmni = sliderIndex < 0 ? null : afterStateForIndex(sliderIndex);
+        const omni = tm === "before" ? beforeOmni?.nodes?.[nodeId] : afterOmni?.nodes?.[nodeId];
+
+        const p1 = turn?.observations?.P1?.nodes?.[nodeId];
+        const p2 = turn?.observations?.P2?.nodes?.[nodeId];
+
+        tooltipTitle.textContent = nodeId;
+        if (vm === "Diff") {
+          tooltipBody.textContent = [nodeLine("P1", p1), nodeLine("P2", p2), nodeLine("Omni", omni)].join("\n");
+        } else if (vm === "P1") {
+          tooltipBody.textContent = [nodeLine("P1", p1), nodeLine("Omni", omni)].join("\n");
+        } else if (vm === "P2") {
+          tooltipBody.textContent = [nodeLine("P2", p2), nodeLine("Omni", omni)].join("\n");
+        } else {
+          tooltipBody.textContent = nodeLine("Omni", omni);
+        }
+
+        tooltip.style.display = "block";
       }
 
       function renderSelectedNode() {
@@ -749,6 +901,7 @@
         events.textContent =
           Array.isArray(t.events) && t.events.length > 0 ? t.events.map((e) => `- ${formatEvent(e)}`).join("\n") : "—";
         highlightFromEvents(t);
+        if (selectedNodeId) highlightNode(selectedNodeId, "rgba(232,238,252,0.95)");
         renderSelectedNode();
       }
 
@@ -758,6 +911,7 @@
         statusEl.textContent = `${replay.scenario.name} (${replay.turns.length} plies)`;
         mapLegend.style.display = "block";
         setHelpVisible(true);
+        stopAutoplay();
         slider.min = "0";
         slider.max = String(replay.turns.length);
         slider.value = "0";
@@ -782,14 +936,22 @@
       });
 
       for (const el of [slider, viewMode, timeMode]) {
-        el.addEventListener("input", () => render());
+        el.addEventListener("input", () => {
+          stopAutoplay();
+          hideTooltip();
+          render();
+        });
       }
 
       prevBtn.addEventListener("click", () => {
+        stopAutoplay();
+        hideTooltip();
         slider.value = String(clampIndex(Number.parseInt(slider.value, 10) - 1));
         render();
       });
       nextBtn.addEventListener("click", () => {
+        stopAutoplay();
+        hideTooltip();
         slider.value = String(clampIndex(Number.parseInt(slider.value, 10) + 1));
         render();
       });
@@ -798,9 +960,12 @@
         if (!replay) return;
         if (e.key === "ArrowLeft") prevBtn.click();
         if (e.key === "ArrowRight") nextBtn.click();
+        if (e.key === " " || e.key === "Spacebar") {
+          e.preventDefault();
+          playBtn.click();
+        }
       });
 
-      const mapWrap = document.getElementById("mapWrap");
       mapWrap.addEventListener("dragenter", (e) => {
         e.preventDefault();
         dropHint.style.display = "flex";
