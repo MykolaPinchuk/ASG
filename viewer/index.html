@@ -15,6 +15,11 @@
         --neutral: #8c97b2;
         --edge: rgba(232, 238, 252, 0.18);
         --border: rgba(232, 238, 252, 0.12);
+        --hl-move: #8af0ff;
+        --hl-combat: #ffb347;
+        --hl-capture: #ffe066;
+        --hl-reinforce: #7dff90;
+        --hl-invalid: #ff6b6b;
       }
       html,
       body {
@@ -127,6 +132,29 @@
         font-size: 12px;
         line-height: 1.35;
       }
+      .help {
+        font-size: 12px;
+        line-height: 1.35;
+        color: rgba(232, 238, 252, 0.92);
+      }
+      .help ul {
+        margin: 6px 0 0 16px;
+        padding: 0;
+      }
+      .help li {
+        margin: 4px 0;
+        color: rgba(232, 238, 252, 0.86);
+      }
+      .help code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 11px;
+        color: rgba(232, 238, 252, 0.92);
+        background: rgba(232, 238, 252, 0.06);
+        border: 1px solid rgba(232, 238, 252, 0.12);
+        padding: 1px 6px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
       .pill {
         display: inline-block;
         padding: 2px 8px;
@@ -135,6 +163,46 @@
         border: 1px solid rgba(232, 238, 252, 0.16);
         color: var(--muted);
         white-space: nowrap;
+      }
+      .legendRow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        border: 1px solid rgba(232, 238, 252, 0.22);
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 6px;
+      }
+      .legendItem {
+        display: inline-flex;
+        align-items: center;
+        font-size: 12px;
+        color: rgba(232, 238, 252, 0.86);
+      }
+      .mapLegend {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        background: rgba(16, 26, 51, 0.9);
+        border: 1px solid rgba(232, 238, 252, 0.12);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 12px;
+        color: rgba(232, 238, 252, 0.86);
+        backdrop-filter: blur(6px);
+      }
+      .mapLegendTitle {
+        font-size: 12px;
+        font-weight: 650;
+        color: rgba(232, 238, 252, 0.95);
+        margin-bottom: 6px;
       }
       .row {
         display: flex;
@@ -156,6 +224,7 @@
       <div id="controls">
         <input id="fileInput" type="file" accept="application/json" />
         <span class="pill" id="status">No replay loaded</span>
+        <button id="helpBtn" title="Toggle explanation panel">Help</button>
 
         <div class="row">
           <label for="viewMode">View</label>
@@ -194,9 +263,45 @@
     <div id="layout">
       <div id="mapWrap">
         <div id="dropHint">Drop a replay JSON here</div>
+        <div class="mapLegend" id="mapLegend" style="display: none">
+          <div class="mapLegendTitle">Legend</div>
+          <div class="legendRow">
+            <span class="legendItem"><span class="swatch" style="background: var(--p1)"></span>P1 owns</span>
+            <span class="legendItem"><span class="swatch" style="background: var(--p2)"></span>P2 owns</span>
+            <span class="legendItem"><span class="swatch" style="background: var(--neutral)"></span>Neutral</span>
+          </div>
+          <div style="margin-top: 6px; color: rgba(232, 238, 252, 0.78)">
+            Node text: <code>P1|P2</code> forces. <code>+2</code> is supply yield if owned.
+          </div>
+        </div>
         <svg id="map" viewBox="0 0 800 600"></svg>
       </div>
       <div id="side">
+        <div class="block" id="helpBlock" style="display: none">
+          <h2>How To Read This</h2>
+          <div class="help">
+            <div>
+              A match is a sequence of <b>plies</b> (half-turns). Each ply: income happens first, then the active player submits
+              up to <code>actionBudget</code> actions.
+            </div>
+            <ul>
+              <li>
+                Use the slider or <code>Prev</code>/<code>Next</code> to move through time. Slider <code>0</code> is the initial state.
+              </li>
+              <li><code>State=Before</code> shows right before that ply’s actions. <code>After</code> shows after resolution.</li>
+              <li>
+                Map nodes: color = owner, center text <code>P1|P2</code> = forces at that node. If a node shows <code>+2</code>, it
+                produces +2 supply per ply for its owner.
+              </li>
+              <li>
+                <b>Events</b> are the authoritative “what happened” log. Nodes involved in the current ply are highlighted on the map.
+              </li>
+              <li>
+                Click a node to inspect it. In <code>View=Diff</code>, the node panel shows P1/P2/Omni side-by-side.
+              </li>
+            </ul>
+          </div>
+        </div>
         <div class="block">
           <h2>Turn</h2>
           <pre id="turnInfo">Load a replay JSON to begin.</pre>
@@ -239,6 +344,9 @@
       const prevBtn = document.getElementById("prevBtn");
       const nextBtn = document.getElementById("nextBtn");
       const dropHint = document.getElementById("dropHint");
+      const helpBtn = document.getElementById("helpBtn");
+      const helpBlock = document.getElementById("helpBlock");
+      const mapLegend = document.getElementById("mapLegend");
 
       const turnInfo = document.getElementById("turnInfo");
       const nodeInfo = document.getElementById("nodeInfo");
@@ -247,6 +355,15 @@
       const events = document.getElementById("events");
 
       const svg = document.getElementById("map");
+
+      function setHelpVisible(visible) {
+        helpBlock.style.display = visible ? "block" : "none";
+      }
+
+      helpBtn.addEventListener("click", () => {
+        const visible = helpBlock.style.display !== "none";
+        setHelpVisible(!visible);
+      });
 
       function ownerColor(owner) {
         const css = getComputedStyle(document.documentElement);
@@ -296,6 +413,8 @@
 
         const nodes = replay.scenario.map.nodes;
         const edges = replay.scenario.map.edges;
+        const p1Hq = replay.scenario.players && replay.scenario.players.P1 && replay.scenario.players.P1.hq;
+        const p2Hq = replay.scenario.players && replay.scenario.players.P2 && replay.scenario.players.P2.hq;
 
         const xs = nodes.map((n) => n.x);
         const ys = nodes.map((n) => n.y);
@@ -380,6 +499,18 @@
           yieldText.textContent = n.supplyYield > 0 ? `+${n.supplyYield}` : "";
           g.appendChild(yieldText);
 
+          if (n.id === p1Hq || n.id === p2Hq) {
+            const hq = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            hq.setAttribute("x", p.x);
+            hq.setAttribute("y", p.y + 44);
+            hq.setAttribute("text-anchor", "middle");
+            hq.setAttribute("fill", "rgba(232,238,252,0.75)");
+            hq.setAttribute("font-size", "10");
+            hq.setAttribute("font-weight", "650");
+            hq.textContent = "HQ";
+            g.appendChild(hq);
+          }
+
           svg.appendChild(g);
           nodeEls[n.id] = { circle, forces, yieldText };
         }
@@ -447,12 +578,92 @@
         nextBtn.disabled = idx >= replay.turns.length;
       }
 
+      function formatAction(a) {
+        if (!a) return "—";
+        if (a.type === "pass") return "pass";
+        if (a.type === "reinforce") return `reinforce +${a.amount} at HQ`;
+        if (a.type === "move") return `move ${a.amount} ${a.from} → ${a.to}`;
+        return JSON.stringify(a);
+      }
+
+      function formatEvent(e) {
+        if (!e) return "—";
+        switch (e.type) {
+          case "income":
+            return `income: ${e.player} +${e.amount} (supply now ${e.supplyAfter})`;
+          case "invalid_action":
+            return `invalid: ${e.player} ${formatAction(e.action)} — ${e.message}`;
+          case "reinforce":
+            return `reinforce: ${e.player} +${e.amount} at ${e.location} (supply ${e.supplyAfter}, strength now ${e.strengthAfter})`;
+          case "move":
+            return `move: ${e.player} ${e.amount} ${e.from} → ${e.to} (from=${e.fromStrengthAfter}, to=${e.toStrengthAfter})`;
+          case "combat":
+            return (
+              `combat @${e.location}: ${e.attacker}(${e.attackerStrengthBefore}) vs ${e.defender}(${e.defenderStrengthBefore}) ` +
+              `noise=${e.noise} Δ=${e.delta} winner=${e.winner}(${e.winnerStrengthAfter})`
+            );
+          case "capture":
+            return `capture: ${e.location} → ${e.newOwner}`;
+          case "game_end":
+            return e.result.type === "win" ? `game end: WIN ${e.result.winner} (HQ captured)` : `game end: DRAW (turn cap)`;
+          default:
+            return JSON.stringify(e);
+        }
+      }
+
+      function clearHighlights() {
+        if (!nodeEls) return;
+        for (const el of Object.values(nodeEls)) {
+          el.circle.setAttribute("stroke", "rgba(232,238,252,0.25)");
+          el.circle.setAttribute("stroke-width", "2");
+        }
+      }
+
+      function highlightNode(id, color) {
+        if (!nodeEls || !nodeEls[id]) return;
+        nodeEls[id].circle.setAttribute("stroke", color);
+        nodeEls[id].circle.setAttribute("stroke-width", "4");
+      }
+
+      function highlightFromEvents(turn) {
+        clearHighlights();
+        if (!turn || !Array.isArray(turn.events)) return;
+        const css = getComputedStyle(document.documentElement);
+        const colors = {
+          move: css.getPropertyValue("--hl-move"),
+          combat: css.getPropertyValue("--hl-combat"),
+          capture: css.getPropertyValue("--hl-capture"),
+          reinforce: css.getPropertyValue("--hl-reinforce"),
+          invalid: css.getPropertyValue("--hl-invalid"),
+        };
+
+        for (const e of turn.events) {
+          if (e.type === "move") {
+            highlightNode(e.from, colors.move);
+            highlightNode(e.to, colors.move);
+          } else if (e.type === "combat") {
+            highlightNode(e.location, colors.combat);
+          } else if (e.type === "capture") {
+            highlightNode(e.location, colors.capture);
+          } else if (e.type === "reinforce") {
+            highlightNode(e.location, colors.reinforce);
+          } else if (e.type === "invalid_action") {
+            const maybeMove = e.action && e.action.type === "move" ? e.action : null;
+            if (maybeMove) {
+              highlightNode(maybeMove.from, colors.invalid);
+              highlightNode(maybeMove.to, colors.invalid);
+            }
+          }
+        }
+      }
+
       function renderSelectedNode() {
         if (!replay || !selectedNodeId) return;
 
         const sliderIndex = Number.parseInt(slider.value, 10) - 1;
         const turn = replay.turns[Math.max(0, sliderIndex)];
         const tm = timeMode.value;
+        const vm = viewMode.value;
 
         const beforeOmni = sliderIndex < 0 ? computeInitialState(replay.scenario) : beforeStateForIndex(sliderIndex);
         const afterOmni = sliderIndex < 0 ? null : afterStateForIndex(sliderIndex);
@@ -468,12 +679,23 @@
           return `${label}: owner=${n.owner} forces=P1:${f1} P2:${f2} yield=${n.supplyYield}`;
         }
 
-        nodeInfo.textContent = [
-          `node: ${selectedNodeId}`,
-          fmt("P1 sees", p1),
-          fmt("P2 sees", p2),
-          fmt("Omni", omni),
-        ].join("\n");
+        const lines = [];
+        lines.push(`node: ${selectedNodeId}`);
+        lines.push(`meaning: node color = owner; center text P1|P2 = forces; +N = supply yield`);
+        if (vm === "Diff") {
+          lines.push(fmt("P1 sees", p1));
+          lines.push(fmt("P2 sees", p2));
+          lines.push(fmt("Omni", omni));
+        } else if (vm === "P1") {
+          lines.push(fmt("P1 sees", p1));
+          lines.push(fmt("Omni", omni));
+        } else if (vm === "P2") {
+          lines.push(fmt("P2 sees", p2));
+          lines.push(fmt("Omni", omni));
+        } else {
+          lines.push(fmt("Omni", omni));
+        }
+        nodeInfo.textContent = lines.join("\n");
       }
 
       function render() {
@@ -499,10 +721,12 @@
             "Initial state",
             `Active: ${frame.state.activePlayer}`,
             `Supply: P1=${frame.state.supplies?.P1 ?? "?"} P2=${frame.state.supplies?.P2 ?? "?"}`,
+            `Settings: actionBudget=${replay.scenario.settings.actionBudget}, baseIncome=${replay.scenario.settings.baseIncome}, turnCapPlies=${replay.scenario.settings.turnCapPlies}`,
           ].join("\n");
           rationale.textContent = "—";
           actions.textContent = "—";
           events.textContent = "—";
+          clearHighlights();
           renderSelectedNode();
           return;
         }
@@ -520,8 +744,11 @@
         turnInfo.textContent = [turnLabel.textContent, supplyLine, resultLine, note].filter(Boolean).join("\n");
 
         rationale.textContent = t.rationaleText ?? "—";
-        actions.textContent = JSON.stringify(t.actions, null, 2);
-        events.textContent = JSON.stringify(t.events, null, 2);
+        actions.textContent =
+          Array.isArray(t.actions) && t.actions.length > 0 ? t.actions.map((a, i) => `${i + 1}. ${formatAction(a)}`).join("\n") : "—";
+        events.textContent =
+          Array.isArray(t.events) && t.events.length > 0 ? t.events.map((e) => `- ${formatEvent(e)}`).join("\n") : "—";
+        highlightFromEvents(t);
         renderSelectedNode();
       }
 
@@ -529,6 +756,8 @@
         replay = r;
         selectedNodeId = null;
         statusEl.textContent = `${replay.scenario.name} (${replay.turns.length} plies)`;
+        mapLegend.style.display = "block";
+        setHelpVisible(true);
         slider.min = "0";
         slider.max = String(replay.turns.length);
         slider.value = "0";
@@ -598,4 +827,3 @@
     </script>
   </body>
 </html>
-
