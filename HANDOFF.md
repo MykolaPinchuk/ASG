@@ -1,7 +1,7 @@
 # HANDOFF
 
 ## Current slice
-v0 repo setup: establish multi-agent workflow scaffolding and canonical paths for specs/schemas/scenarios before implementation work begins.
+v0 setup + planning: repo scaffold is in place; next step is to confirm v0 implementation decisions and then start M0/M1.
 
 ## Invariants (do not break)
 - Spec is source of truth: `docs/planning/MVP_SPEC.md`.
@@ -12,6 +12,8 @@ v0 repo setup: establish multi-agent workflow scaffolding and canonical paths fo
 
 ### Done (with evidence)
 - Version branch set: currently on `v0`.
+- Initial setup commit:
+  - `b6aeff4` — `agent00: checkpoint(workflow): initial v0 repo scaffold`
 - Agentic workflow scaffold added:
   - `agents.md`, `business_context.md`, `repo_workflow.md`, `onboarding.md`, `REPO_MAP.md`
   - `.codex/skills/`, `agent_logs/`, `docs/adr/0001-agentic-workflow-protocol.md`
@@ -21,14 +23,18 @@ v0 repo setup: establish multi-agent workflow scaffolding and canonical paths fo
   - Schemas: `schemas/replay.schema.json`, `schemas/agent_api.schema.json`
   - Optional TS prototype: `prototype_optional/`
   - `IA_HANDOFF/` retained as an immutable snapshot (do not edit).
+- Proposed v0 decision ADRs:
+  - `docs/adr/0002-v0-stack-and-repo-layout.md`
+  - `docs/adr/0003-v0-determinism-and-replay-contract.md`
 
 ### Next (ordered)
-1) Decide whether to reuse `prototype_optional/` as the starting codebase vs re-implement from `docs/planning/MVP_SPEC.md`.
-2) Decide tech stack for v0 (TypeScript end-to-end vs Python engine + web viewer).
-3) Start MVP v0 implementation: deterministic engine + bot-vs-bot runner + replay viewer.
+1) Human: approve (or edit) ADRs:
+   - `docs/adr/0002-v0-stack-and-repo-layout.md`
+   - `docs/adr/0003-v0-determinism-and-replay-contract.md`
+2) Agent01: start MVP v0 implementation (M0/M1) per `docs/planning/IMPLEMENTATION_PLAN.md`.
 
 ### Open questions
-- Git policy: should agents create an initial commit on `v0` now, or should humans do the first commit?
+- None blocking (once ADRs above are approved).
 
 ## Repro / smoke check
 - Commands run:
@@ -37,7 +43,7 @@ v0 repo setup: establish multi-agent workflow scaffolding and canonical paths fo
   - Generated `agents.md` and `business_context.md`.
 
 ## Known issues / current breakage
-- None known (repo is uninitialized; no build/tests yet).
+- None known.
 
 ## Git notes (handoff)
 - `.gitignore` updates made:
