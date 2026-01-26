@@ -176,14 +176,15 @@ async function runAgentMatch(params: {
   temperature: string;
   maxTokens: string;
   timeoutMs: string;
-  scenarioPath: string;
+  baseScenario: any;
+  adjacency: Record<string, string[]>;
   seed: number;
   turnCapPlies: number;
   outReplayPath?: string;
 }): Promise<ModelRunSummary> {
-  const scenario = await loadScenarioFromFile(params.scenarioPath);
+  const scenario = structuredClone(params.baseScenario);
   scenario.settings.turnCapPlies = params.turnCapPlies;
-  const adjacency = createAdjacency(scenario);
+  const adjacency = params.adjacency;
   const ctx = { scenario, adjacency };
 
   const args = new Map<string, string>();
@@ -267,6 +268,8 @@ async function main() {
 
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const outRoot = args.get("--out-dir") ?? path.join("runs", "model_sweeps", nowStampPacific());
+  const baseScenario = await loadScenarioFromFile(scenarioPath);
+  const adjacency = createAdjacency(baseScenario);
 
   const providersRaw = (args.get("--providers") ?? "nanogpt,chutes").split(",").map((s) => s.trim()).filter(Boolean);
   const providers = providersRaw.filter((p): p is ProviderName => ["nanogpt", "chutes", "openrouter"].includes(p));
@@ -348,7 +351,8 @@ async function main() {
         temperature,
         maxTokens,
         timeoutMs,
-        scenarioPath,
+        baseScenario,
+        adjacency,
         seed: smokeSeed,
         turnCapPlies: smokeTurnCap,
         outReplayPath: smokeReplayPath,
@@ -373,7 +377,8 @@ async function main() {
           temperature,
           maxTokens,
           timeoutMs,
-          scenarioPath,
+          baseScenario,
+          adjacency,
           seed: fullSeed,
           turnCapPlies: fullTurnCap,
           outReplayPath: fullReplayPath,
@@ -422,4 +427,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-
