@@ -94,7 +94,11 @@ function validateAgentResponse(json: unknown, expectedApiVersion: string): Agent
 function buildSystemPrompt() {
   return [
     "You are an agent that plays a deterministic, turn-based strategy game.",
-    "You must respond with JSON ONLY and no extra text.",
+    "You must respond with VALID JSON ONLY (no markdown, no code fences, no commentary).",
+    "Rules for JSON:",
+    "- Use double quotes for all strings and keys.",
+    "- No trailing commas.",
+    "- Output must be a single JSON object.",
     "Your response must match this schema:",
     `{ "api_version": "0.1", "actions": [ ... ], "rationale_text": "optional" }`,
     "Valid actions (array order matters; the runner may truncate to action_budget):",
@@ -105,7 +109,12 @@ function buildSystemPrompt() {
     "- move only along an edge from the provided adjacency list.",
     "- do not exceed available forces at the from node.",
     "- reinforce costs supply: amount * reinforceCostPerStrength.",
-    "If unsure, return pass.",
+    "If unsure, prefer: reinforce 1 (if affordable), else move 1 toward enemy HQ, else pass.",
+    "Strategy guideline (good enough):",
+    "- If you can capture enemy HQ soon, do it.",
+    "- Otherwise, expand to adjacent neutral/enemy nodes with higher supplyYield.",
+    "- Reinforce HQ when you have spare supply.",
+    "Keep rationale_text short (<= 1 sentence) or omit it.",
   ].join("\n");
 }
 
@@ -118,6 +127,28 @@ function buildUserPrompt(params: {
   const enemy = request.player === "P1" ? "P2" : "P1";
 
   const settings = scenario.settings;
+  const cost = settings.reinforceCostPerStrength ?? 1;
+  const obs = request.observation ?? {};
+  const supplies = obs.supplies ?? { P1: 0, P2: 0 };
+  const playerSupply = Number.isFinite(supplies?.[request.player]) ? supplies[request.player] : 0;
+  const maxReinforce = Math.max(0, Math.floor(playerSupply / cost));
+
+  const moveOptions: Array<{ from: string; to: string; maxAmount: number }> = [];
+  const nodes: Record<string, any> = obs.nodes ?? {};
+  for (const [nodeId, node] of Object.entries(nodes)) {
+    const f = node?.forces?.[request.player];
+    if (!Number.isFinite(f) || f <= 0) continue;
+    for (const to of adjacency[nodeId] ?? []) {
+      moveOptions.push({ from: nodeId, to, maxAmount: Math.floor(f) });
+    }
+  }
+
+  const legal = {
+    reinforce: { maxAmount: maxReinforce, costPerStrength: cost },
+    moves: moveOptions.slice(0, 120),
+    notes: "For moves: choose amount between 1 and maxAmount.",
+  };
+
   const info = {
     match_id: request.match_id,
     player: request.player,
@@ -133,6 +164,7 @@ function buildUserPrompt(params: {
       turnCapPlies: settings.turnCapPlies,
     },
     adjacency,
+    legal,
     observation: request.observation,
   };
 
@@ -231,7 +263,7 @@ export async function openAiCompatAct(params: {
     "";
   // Default must accommodate typical remote OpenAI-compatible provider latency.
   const timeoutMs = Number.parseInt(args.get("--timeout-ms") ?? process.env.ASG_OPENAI_TIMEOUT_MS ?? "60000", 10);
-  const temperature = Number.parseFloat(args.get("--temperature") ?? process.env.ASG_OPENAI_TEMPERATURE ?? "0.2");
+  const temperature = Number.parseFloat(args.get("--temperature") ?? process.env.ASG_OPENAI_TEMPERATURE ?? "0");
   const maxTokens = Number.parseInt(args.get("--max-tokens") ?? process.env.ASG_OPENAI_MAX_TOKENS ?? "300", 10);
   const referer =
     args.get("--referer") ??

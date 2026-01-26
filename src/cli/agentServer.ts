@@ -30,6 +30,7 @@ type Scenario = {
   id: string;
   settings: {
     actionBudget: number;
+    baseIncome?: number;
     reinforceCostPerStrength: number;
   };
   players: Record<PlayerId, { hq: string }>;
@@ -66,29 +67,127 @@ function isAction(value: unknown): value is Action {
   if (!isObject(value)) return false;
   const type = value.type;
   if (type === "pass") return true;
-  if (type === "reinforce") return Number.isInteger(value.amount) && (value.amount as number) >= 1;
+  if (type === "reinforce") return typeof value.amount === "number" && Number.isFinite(value.amount);
   if (type === "move") {
     return (
       typeof value.from === "string" &&
       value.from.length > 0 &&
       typeof value.to === "string" &&
       value.to.length > 0 &&
-      Number.isInteger(value.amount) &&
-      (value.amount as number) >= 1
+      typeof value.amount === "number" &&
+      Number.isFinite(value.amount)
     );
   }
   return false;
 }
 
-function sanitizeActions(actions: unknown, budget: number): Action[] {
-  if (!Array.isArray(actions)) return [{ type: "pass" }];
-  const out: Action[] = [];
-  for (const a of actions) {
-    if (!isAction(a)) continue;
-    out.push(a);
-    if (out.length >= budget) break;
+function clampInt(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const n = Math.floor(value);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+function sumIncomeFromObservation(obs: any, player: PlayerId, baseIncome: number): number {
+  let income = baseIncome;
+  const nodes: Record<string, any> = obs?.nodes ?? {};
+  for (const node of Object.values(nodes)) {
+    if (node?.owner === player) income += Number.isFinite(node?.supplyYield) ? Number(node.supplyYield) : 0;
   }
-  return out.length > 0 ? out : [{ type: "pass" }];
+  return income;
+}
+
+function hasAnyLegalNonPassAction(req: AgentRequest, scenario: Scenario, adjacency: Record<string, string[]>): boolean {
+  const obs: any = req.observation ?? {};
+  const supplies: Record<PlayerId, number> = obs.supplies ?? { P1: 0, P2: 0 };
+  const baseIncome = scenario.settings?.baseIncome ?? 0;
+  const income = sumIncomeFromObservation(obs, req.player, baseIncome);
+  const effectiveSupply = (Number.isFinite(supplies[req.player]) ? supplies[req.player] : 0) + income;
+  const cost = scenario.settings?.reinforceCostPerStrength ?? 1;
+  if (effectiveSupply >= cost) return true;
+
+  const nodes: Record<string, any> = obs.nodes ?? {};
+  for (const [nodeId, node] of Object.entries(nodes)) {
+    const f = node?.forces?.[req.player];
+    if (!Number.isFinite(f) || f <= 0) continue;
+    if ((adjacency[nodeId] ?? []).length > 0) return true;
+  }
+
+  return false;
+}
+
+function sanitizeActionsAgainstObservation(params: {
+  actions: unknown;
+  budget: number;
+  req: AgentRequest;
+  scenario: Scenario;
+  adjacency: Record<string, string[]>;
+}): { actions: Action[]; usedFallback: boolean } {
+  const { req, scenario, adjacency } = params;
+  const budget = Math.max(0, params.budget);
+  const obs: any = req.observation ?? {};
+  const nodes: Record<string, any> = obs.nodes ?? {};
+  const forcesRemaining: Record<string, number> = {};
+  for (const [nodeId, node] of Object.entries(nodes)) {
+    const f = node?.forces?.[req.player];
+    forcesRemaining[nodeId] = Number.isFinite(f) ? Math.max(0, Math.floor(f)) : 0;
+  }
+
+  const supplies: Record<PlayerId, number> = obs.supplies ?? { P1: 0, P2: 0 };
+  const baseIncome = scenario.settings?.baseIncome ?? 0;
+  const income = sumIncomeFromObservation(obs, req.player, baseIncome);
+  let supplyRemaining = (Number.isFinite(supplies[req.player]) ? supplies[req.player] : 0) + income;
+  const cost = scenario.settings?.reinforceCostPerStrength ?? 1;
+
+  const raw = Array.isArray(params.actions) ? params.actions : [];
+  const out: Action[] = [];
+
+  for (const a of raw) {
+    if (out.length >= budget) break;
+    if (!isAction(a)) continue;
+
+    if (a.type === "pass") continue;
+
+    if (a.type === "reinforce") {
+      const amt0 = clampInt((a as any).amount);
+      if (amt0 === null) continue;
+      const amt = Math.max(1, amt0);
+      const maxAffordable = Math.floor(supplyRemaining / cost);
+      if (maxAffordable < 1) continue;
+      const finalAmt = Math.min(amt, maxAffordable);
+      out.push({ type: "reinforce", amount: finalAmt });
+      supplyRemaining -= finalAmt * cost;
+      continue;
+    }
+
+    if (a.type === "move") {
+      const from = (a as any).from;
+      const to = (a as any).to;
+      if (typeof from !== "string" || typeof to !== "string") continue;
+      if (!(adjacency[from] ?? []).includes(to)) continue;
+      if (!nodes[from] || !nodes[to]) continue;
+
+      const avail = forcesRemaining[from] ?? 0;
+      if (avail < 1) continue;
+
+      const amt0 = clampInt((a as any).amount);
+      if (amt0 === null) continue;
+      const amt = Math.max(1, amt0);
+      const finalAmt = Math.min(amt, avail);
+      out.push({ type: "move", from, to, amount: finalAmt });
+      forcesRemaining[from] = avail - finalAmt;
+      forcesRemaining[to] = (forcesRemaining[to] ?? 0) + finalAmt;
+      continue;
+    }
+  }
+
+  if (out.length > 0) return { actions: out, usedFallback: false };
+
+  const shouldFallback = hasAnyLegalNonPassAction(req, scenario, adjacency);
+  if (!shouldFallback) return { actions: [{ type: "pass" }], usedFallback: false };
+
+  const fallback = chooseStubActions(req, scenario, adjacency);
+  return { actions: fallback.actions.slice(0, budget), usedFallback: true };
 }
 
 function jsonResponse(res: http.ServerResponse, statusCode: number, body: unknown) {
@@ -127,7 +226,9 @@ function chooseStubActions(req: AgentRequest, scenario: Scenario, adjacency: Rec
 
   // Prefer reinforcing if possible (keeps the game moving).
   const cost = scenario.settings?.reinforceCostPerStrength ?? 1;
-  const supply = Number.isFinite(supplies[player]) ? supplies[player] : 0;
+  const baseIncome = scenario.settings?.baseIncome ?? 0;
+  const income = sumIncomeFromObservation(obs, player, baseIncome);
+  const supply = (Number.isFinite(supplies[player]) ? supplies[player] : 0) + income;
   if (supply >= cost) {
     return {
       api_version: req.api_version,
@@ -320,10 +421,16 @@ async function main() {
       }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
-      response = { api_version: request.api_version, actions: [{ type: "pass" }], rationale_text: `server: ${provider} error (${error})` };
+      response = chooseStubActions(request, scenario, adjacency);
+      response.rationale_text = `server: ${provider} error (${error}); fallback=stub`;
     }
 
-    response.actions = sanitizeActions(response.actions, budget);
+    const sanitized = sanitizeActionsAgainstObservation({ actions: response.actions, budget, req: request, scenario, adjacency });
+    response.actions = sanitized.actions;
+    if (sanitized.usedFallback) {
+      const prev = response.rationale_text ? `${response.rationale_text}; ` : "";
+      response.rationale_text = `${prev}fallback=stub`;
+    }
     if (response.api_version !== request.api_version) {
       response = { api_version: request.api_version, actions: [{ type: "pass" }], rationale_text: "server: api_version mismatch" };
     }
@@ -354,4 +461,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-
