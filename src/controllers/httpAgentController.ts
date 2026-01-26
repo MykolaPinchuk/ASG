@@ -17,6 +17,12 @@ type AgentResponse = {
   api_version: string;
   actions: Action[];
   rationale_text?: string;
+  agent_info?: {
+    provider?: string;
+    baseUrl?: string;
+    model?: string;
+    modelMode?: "auto" | "explicit";
+  };
 };
 
 function ensureActUrl(url: string): string {
@@ -67,7 +73,19 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
     if (!isAction(a)) throw new Error("response.actions contains invalid action shape");
   }
   const rationale_text = typeof json.rationale_text === "string" ? json.rationale_text : undefined;
-  return { api_version: json.api_version, actions: actions as Action[], rationale_text };
+  const infoRaw = (json as any).agent_info;
+  let agent_info: AgentResponse["agent_info"] | undefined;
+  if (isObject(infoRaw) && (typeof infoRaw.provider === "string" || typeof infoRaw.model === "string")) {
+    const mm = (infoRaw as any).modelMode;
+    const modelMode = mm === "auto" || mm === "explicit" ? mm : undefined;
+    agent_info = {
+      provider: typeof infoRaw.provider === "string" ? infoRaw.provider : undefined,
+      baseUrl: typeof infoRaw.baseUrl === "string" ? infoRaw.baseUrl : undefined,
+      model: typeof infoRaw.model === "string" ? infoRaw.model : undefined,
+      modelMode,
+    };
+  }
+  return { api_version: json.api_version, actions: actions as Action[], rationale_text, agent_info };
 }
 
 export type HttpAgentControllerParams = {
@@ -94,6 +112,7 @@ export class HttpAgentController implements Controller {
   private readonly timeoutMs: number;
   private readonly maxResponseBytes: number;
   private readonly logDir?: string;
+  private _agentInfo?: AgentResponse["agent_info"];
 
   constructor(params: HttpAgentControllerParams) {
     this.id = params.id ?? "agent";
@@ -106,6 +125,10 @@ export class HttpAgentController implements Controller {
     this.timeoutMs = params.timeoutMs;
     this.maxResponseBytes = params.maxResponseBytes;
     this.logDir = params.logDir;
+  }
+
+  get agentInfo(): AgentResponse["agent_info"] | undefined {
+    return this._agentInfo;
   }
 
   async decide(observation: Observation): Promise<ControllerOutput> {
@@ -141,6 +164,7 @@ export class HttpAgentController implements Controller {
       if (responseText.length > this.maxResponseBytes) throw new Error(`response too large: ${responseText.length} bytes`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       parsedResponse = parseAgentResponse(JSON.parse(responseText), this.apiVersion);
+      if (parsedResponse.agent_info) this._agentInfo = parsedResponse.agent_info;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -179,4 +203,3 @@ export class HttpAgentController implements Controller {
     };
   }
 }
-

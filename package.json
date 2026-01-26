@@ -17,6 +17,8 @@
     "agent:server": "tsx src/cli/agentServer.ts"
     ,
     "agent:list-models": "tsx src/cli/listModels.ts"
+    ,
+    "agent:vs-random": "tsx src/cli/agentVsRandom.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

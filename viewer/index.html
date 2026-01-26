@@ -347,6 +347,10 @@
           <pre id="turnInfo">Load a replay JSON to begin.</pre>
         </div>
         <div class="block">
+          <h2>Players</h2>
+          <pre id="playersInfo">—</pre>
+        </div>
+        <div class="block">
           <h2>Selected Node</h2>
           <pre id="nodeInfo">Click a node to inspect details.</pre>
         </div>
@@ -394,6 +398,7 @@
       const tooltipBody = document.getElementById("tooltipBody");
 
       const turnInfo = document.getElementById("turnInfo");
+      const playersInfo = document.getElementById("playersInfo");
       const nodeInfo = document.getElementById("nodeInfo");
       const rationale = document.getElementById("rationale");
       const actions = document.getElementById("actions");
@@ -909,6 +914,18 @@
         replay = r;
         selectedNodeId = null;
         statusEl.textContent = `${replay.scenario.name} (${replay.turns.length} plies)`;
+        const p = replay.players || {};
+        function fmtPlayer(pid) {
+          const meta = p[pid];
+          if (!meta || !meta.kind) return `${pid}: (unknown)`;
+          if (meta.kind !== "agent") return `${pid}: ${meta.kind}`;
+          const bits = [];
+          if (meta.provider) bits.push(`provider=${meta.provider}`);
+          if (meta.model) bits.push(`model=${meta.model}`);
+          if (meta.modelMode) bits.push(`mode=${meta.modelMode}`);
+          return `${pid}: agent${bits.length ? " (" + bits.join(", ") + ")" : ""}`;
+        }
+        playersInfo.textContent = [fmtPlayer("P1"), fmtPlayer("P2")].join("\n");
         mapLegend.style.display = "block";
         setHelpVisible(true);
         stopAutoplay();

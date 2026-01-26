@@ -93,6 +93,19 @@ export interface Replay {
   createdAt: string;
   seed: number;
   scenario: ScenarioDefinition;
+  players?: Record<
+    PlayerId,
+    | { kind: "greedy" }
+    | { kind: "random" }
+    | {
+        kind: "agent";
+        agentUrl?: string;
+        provider?: string;
+        baseUrl?: string;
+        model?: string;
+        modelMode?: "auto" | "explicit";
+      }
+  >;
   turns: TurnRecord[];
   result: GameResult;
 }

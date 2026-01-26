@@ -10,6 +10,7 @@
     "createdAt": { "type": "string", "format": "date-time" },
     "seed": { "type": "integer" },
     "scenario": { "$ref": "#/$defs/ScenarioDefinition" },
+    "players": { "$ref": "#/$defs/PlayersMeta" },
     "turns": { "type": "array", "items": { "$ref": "#/$defs/TurnRecord" } },
     "result": { "$ref": "#/$defs/GameResult" }
   },
@@ -17,6 +18,46 @@
     "PlayerId": { "type": "string", "enum": ["P1", "P2"] },
     "Owner": { "type": "string", "enum": ["P1", "P2", "Neutral"] },
     "LocationId": { "type": "string", "minLength": 1 },
+
+    "PlayersMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["P1", "P2"],
+      "properties": {
+        "P1": { "$ref": "#/$defs/PlayerMeta" },
+        "P2": { "$ref": "#/$defs/PlayerMeta" }
+      }
+    },
+
+    "PlayerMeta": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "greedy" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "random" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "agent" },
+            "agentUrl": { "type": "string" },
+            "provider": { "type": "string" },
+            "baseUrl": { "type": "string" },
+            "model": { "type": "string" },
+            "modelMode": { "type": "string", "enum": ["auto", "explicit"] }
+          }
+        }
+      ]
+    },
 
     "Forces": {
       "type": "object",

@@ -24,6 +24,12 @@ type AgentResponse = {
   api_version: string;
   actions: Action[];
   rationale_text?: string;
+  agent_info?: {
+    provider?: string;
+    baseUrl?: string;
+    model?: string;
+    modelMode?: "auto" | "explicit";
+  };
 };
 
 type Scenario = {
@@ -418,6 +424,12 @@ async function main() {
         response = out.response;
         upstreamStatus = out.httpStatus;
         upstreamRaw = out.raw;
+        response.agent_info = {
+          provider: out.provider,
+          baseUrl: out.baseUrl,
+          model: out.resolvedModel,
+          modelMode: (args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? "").toLowerCase() === "auto" ? "auto" : "explicit",
+        };
       }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);

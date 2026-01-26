@@ -38,6 +38,8 @@ The match runner can call an external agent over HTTP (`POST /act`) per `docs/pl
   - Optional: log raw request/response per ply under `runs/`: add `--agent-log-dir runs/agent_io`
   - If using a real LLM and you see timeouts, increase the client timeout: add `--agent-timeout-ms 60000` (default is 60000).
 
+The replay viewer shows controller/model metadata (when present) in the **Players** panel.
+
 ### Real LLM (OpenAI-compatible providers)
 Run the agent server with `openai_compat` and point it at an OpenAI-compatible endpoint (e.g. OpenRouter).
 Keys stay local (env vars / `secrets/`), never committed.
@@ -57,6 +59,10 @@ ASG includes an OSS allowlist at `configs/oss_models.json` (priority ordered; de
 Tip: set `ASG_MODELS_CONFIG=configs/oss_models.json` to avoid passing `--models-config` each time.
 
 Quick smoke test (1 LLM decision only): add `--turn-cap-plies 2` to `npm run match ...`.
+
+### Baseline check: agent vs random
+Runs a small sweep (starts a local agent server automatically) and prints win/draw rates:
+- `npm run agent:vs-random -- --provider-name nanogpt --keys-file secrets/provider_apis.txt --model auto --turn-cap-plies 20 --start 1 --count 2`
 
 List models from a provider (requires provider access; some endpoints need an API key):
 - `npm run agent:list-models -- --provider openrouter --base-url https://openrouter.ai/api/v1 --format text --limit 50`

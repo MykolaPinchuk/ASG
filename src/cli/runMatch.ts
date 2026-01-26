@@ -106,6 +106,24 @@ async function main() {
   };
 
   const replay = await runMatch({ ctx, controllers, seed });
+  replay.players = {
+    P1:
+      p1 === "agent"
+        ? {
+            kind: "agent",
+            agentUrl: agentUrl ?? undefined,
+            ...(controllers.P1 instanceof HttpAgentController ? (controllers.P1.agentInfo ?? {}) : {}),
+          }
+        : { kind: p1 },
+    P2:
+      p2 === "agent"
+        ? {
+            kind: "agent",
+            agentUrl: agentUrl ?? undefined,
+            ...(controllers.P2 instanceof HttpAgentController ? (controllers.P2.agentInfo ?? {}) : {}),
+          }
+        : { kind: p2 },
+  };
 
   const outArg = args.get("--out");
   const outDir = outArg ? path.dirname(outArg) : path.resolve("replays");

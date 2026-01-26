@@ -232,7 +232,7 @@ export async function openAiCompatAct(params: {
   scenario: Scenario;
   adjacency: Record<string, string[]>;
   args: ProviderArgs;
-}): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
+}): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown; resolvedModel: string; provider: string; baseUrl: string }> {
   const { request, scenario, adjacency, args } = params;
 
   const providerName = (args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "openai").toUpperCase().replace(/[^A-Z0-9]+/g, "_");
@@ -338,7 +338,7 @@ export async function openAiCompatAct(params: {
 
     const extracted = extractJsonObject(content);
     const response = validateAgentResponse(extracted, request.api_version);
-    return { response, httpStatus, raw };
+    return { response, httpStatus, raw, resolvedModel, provider: keysName, baseUrl };
   } catch (e) {
     clearTimeout(timeout);
     const err = e instanceof Error ? e.message : String(e);
