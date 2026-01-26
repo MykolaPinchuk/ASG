@@ -13,30 +13,45 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/MVP_SPEC.md` — normative MVP rules/spec (source of truth).
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.
 - `docs/planning/ROADMAP.md` — post-MVP direction.
-- `docs/adr/0002-v0-stack-and-repo-layout.md` — proposed v0 stack/layout decision.
-- `docs/adr/0003-v0-determinism-and-replay-contract.md` — proposed v0 determinism/replay contract.
 - `viewer/index.html` — replay viewer (load `replays/*.json`).
 - `scenarios/scenario_01.json` — initial scenario data.
 - `schemas/replay.schema.json` — replay JSON schema.
-- `schemas/agent_api.schema.json` — agent API schema (post-MVP v0).
+- `schemas/agent_api.schema.json` — agent API schema (`src/controllers/httpAgentController.ts` ↔ `src/cli/agentServer.ts`).
 
 ## Where results live (ignored by default)
 - `agent_logs/` — per-cycle logs and index.
 - `replays/` — replay outputs (ignored; keep examples small if ever committed).
 - `runs/` — per-run outputs (ignored).
 
+## Core runtime (engine → replay)
+- `src/game/engine.ts` — turn/ply resolution and state transitions.
+- `src/game/match.ts` — match loop and replay building.
+- `src/game/types.ts` — core types + replay schema types.
+- `src/scenario/loadScenario.ts` — scenario loader + validation.
+- `src/cli/runMatch.ts` — `npm run match` entrypoint.
+
+## Agent plumbing
+- `src/controllers/httpAgentController.ts` — game runner → HTTP agent API.
+- `src/cli/agentServer.ts` — HTTP agent server (providers: `stub`, `openai_compat`).
+- `src/providers/openaiCompat.ts` — OpenAI-compatible client + parsing/tooling behavior.
+
+## Model tooling
+- `configs/oss_models.json` — OSS model allowlist / priority list (derived from TML-bench).
+- `src/llm/models.ts` — shared OSS allowlist + OpenAI-compatible `/models` helpers.
+- `src/cli/listModels.ts` — `npm run agent:list-models`.
+- `src/cli/agentVsRandom.ts` — `npm run agent:vs-random` (eval harness; spawns `agent:server`).
+- `src/cli/sweepOssModels.ts` — `npm run agent:sweep-oss` (multi-provider sweep).
+
 ## Utility scripts
-- `scripts/sanitize_runs_markdown.py` — replace embedded images in `runs/**/{summary,report}.md` with links.
 - `src/cli/reportBatch.ts` — batch metrics report (`npm run report`).
-- `src/controllers/httpAgentController.ts` — HTTP agent controller (`--p1/--p2 agent` with `--agent-url`).
-- `src/cli/stubAgentServer.ts` — local stub agent (`npm run agent:stub`).
-- `src/cli/agentServer.ts` — agent server with providers (`npm run agent:server`).
 
 ## Local-only directories (ignored)
 - `secrets/` — local credentials (see `secrets/README.md`).
 
 ## Hot paths (last 1–2 cycles)
-- (path) — (why it's being touched)
+- `src/providers/openaiCompat.ts` — harden model output parsing / tool-use.
+- `src/cli/agentVsRandom.ts` — evaluation + replay naming/observability.
+- `viewer/index.html` — show agent/provider/model and add explanations.
 
 ## New important files since last cycle
 - `configs/oss_models.json` — OSS model allowlist/priority list (derived from TML-bench).

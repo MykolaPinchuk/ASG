@@ -32,13 +32,12 @@ secrets/**
 !secrets/README.md
 
 # Runs / artifacts (never commit)
+runs/
 runs/**
-!runs/**/
-!runs/**/summary.md
-!runs/**/report.md
 artifacts/
 outputs/
 tmp/
 
 # Game outputs (default: keep out of git)
+replays/
 replays/**
