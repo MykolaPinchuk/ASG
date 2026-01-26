@@ -19,6 +19,8 @@
     "agent:list-models": "tsx src/cli/listModels.ts"
     ,
     "agent:vs-random": "tsx src/cli/agentVsRandom.ts"
+    ,
+    "agent:sweep-oss": "tsx src/cli/sweepOssModels.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",
