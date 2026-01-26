@@ -36,6 +36,7 @@ The match runner can call an external agent over HTTP (`POST /act`) per `docs/pl
 - Run a match vs the agent:
   - `npm run match -- --seed 1 --p1 greedy --p2 agent --agent-url http://127.0.0.1:8787`
   - Optional: log raw request/response per ply under `runs/`: add `--agent-log-dir runs/agent_io`
+  - If using a real LLM and you see timeouts, increase the client timeout: add `--agent-timeout-ms 60000` (default is 60000).
 
 ### Real LLM (OpenAI-compatible providers)
 Run the agent server with `openai_compat` and point it at an OpenAI-compatible endpoint (e.g. OpenRouter).
@@ -54,6 +55,8 @@ ASG includes an OSS allowlist at `configs/oss_models.json` (priority ordered; de
   - `npm run agent:server -- --provider openai_compat --provider-name nanogpt --keys-file /path/to/provider_apis.txt --model auto --models-config configs/oss_models.json`
 
 Tip: set `ASG_MODELS_CONFIG=configs/oss_models.json` to avoid passing `--models-config` each time.
+
+Quick smoke test (1 LLM decision only): add `--turn-cap-plies 2` to `npm run match ...`.
 
 List models from a provider (requires provider access; some endpoints need an API key):
 - `npm run agent:list-models -- --provider openrouter --base-url https://openrouter.ai/api/v1 --format text --limit 50`

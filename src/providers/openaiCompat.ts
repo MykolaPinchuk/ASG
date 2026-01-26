@@ -229,7 +229,8 @@ export async function openAiCompatAct(params: {
     process.env.ASG_OPENAI_MODEL ??
     keys.get(`${keysName}_model`) ??
     "";
-  const timeoutMs = Number.parseInt(args.get("--timeout-ms") ?? process.env.ASG_OPENAI_TIMEOUT_MS ?? "8000", 10);
+  // Default must accommodate typical remote OpenAI-compatible provider latency.
+  const timeoutMs = Number.parseInt(args.get("--timeout-ms") ?? process.env.ASG_OPENAI_TIMEOUT_MS ?? "60000", 10);
   const temperature = Number.parseFloat(args.get("--temperature") ?? process.env.ASG_OPENAI_TEMPERATURE ?? "0.2");
   const maxTokens = Number.parseInt(args.get("--max-tokens") ?? process.env.ASG_OPENAI_MAX_TOKENS ?? "300", 10);
   const referer =

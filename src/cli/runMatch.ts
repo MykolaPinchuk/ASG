@@ -67,11 +67,18 @@ async function main() {
   const p2 = (args.get("--p2") ?? "greedy") as ControllerName;
   const seed = Number.parseInt(args.get("--seed") ?? "1", 10);
   const agentUrl = args.get("--agent-url");
-  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "2000", 10);
+  // Default must accommodate real LLM latency (even via a local agent server).
+  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
   const agentApiVersion = args.get("--agent-api-version") ?? "0.1";
   const agentLogDir = args.get("--agent-log-dir") ?? undefined;
+  const turnCapOverrideRaw = args.get("--turn-cap-plies");
+  const turnCapPliesOverride = turnCapOverrideRaw ? Number.parseInt(turnCapOverrideRaw, 10) : undefined;
 
   const scenario = await loadScenarioFromFile(scenarioPath);
+  if (turnCapPliesOverride !== undefined) {
+    if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
+    scenario.settings.turnCapPlies = turnCapPliesOverride;
+  }
   const adjacency = createAdjacency(scenario);
   const ctx = { scenario, adjacency };
 
