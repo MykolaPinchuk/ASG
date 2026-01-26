@@ -89,6 +89,14 @@ function summarizeReplay(replay: Replay, agentPlayer: PlayerId) {
   };
 }
 
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 120);
+}
+
 async function main() {
   const args = parseArgs(process.argv);
 
@@ -106,6 +114,8 @@ async function main() {
   const outDir = args.get("--out-dir") ?? "replays";
   const turnCapOverrideRaw = args.get("--turn-cap-plies");
   const turnCapPliesOverride = turnCapOverrideRaw ? Number.parseInt(turnCapOverrideRaw, 10) : undefined;
+  const tag = args.get("--tag") ?? `${providerName}_${model}`;
+  const tagSlug = slugify(tag);
 
   const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
   const maxTokens = args.get("--max-tokens") ?? "200";
@@ -209,7 +219,7 @@ async function main() {
 
     for (let i = 0; i < count; i++) {
       const seed = start + i;
-      const matchId = `${scenario.id}_seed${seed}_agent_vs_random`;
+      const matchId = `${scenario.id}_seed${seed}_agent_vs_random_${tagSlug}`;
 
       const agentController = new HttpAgentController({
         id: "agent",
@@ -273,7 +283,7 @@ async function main() {
 
       if (saveReplays) {
         await mkdir(outDir, { recursive: true });
-        const outFile = path.join(outDir, `${scenario.id}_seed${seed}_agent_vs_random.json`);
+        const outFile = path.join(outDir, `${scenario.id}_seed${seed}_agent_vs_random_${tagSlug}.json`);
         await writeFile(outFile, JSON.stringify(replay, null, 2), "utf8");
         if (i === 0) stats.sampleReplay = outFile;
       }
