@@ -61,7 +61,30 @@ async function waitForServer(url: string, timeoutMs: number): Promise<void> {
 function summarizeReplay(replay: Replay, agentPlayer: PlayerId) {
   const agentTurns = replay.turns.filter((t) => t.player === agentPlayer);
   const passTurns = agentTurns.filter((t) => (t.actions ?? []).length === 0 || (t.actions ?? []).every((a) => a.type === "pass")).length;
-  return { plies: replay.turns.length, agentTurns: agentTurns.length, agentPassTurns: passTurns, result: replay.result };
+  const agentActions = agentTurns.flatMap((t) => t.actions ?? []);
+  const moveActions = agentActions.filter((a) => a.type === "move").length;
+  const reinforceActions = agentActions.filter((a) => a.type === "reinforce").length;
+  let captureEvents = 0;
+  let combatEvents = 0;
+  let invalidActionEvents = 0;
+  for (const t of agentTurns) {
+    for (const e of t.events ?? []) {
+      if (e.type === "capture") captureEvents += 1;
+      else if (e.type === "combat") combatEvents += 1;
+      else if (e.type === "invalid_action") invalidActionEvents += 1;
+    }
+  }
+  return {
+    plies: replay.turns.length,
+    agentTurns: agentTurns.length,
+    agentPassTurns: passTurns,
+    agentMoveActions: moveActions,
+    agentReinforceActions: reinforceActions,
+    agentCaptures: captureEvents,
+    agentCombats: combatEvents,
+    agentInvalidActions: invalidActionEvents,
+    result: replay.result,
+  };
 }
 
 async function main() {
@@ -152,6 +175,11 @@ async function main() {
       results: { agentWins: number; opponentWins: number; draws: number };
       avgPlies: number;
       avgAgentPassTurns: number;
+      avgAgentMoveActions: number;
+      avgAgentReinforceActions: number;
+      avgAgentCaptures: number;
+      avgAgentCombats: number;
+      avgAgentInvalidActions: number;
       sampleReplay?: string;
     } = {
       seeds: { start, count },
@@ -159,10 +187,20 @@ async function main() {
       results: { agentWins: 0, opponentWins: 0, draws: 0 },
       avgPlies: 0,
       avgAgentPassTurns: 0,
+      avgAgentMoveActions: 0,
+      avgAgentReinforceActions: 0,
+      avgAgentCaptures: 0,
+      avgAgentCombats: 0,
+      avgAgentInvalidActions: 0,
     };
 
     let totalPlies = 0;
     let totalAgentPassTurns = 0;
+    let totalAgentMoveActions = 0;
+    let totalAgentReinforceActions = 0;
+    let totalAgentCaptures = 0;
+    let totalAgentCombats = 0;
+    let totalAgentInvalidActions = 0;
 
     for (let i = 0; i < count; i++) {
       const seed = start + i;
@@ -203,13 +241,18 @@ async function main() {
       const summary = summarizeReplay(replay, agentSide);
       totalPlies += summary.plies;
       totalAgentPassTurns += summary.agentPassTurns;
+      totalAgentMoveActions += summary.agentMoveActions;
+      totalAgentReinforceActions += summary.agentReinforceActions;
+      totalAgentCaptures += summary.agentCaptures;
+      totalAgentCombats += summary.agentCombats;
+      totalAgentInvalidActions += summary.agentInvalidActions;
 
       if (replay.result.type === "draw") stats.results.draws += 1;
       else if (replay.result.winner === agentSide) stats.results.agentWins += 1;
       else stats.results.opponentWins += 1;
 
       console.log(
-        `seed=${seed} plies=${summary.plies} agentPassTurns=${summary.agentPassTurns} result=${
+        `seed=${seed} plies=${summary.plies} agentPassTurns=${summary.agentPassTurns} moves=${summary.agentMoveActions} reinforces=${summary.agentReinforceActions} captures=${summary.agentCaptures} result=${
           replay.result.type === "draw" ? "DRAW" : `WIN_${replay.result.winner}`
         }`,
       );
@@ -224,6 +267,11 @@ async function main() {
 
     stats.avgPlies = totalPlies / count;
     stats.avgAgentPassTurns = totalAgentPassTurns / count;
+    stats.avgAgentMoveActions = totalAgentMoveActions / count;
+    stats.avgAgentReinforceActions = totalAgentReinforceActions / count;
+    stats.avgAgentCaptures = totalAgentCaptures / count;
+    stats.avgAgentCombats = totalAgentCombats / count;
+    stats.avgAgentInvalidActions = totalAgentInvalidActions / count;
 
     console.log("---");
     console.log(JSON.stringify(stats, null, 2));

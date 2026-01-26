@@ -105,17 +105,32 @@ function buildSystemPrompt() {
     `- {"type":"pass"}`,
     `- {"type":"reinforce","amount": <positive integer>}`,
     `- {"type":"move","from":"<node_id>","to":"<node_id>","amount": <positive integer>}`,
+    "Game rules (important):",
+    "- Plies alternate: P1 then P2 then P1 ...",
+    "- At start of each ply, ACTIVE player gains supply: baseIncome + sum(supplyYield of nodes they own).",
+    "- Reinforce adds forces to your HQ only and costs: amount * reinforceCostPerStrength (you can spend the income gained this ply).",
+    "- Move transfers forces along an edge. You cannot move more forces than you have at the 'from' node.",
+    "- If after a move both sides have forces at the destination, combat resolves immediately with randomness:",
+    "  let A=attackerStrength, D=defenderStrength, n=floor(min(A,D)*combatVarianceFraction) (at least 1), noise ~ Uniform[-n, +n], delta=(A-D)+noise.",
+    "  if delta>0 attacker wins with delta remaining; if delta<0 defender wins with -delta; if delta==0 coin flip winner with 1 remaining.",
+    "- After combat (or if no defender forces), if you have forces>0 and enemy has 0 at a node, you capture it (owner becomes you).",
+    "- You WIN immediately if you capture the enemy HQ node.",
     "Rules reminders:",
     "- move only along an edge from the provided adjacency list.",
     "- do not exceed available forces at the from node.",
     "- reinforce costs supply: amount * reinforceCostPerStrength.",
-    "If unsure, prefer: reinforce 1 (if affordable), else move 1 toward enemy HQ, else pass.",
-    "Strategy guideline (good enough):",
-    "- If you can capture enemy HQ soon, do it.",
-    "- Otherwise, expand to adjacent neutral/enemy nodes with higher supplyYield.",
-    "- Reinforce HQ when you have spare supply.",
+    "If unsure or you cannot find a legal action, return pass.",
     "Keep rationale_text short (<= 1 sentence) or omit it.",
   ].join("\n");
+}
+
+function sumIncomeFromObservation(obs: any, player: PlayerId, baseIncome: number): number {
+  let income = baseIncome;
+  const nodes: Record<string, any> = obs?.nodes ?? {};
+  for (const node of Object.values(nodes)) {
+    if (node?.owner === player) income += Number.isFinite(node?.supplyYield) ? Number(node.supplyYield) : 0;
+  }
+  return income;
 }
 
 function buildUserPrompt(params: {
@@ -131,7 +146,10 @@ function buildUserPrompt(params: {
   const obs = request.observation ?? {};
   const supplies = obs.supplies ?? { P1: 0, P2: 0 };
   const playerSupply = Number.isFinite(supplies?.[request.player]) ? supplies[request.player] : 0;
-  const maxReinforce = Math.max(0, Math.floor(playerSupply / cost));
+  const baseIncome = settings.baseIncome ?? 0;
+  const incomeThisPly = sumIncomeFromObservation(obs, request.player, baseIncome);
+  const supplyAfterIncome = playerSupply + incomeThisPly;
+  const maxReinforce = Math.max(0, Math.floor(supplyAfterIncome / cost));
 
   const moveOptions: Array<{ from: string; to: string; maxAmount: number }> = [];
   const nodes: Record<string, any> = obs.nodes ?? {};
@@ -144,7 +162,7 @@ function buildUserPrompt(params: {
   }
 
   const legal = {
-    reinforce: { maxAmount: maxReinforce, costPerStrength: cost },
+    reinforce: { maxAmount: maxReinforce, costPerStrength: cost, supplyAfterIncome, incomeThisPly },
     moves: moveOptions.slice(0, 120),
     notes: "For moves: choose amount between 1 and maxAmount.",
   };

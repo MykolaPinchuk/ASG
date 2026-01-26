@@ -128,6 +128,7 @@ function sanitizeActionsAgainstObservation(params: {
   req: AgentRequest;
   scenario: Scenario;
   adjacency: Record<string, string[]>;
+  fallbackMode: "pass" | "stub";
 }): { actions: Action[]; usedFallback: boolean } {
   const { req, scenario, adjacency } = params;
   const budget = Math.max(0, params.budget);
@@ -189,9 +190,12 @@ function sanitizeActionsAgainstObservation(params: {
 
   if (out.length > 0) return { actions: out, usedFallback: false };
 
+  // Default behavior is to be non-strategic: if the model gives no usable actions, pass.
+  // (A strategic fallback can be enabled explicitly via --fallback=stub.)
+  if (params.fallbackMode !== "stub") return { actions: [{ type: "pass" }], usedFallback: false };
+
   const shouldFallback = hasAnyLegalNonPassAction(req, scenario, adjacency);
   if (!shouldFallback) return { actions: [{ type: "pass" }], usedFallback: false };
-
   const fallback = chooseStubActions(req, scenario, adjacency);
   return { actions: fallback.actions.slice(0, budget), usedFallback: true };
 }
@@ -317,9 +321,11 @@ async function main() {
   const scenarioDir = args.get("--scenario-dir") ?? process.env.ASG_SCENARIO_DIR ?? path.resolve("scenarios");
   const logDir = args.get("--log-dir") ?? process.env.ASG_AGENT_LOG_DIR ?? undefined;
   const maxRequestBytes = Number.parseInt(args.get("--max-request-bytes") ?? "1048576", 10);
+  const fallbackMode = (args.get("--fallback") ?? process.env.ASG_AGENT_FALLBACK ?? "pass").toLowerCase();
 
   if (!Number.isInteger(port) || port <= 0) throw new Error("--port must be a positive integer");
   if (!["stub", "openai_compat"].includes(provider)) throw new Error("--provider must be stub or openai_compat");
+  if (!["pass", "stub"].includes(fallbackMode)) throw new Error("--fallback must be pass or stub");
 
   const scenarioCache = new Map<string, { scenario: Scenario; adjacency: Record<string, string[]> }>();
 
@@ -433,11 +439,17 @@ async function main() {
       }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
-      response = chooseStubActions(request, scenario, adjacency);
-      response.rationale_text = `server: ${provider} error (${error}); fallback=stub`;
+      response = { api_version: request.api_version, actions: [{ type: "pass" }], rationale_text: `server: ${provider} error (${error})` };
     }
 
-    const sanitized = sanitizeActionsAgainstObservation({ actions: response.actions, budget, req: request, scenario, adjacency });
+    const sanitized = sanitizeActionsAgainstObservation({
+      actions: response.actions,
+      budget,
+      req: request,
+      scenario,
+      adjacency,
+      fallbackMode: fallbackMode as "pass" | "stub",
+    });
     response.actions = sanitized.actions;
     if (sanitized.usedFallback) {
       const prev = response.rationale_text ? `${response.rationale_text}; ` : "";
