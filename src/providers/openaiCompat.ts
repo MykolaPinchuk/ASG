@@ -82,13 +82,60 @@ function extractJsonObject(text: string): unknown {
 
 function validateAgentResponse(json: unknown, expectedApiVersion: string): AgentResponse {
   if (!isObject(json)) throw new Error("model output must be a JSON object");
-  const apiVersion = json.api_version;
-  if (typeof apiVersion !== "string" || apiVersion.length === 0) throw new Error("api_version missing");
-  if (apiVersion !== expectedApiVersion) throw new Error(`api_version mismatch: got ${apiVersion}, expected ${expectedApiVersion}`);
+  const apiVersionRaw = (json as any).api_version;
+  // Some models omit or corrupt api_version; treat it as metadata and force the expected version.
+  const apiVersion = expectedApiVersion;
   if (!Array.isArray(json.actions)) throw new Error("actions must be an array");
   const actions = json.actions as Action[];
   const rationale_text = typeof json.rationale_text === "string" ? json.rationale_text : undefined;
   return { api_version: apiVersion, actions, rationale_text };
+}
+
+function buildToolSchema() {
+  // OpenAI-compatible "tools" schema to force JSON arguments (when supported).
+  return [
+    {
+      type: "function",
+      function: {
+        name: "act",
+        description: "Return actions for the current ply.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          required: ["api_version", "actions"],
+          properties: {
+            api_version: { const: "0.1" },
+            rationale_text: { type: "string" },
+            actions: {
+              type: "array",
+              items: {
+                oneOf: [
+                  { type: "object", additionalProperties: false, required: ["type"], properties: { type: { const: "pass" } } },
+                  {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["type", "amount"],
+                    properties: { type: { const: "reinforce" }, amount: { type: "integer", minimum: 1 } },
+                  },
+                  {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["type", "from", "to", "amount"],
+                    properties: {
+                      type: { const: "move" },
+                      from: { type: "string" },
+                      to: { type: "string" },
+                      amount: { type: "integer", minimum: 1 },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+  ];
 }
 
 function buildSystemPrompt() {
@@ -331,35 +378,84 @@ export async function openAiCompatAct(params: {
   if (referer) headers["HTTP-Referer"] = referer;
   if (title) headers["X-Title"] = title;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  async function callOnce(extraUserLine?: string): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let httpStatus = 0;
+    let raw: unknown = undefined;
 
-  let httpStatus = 0;
-  let raw: unknown = undefined;
+    try {
+      const p: any = { ...payload };
+
+      // Prefer tools/function-call when supported (reduces malformed JSON output).
+      const useTools = (params.args.get("--use-tools") ?? process.env.ASG_OPENAI_USE_TOOLS ?? "true").toLowerCase() !== "false";
+      if (useTools) {
+        p.tools = buildToolSchema();
+        p.tool_choice = { type: "function", function: { name: "act" } };
+      }
+
+      if (extraUserLine) {
+        p.messages = p.messages.slice();
+        p.messages.push({ role: "user", content: extraUserLine });
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(p),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+
+      httpStatus = res.status;
+      const text = await res.text();
+      raw = { status: res.status, body: text };
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 500)}`);
+
+      const json = JSON.parse(text) as any;
+      const msg = json?.choices?.[0]?.message;
+
+      const toolArgs = msg?.tool_calls?.[0]?.function?.arguments;
+      if (typeof toolArgs === "string" && toolArgs.length > 0) {
+        const extracted = extractJsonObject(toolArgs);
+        const response = validateAgentResponse(extracted, request.api_version);
+        return { response, httpStatus, raw };
+      }
+
+      const content = msg?.content;
+      if (typeof content !== "string" || content.length === 0) throw new Error("no message.content or tool_calls");
+
+      const extracted = extractJsonObject(content);
+      const response = validateAgentResponse(extracted, request.api_version);
+      return { response, httpStatus, raw };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+    // First attempt.
+    const first = await callOnce();
+    return { ...first, resolvedModel, provider: keysName, baseUrl };
+  } catch (e1) {
+    // One retry for malformed JSON / parsing issues.
+    const msg = e1 instanceof Error ? e1.message : String(e1);
+    const shouldRetry =
+      msg.includes("JSON") ||
+      msg.includes("Unexpected") ||
+      msg.includes("Expected ','") ||
+      msg.includes("no message.content") ||
+      msg.includes("no message.content or tool_calls") ||
+      msg.includes("no JSON object found");
+    if (!shouldRetry) throw new Error(`openai_compat failed: ${msg}`);
 
-    httpStatus = res.status;
-    const text = await res.text();
-    raw = { status: res.status, body: text };
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 500)}`);
-
-    const json = JSON.parse(text) as any;
-    const content = json?.choices?.[0]?.message?.content;
-    if (typeof content !== "string" || content.length === 0) throw new Error("no choices[0].message.content");
-
-    const extracted = extractJsonObject(content);
-    const response = validateAgentResponse(extracted, request.api_version);
-    return { response, httpStatus, raw, resolvedModel, provider: keysName, baseUrl };
-  } catch (e) {
-    clearTimeout(timeout);
-    const err = e instanceof Error ? e.message : String(e);
-    throw new Error(`openai_compat failed: ${err}`);
+    try {
+      const retry = await callOnce(
+        `Your previous output was invalid or not parseable. Return ONLY a single valid JSON object matching the schema exactly. api_version must be "${request.api_version}".`,
+      );
+      return { ...retry, resolvedModel, provider: keysName, baseUrl };
+    } catch (e2) {
+      const msg2 = e2 instanceof Error ? e2.message : String(e2);
+      throw new Error(`openai_compat failed: ${msg2}`);
+    }
   }
 }

@@ -61,6 +61,7 @@ async function waitForServer(url: string, timeoutMs: number): Promise<void> {
 function summarizeReplay(replay: Replay, agentPlayer: PlayerId) {
   const agentTurns = replay.turns.filter((t) => t.player === agentPlayer);
   const passTurns = agentTurns.filter((t) => (t.actions ?? []).length === 0 || (t.actions ?? []).every((a) => a.type === "pass")).length;
+  const providerErrorTurns = agentTurns.filter((t) => (t.rationaleText ?? "").includes("server: openai_compat error")).length;
   const agentActions = agentTurns.flatMap((t) => t.actions ?? []);
   const moveActions = agentActions.filter((a) => a.type === "move").length;
   const reinforceActions = agentActions.filter((a) => a.type === "reinforce").length;
@@ -78,6 +79,7 @@ function summarizeReplay(replay: Replay, agentPlayer: PlayerId) {
     plies: replay.turns.length,
     agentTurns: agentTurns.length,
     agentPassTurns: passTurns,
+    providerErrorTurns,
     agentMoveActions: moveActions,
     agentReinforceActions: reinforceActions,
     agentCaptures: captureEvents,
@@ -175,6 +177,7 @@ async function main() {
       results: { agentWins: number; opponentWins: number; draws: number };
       avgPlies: number;
       avgAgentPassTurns: number;
+      avgProviderErrorTurns: number;
       avgAgentMoveActions: number;
       avgAgentReinforceActions: number;
       avgAgentCaptures: number;
@@ -187,6 +190,7 @@ async function main() {
       results: { agentWins: 0, opponentWins: 0, draws: 0 },
       avgPlies: 0,
       avgAgentPassTurns: 0,
+      avgProviderErrorTurns: 0,
       avgAgentMoveActions: 0,
       avgAgentReinforceActions: 0,
       avgAgentCaptures: 0,
@@ -196,6 +200,7 @@ async function main() {
 
     let totalPlies = 0;
     let totalAgentPassTurns = 0;
+    let totalProviderErrorTurns = 0;
     let totalAgentMoveActions = 0;
     let totalAgentReinforceActions = 0;
     let totalAgentCaptures = 0;
@@ -241,6 +246,7 @@ async function main() {
       const summary = summarizeReplay(replay, agentSide);
       totalPlies += summary.plies;
       totalAgentPassTurns += summary.agentPassTurns;
+      totalProviderErrorTurns += summary.providerErrorTurns;
       totalAgentMoveActions += summary.agentMoveActions;
       totalAgentReinforceActions += summary.agentReinforceActions;
       totalAgentCaptures += summary.agentCaptures;
@@ -252,7 +258,7 @@ async function main() {
       else stats.results.opponentWins += 1;
 
       console.log(
-        `seed=${seed} plies=${summary.plies} agentPassTurns=${summary.agentPassTurns} moves=${summary.agentMoveActions} reinforces=${summary.agentReinforceActions} captures=${summary.agentCaptures} result=${
+        `seed=${seed} plies=${summary.plies} passTurns=${summary.agentPassTurns} providerErrors=${summary.providerErrorTurns} moves=${summary.agentMoveActions} reinforces=${summary.agentReinforceActions} captures=${summary.agentCaptures} result=${
           replay.result.type === "draw" ? "DRAW" : `WIN_${replay.result.winner}`
         }`,
       );
@@ -267,6 +273,7 @@ async function main() {
 
     stats.avgPlies = totalPlies / count;
     stats.avgAgentPassTurns = totalAgentPassTurns / count;
+    stats.avgProviderErrorTurns = totalProviderErrorTurns / count;
     stats.avgAgentMoveActions = totalAgentMoveActions / count;
     stats.avgAgentReinforceActions = totalAgentReinforceActions / count;
     stats.avgAgentCaptures = totalAgentCaptures / count;
