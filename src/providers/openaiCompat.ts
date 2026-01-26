@@ -1,3 +1,10 @@
+import {
+  fetchOpenAiCompatModelIds,
+  getProviderAllowlist,
+  loadOssModelsConfig,
+  normalizeBaseUrl,
+} from "../llm/models.js";
+
 type PlayerId = "P1" | "P2";
 
 type AgentRequest = {
@@ -137,6 +144,57 @@ function buildUserPrompt(params: {
   ].join("\n");
 }
 
+const resolvedModelCache = new Map<string, string>();
+
+async function resolveOpenAiCompatModel(params: {
+  args: ProviderArgs;
+  keys: Map<string, string>;
+  keysName: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}): Promise<string> {
+  const { args, keys, keysName, baseUrl, apiKey } = params;
+  const modelRaw = params.model;
+  if (modelRaw !== "auto") return modelRaw;
+
+  const modelsConfigPath =
+    args.get("--models-config") ??
+    process.env.ASG_MODELS_CONFIG ??
+    "configs/oss_models.json";
+
+  const modelsProvider = (
+    args.get("--models-provider") ??
+    args.get("--provider-name") ??
+    process.env.ASG_OPENAI_PROVIDER ??
+    keysName
+  ).toLowerCase();
+
+  const cacheKey = `${normalizeBaseUrl(baseUrl)}|${modelsProvider}|${modelsConfigPath}`;
+  const cached = resolvedModelCache.get(cacheKey);
+  if (cached) return cached;
+
+  const config = await loadOssModelsConfig(modelsConfigPath);
+  const { priority, allow } = getProviderAllowlist(config, modelsProvider);
+  if (priority.length === 0 && allow.length === 0) {
+    throw new Error(`model=auto has no allowlist for provider '${modelsProvider}' in ${modelsConfigPath}`);
+  }
+
+  const ids = await fetchOpenAiCompatModelIds({ baseUrl, apiKey });
+  const available = new Set(ids);
+  const candidateOrder = Array.from(new Set([...priority, ...allow]));
+  const chosen = candidateOrder.find((m) => available.has(m));
+  if (!chosen) {
+    const sample = ids.slice(0, 30).join(", ");
+    throw new Error(
+      `model=auto could not find an allowed model for provider '${modelsProvider}' at ${normalizeBaseUrl(baseUrl)}; sample available models: ${sample}`,
+    );
+  }
+
+  resolvedModelCache.set(cacheKey, chosen);
+  return chosen;
+}
+
 export async function openAiCompatAct(params: {
   request: AgentRequest;
   scenario: Scenario;
@@ -187,15 +245,24 @@ export async function openAiCompatAct(params: {
 
   if (!baseUrl) throw new Error("openai_compat requires --base-url (e.g. https://openrouter.ai/api/v1)");
   if (!apiKey) throw new Error("openai_compat requires --api-key (or ASG_OPENAI_API_KEY/OPENAI_API_KEY)");
-  if (!model) throw new Error("openai_compat requires --model");
+  if (!model) throw new Error("openai_compat requires --model (or set it to 'auto')");
 
-  const url = baseUrl.replace(/\/+$/, "") + "/chat/completions";
+  const resolvedModel = await resolveOpenAiCompatModel({
+    args,
+    keys,
+    keysName,
+    baseUrl,
+    apiKey,
+    model,
+  });
+
+  const url = normalizeBaseUrl(baseUrl) + "/chat/completions";
 
   const system = buildSystemPrompt();
   const user = buildUserPrompt({ request, scenario, adjacency });
 
   const payload: any = {
-    model,
+    model: resolvedModel,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },

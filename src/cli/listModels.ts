@@ -1,3 +1,9 @@
+import {
+  fetchOpenAiCompatModelIds,
+  getProviderAllowlist,
+  loadOssModelsConfig,
+} from "../llm/models.js";
+
 type OutputFormat = "text" | "json";
 
 function parseArgs(argv: string[]) {
@@ -43,23 +49,6 @@ function guessKeyEnv(providerName: string): string {
   return `${upper}_API_KEY`;
 }
 
-function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, "");
-}
-
-function extractModelIds(payload: unknown): string[] {
-  if (typeof payload !== "object" || payload === null) return [];
-  const p = payload as any;
-  const candidates = p.data ?? p.models ?? p.items ?? p.result ?? p;
-  if (!Array.isArray(candidates)) return [];
-  const ids: string[] = [];
-  for (const item of candidates) {
-    const id = item?.id ?? item?.name ?? item?.model;
-    if (typeof id === "string" && id.length > 0) ids.push(id);
-  }
-  return Array.from(new Set(ids)).sort();
-}
-
 async function main() {
   const args = parseArgs(process.argv);
   const providerName = args.get("--provider") ?? "openrouter";
@@ -84,32 +73,56 @@ async function main() {
   const outAll = args.get("--all") === "true";
   const limit = Number.parseInt(args.get("--limit") ?? "50", 10);
   const filter = args.get("--filter") ?? "";
+  const modelsConfigPath = args.get("--models-config") ?? getEnv("ASG_MODELS_CONFIG") ?? "";
+  const modelsProvider = (args.get("--models-provider") ?? providerName).toLowerCase();
+  const onlyAllowed = modelsConfigPath ? args.get("--only-allowed") !== "false" : false;
 
   const finalBaseUrl = baseUrl || keys.get(providerBaseUrlName) || "";
   if (!finalBaseUrl) throw new Error("Missing --base-url (or ASG_<PROVIDER>_BASE_URL / ASG_OPENAI_BASE_URL / --keys-file)");
   if (!Number.isInteger(limit) || limit < 1) throw new Error("--limit must be an integer >= 1");
   if (!["text", "json"].includes(format)) throw new Error("--format must be text|json");
 
-  const url = normalizeBaseUrl(finalBaseUrl) + "/models";
-  const headers: Record<string, string> = {};
-  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
-
-  const res = await fetch(url, { headers });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}: ${text.slice(0, 400)}`);
-
-  let payload: unknown;
-  try {
-    payload = JSON.parse(text);
-  } catch {
-    throw new Error(`Non-JSON response from ${url}: ${text.slice(0, 200)}`);
-  }
-
-  let ids = extractModelIds(payload);
+  let ids = await fetchOpenAiCompatModelIds({ baseUrl: finalBaseUrl, apiKey: apiKey || undefined });
   if (filter) ids = ids.filter((id) => id.toLowerCase().includes(filter.toLowerCase()));
 
+  let allow: string[] = [];
+  let priority: string[] = [];
+  let availablePriority: string[] = [];
+  let missingPriority: string[] = [];
+  if (modelsConfigPath) {
+    const config = await loadOssModelsConfig(modelsConfigPath);
+    const lists = getProviderAllowlist(config, modelsProvider);
+    allow = lists.allow;
+    priority = lists.priority;
+    const availableSet = new Set(ids);
+    availablePriority = priority.filter((m) => availableSet.has(m));
+    missingPriority = priority.filter((m) => !availableSet.has(m));
+    if (onlyAllowed && allow.length > 0) {
+      const allowSet = new Set(allow);
+      ids = ids.filter((id) => allowSet.has(id));
+    }
+  }
+
   if (format === "json") {
-    console.log(JSON.stringify({ provider: providerName, baseUrl: finalBaseUrl, count: ids.length, ids }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          provider: providerName,
+          baseUrl: finalBaseUrl,
+          count: ids.length,
+          ids,
+          modelsConfigPath: modelsConfigPath || undefined,
+          modelsProvider: modelsConfigPath ? modelsProvider : undefined,
+          onlyAllowed: modelsConfigPath ? onlyAllowed : undefined,
+          allow: modelsConfigPath ? allow : undefined,
+          priority: modelsConfigPath ? priority : undefined,
+          availablePriority: modelsConfigPath ? availablePriority : undefined,
+          missingPriority: modelsConfigPath ? missingPriority : undefined,
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
@@ -117,6 +130,15 @@ async function main() {
   console.log(`provider=${providerName}`);
   console.log(`baseUrl=${finalBaseUrl}`);
   console.log(`count=${ids.length}`);
+  if (modelsConfigPath) {
+    console.log(`modelsConfig=${modelsConfigPath}`);
+    console.log(`modelsProvider=${modelsProvider}`);
+    console.log(`onlyAllowed=${onlyAllowed}`);
+    if (priority.length > 0) {
+      console.log(`priorityAvailable=${availablePriority.length}/${priority.length}`);
+      if (missingPriority.length > 0) console.log(`priorityMissing=${missingPriority.length}`);
+    }
+  }
   for (const id of shown) console.log(id);
   if (!outAll && ids.length > shown.length) console.log(`... (use --all or increase --limit)`);
 }

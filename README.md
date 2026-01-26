@@ -45,10 +45,21 @@ Example (OpenRouter):
 - `export ASG_OPENROUTER_API_KEY='...'`
 - `npm run agent:server -- --provider openai_compat --provider-name openrouter --base-url https://openrouter.ai/api/v1 --model <model_id>`
 
+### OSS-only model allowlist (priority from TML-bench)
+ASG includes an OSS allowlist at `configs/oss_models.json` (priority ordered; derived from TML-bench).
+
+- Auto-pick the first available priority model (Chutes):
+  - `npm run agent:server -- --provider openai_compat --provider-name chutes --base-url https://llm.chutes.ai/v1 --keys-file /path/to/provider_apis.txt --model auto --models-config configs/oss_models.json`
+- Auto-pick the first available priority model (NanoGPT):
+  - `npm run agent:server -- --provider openai_compat --provider-name nanogpt --keys-file /path/to/provider_apis.txt --model auto --models-config configs/oss_models.json`
+
+Tip: set `ASG_MODELS_CONFIG=configs/oss_models.json` to avoid passing `--models-config` each time.
+
 List models from a provider (requires provider access; some endpoints need an API key):
 - `npm run agent:list-models -- --provider openrouter --base-url https://openrouter.ai/api/v1 --format text --limit 50`
 - `npm run agent:list-models -- --provider nanogpt --keys-file /path/to/provider_apis.txt --format text --limit 50`
 - `npm run agent:list-models -- --provider chutes --base-url https://llm.chutes.ai/v1 --keys-file /path/to/provider_apis.txt --format text --limit 50`
+  - Add `--models-config configs/oss_models.json` to filter to the OSS allowlist (default `--only-allowed=true`).
 
 Provider-specific env vars (optional convenience):
 - `ASG_OPENROUTER_BASE_URL`, `ASG_OPENROUTER_API_KEY`, `ASG_OPENROUTER_MODEL`

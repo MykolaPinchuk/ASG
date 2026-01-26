@@ -39,4 +39,5 @@ Keep this file short. Update it only when something important changes.
 - (path) — (why it's being touched)
 
 ## New important files since last cycle
-- (path) — (purpose)
+- `configs/oss_models.json` — OSS model allowlist/priority list (derived from TML-bench).
+- `src/llm/models.ts` — shared helpers for OSS allowlist + OpenAI-compatible `/models`.

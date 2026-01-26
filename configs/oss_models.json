@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "updated_at": "2026-01-26",
+  "sources": [
+    "TML-bench/orchestrator/model_sets/v3_fast.json",
+    "TML-bench/orchestrator/model_sets/leaderboard_current.json"
+  ],
+  "providers": {
+    "chutes": {
+      "priority": [
+        "deepseek-ai/DeepSeek-V3.1-Terminus",
+        "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+        "zai-org/GLM-4.6-FP8",
+        "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        "microsoft/Phi-3.5-mini-instruct",
+        "deepseek-v3.1-terminus"
+      ]
+    },
+    "nanogpt": {
+      "priority": [
+        "deepseek/deepseek-v3.2",
+        "mistralai/devstral-2-123b-instruct-2512",
+        "qwen/qwen3-next-80b-a3b-thinking"
+      ]
+    },
+    "openrouter": {
+      "priority": []
+    }
+  }
+}
