@@ -12,6 +12,23 @@ type AgentRequest = {
 
 type ProviderArgs = Map<string, string>;
 
+function parseKeysFile(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const idx = line.indexOf(":");
+    const eq = line.indexOf("=");
+    const splitAt = idx >= 0 ? idx : eq >= 0 ? eq : -1;
+    if (splitAt < 0) continue;
+    const k = line.slice(0, splitAt).trim().toLowerCase();
+    const v = line.slice(splitAt + 1).trim();
+    if (!k || !v) continue;
+    out.set(k, v);
+  }
+  return out;
+}
+
 type Scenario = {
   id: string;
   settings: {
@@ -129,21 +146,30 @@ export async function openAiCompatAct(params: {
   const { request, scenario, adjacency, args } = params;
 
   const providerName = (args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "openai").toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  const keysFilePath = args.get("--keys-file");
+  const keys = keysFilePath
+    ? parseKeysFile(await (await import("node:fs/promises")).readFile(keysFilePath, "utf8"))
+    : new Map<string, string>();
+  const keysName = (args.get("--keys-name") ?? providerName.toLowerCase()).toLowerCase();
+
   const baseUrl =
     args.get("--base-url") ??
     process.env[`ASG_${providerName}_BASE_URL`] ??
     process.env.ASG_OPENAI_BASE_URL ??
+    keys.get(`${keysName}_base_url`) ??
     "";
   const apiKey =
     args.get("--api-key") ??
     process.env[`ASG_${providerName}_API_KEY`] ??
     process.env.ASG_OPENAI_API_KEY ??
     process.env.OPENAI_API_KEY ??
+    keys.get(keysName) ??
     "";
   const model =
     args.get("--model") ??
     process.env[`ASG_${providerName}_MODEL`] ??
     process.env.ASG_OPENAI_MODEL ??
+    keys.get(`${keysName}_model`) ??
     "";
   const timeoutMs = Number.parseInt(args.get("--timeout-ms") ?? process.env.ASG_OPENAI_TIMEOUT_MS ?? "8000", 10);
   const temperature = Number.parseFloat(args.get("--temperature") ?? process.env.ASG_OPENAI_TEMPERATURE ?? "0.2");

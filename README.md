@@ -47,11 +47,16 @@ Example (OpenRouter):
 
 List models from a provider (requires provider access; some endpoints need an API key):
 - `npm run agent:list-models -- --provider openrouter --base-url https://openrouter.ai/api/v1 --format text --limit 50`
+- `npm run agent:list-models -- --provider nanogpt --keys-file /path/to/provider_apis.txt --format text --limit 50`
+- `npm run agent:list-models -- --provider chutes --base-url https://llm.chutes.ai/v1 --keys-file /path/to/provider_apis.txt --format text --limit 50`
 
 Provider-specific env vars (optional convenience):
 - `ASG_OPENROUTER_BASE_URL`, `ASG_OPENROUTER_API_KEY`, `ASG_OPENROUTER_MODEL`
 - `ASG_CHUTES_BASE_URL`, `ASG_CHUTES_API_KEY`, `ASG_CHUTES_MODEL`
 - `ASG_NANOGPT_BASE_URL`, `ASG_NANOGPT_API_KEY`, `ASG_NANOGPT_MODEL`
+
+You can also run the agent server using a `--keys-file` (same format as TML-bench `secrets/provider_apis.txt`):
+- `npm run agent:server -- --provider openai_compat --provider-name nanogpt --keys-file /path/to/provider_apis.txt --model <model_id>`
 
 ## Agent triggers
 - `Onboard` — deterministic onboarding
