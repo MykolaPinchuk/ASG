@@ -415,6 +415,24 @@ async function main() {
     let error: string | undefined;
     let upstreamStatus: number | undefined;
     let upstreamRaw: unknown | undefined;
+    let agentInfo: AgentResponse["agent_info"] | undefined;
+
+    if (provider === "openai_compat") {
+      const providerNameRaw = args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "openai";
+      const providerKey = providerNameRaw.toLowerCase();
+      const baseUrl =
+        args.get("--base-url") ??
+        process.env[`ASG_${providerNameRaw.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_BASE_URL`] ??
+        process.env.ASG_OPENAI_BASE_URL ??
+        undefined;
+      const modelArg = args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? undefined;
+      agentInfo = {
+        provider: providerKey,
+        baseUrl,
+        model: modelArg && modelArg !== "auto" ? modelArg : undefined,
+        modelMode: modelArg === "auto" ? "auto" : modelArg ? "explicit" : undefined,
+      };
+    }
 
     try {
       if (provider === "stub") {
@@ -440,6 +458,7 @@ async function main() {
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       response = { api_version: request.api_version, actions: [{ type: "pass" }], rationale_text: `server: ${provider} error (${error})` };
+      if (agentInfo) response.agent_info = agentInfo;
     }
 
     const sanitized = sanitizeActionsAgainstObservation({

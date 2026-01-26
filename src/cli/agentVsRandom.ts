@@ -98,7 +98,7 @@ async function main() {
   const agentSide = (args.get("--agent-side") ?? "P1") as PlayerId;
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const providerName = args.get("--provider-name") ?? "nanogpt";
-  const baseUrl = args.get("--base-url"); // optional; keys-file may contain it
+  const baseUrl = args.get("--base-url") ?? undefined; // optional; keys-file may contain it
   const model = args.get("--model") ?? "auto";
   const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_models.json";
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
@@ -238,9 +238,17 @@ async function main() {
       const replay = await runMatch({ ctx, controllers, seed });
 
       const agentInfo = agentController.agentInfo;
+      const baseAgentMeta = {
+        kind: "agent" as const,
+        agentUrl,
+        provider: providerName,
+        baseUrl: baseUrl,
+        model,
+        modelMode: model === "auto" ? ("auto" as const) : ("explicit" as const),
+      };
       replay.players = {
-        P1: agentSide === "P1" ? { kind: "agent", agentUrl, ...agentInfo } : { kind: "random" },
-        P2: agentSide === "P2" ? { kind: "agent", agentUrl, ...agentInfo } : { kind: "random" },
+        P1: agentSide === "P1" ? { ...baseAgentMeta, ...(agentInfo ?? {}) } : { kind: "random" },
+        P2: agentSide === "P2" ? { ...baseAgentMeta, ...(agentInfo ?? {}) } : { kind: "random" },
       };
 
       const summary = summarizeReplay(replay, agentSide);
