@@ -84,6 +84,7 @@ export interface TurnRecord {
   observations: Record<PlayerId, Observation>;
   actions: Action[];
   rationaleText?: string;
+  latencyMs?: number;
   events: Event[];
   stateAfter: GameState;
 }

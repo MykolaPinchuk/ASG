@@ -413,6 +413,7 @@
         },
         "actions": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
         "rationaleText": { "type": "string" },
+        "latencyMs": { "type": "integer", "minimum": 0 },
         "events": { "type": "array", "items": { "$ref": "#/$defs/Event" } },
         "stateAfter": { "$ref": "#/$defs/GameState" }
       }

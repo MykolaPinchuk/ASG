@@ -205,12 +205,13 @@ export class HttpAgentController implements Controller {
 
     if (!parsedResponse) {
       const why = error ? `agent error: ${error}` : "agent error";
-      return { actions: [{ type: "pass" }], rationaleText: why + ` (latency ${latencyMs}ms)` };
+      return { actions: [{ type: "pass" }], rationaleText: why + ` (latency ${latencyMs}ms)`, latencyMs };
     }
 
     return {
       actions: parsedResponse.actions,
       rationaleText: parsedResponse.rationale_text,
+      latencyMs,
     };
   }
 }

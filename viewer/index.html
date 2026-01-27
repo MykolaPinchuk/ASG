@@ -893,12 +893,14 @@
         turnLabel.textContent = `Ply ${t.ply} (${t.player}) — ${timeLabel}`;
 
         const supplyLine = `Supply: P1=${frame.state.supplies?.P1 ?? "?"} P2=${frame.state.supplies?.P2 ?? "?"}`;
+        const latencyLine =
+          typeof t.latencyMs === "number" && Number.isFinite(t.latencyMs) ? `Latency: ${Math.max(0, Math.floor(t.latencyMs))}ms` : "Latency: —";
         const resultLine = `Result: ${replay.result.type === "win" ? `WIN ${replay.result.winner}` : "DRAW"}`;
         const note =
           timeMode.value === "after" && viewMode.value !== "Omni"
             ? "Note: After uses omniscient stateAfter (future POV-after not modeled yet)."
             : "";
-        turnInfo.textContent = [turnLabel.textContent, supplyLine, resultLine, note].filter(Boolean).join("\n");
+        turnInfo.textContent = [turnLabel.textContent, supplyLine, latencyLine, resultLine, note].filter(Boolean).join("\n");
 
         rationale.textContent = t.rationaleText ?? "—";
         actions.textContent =

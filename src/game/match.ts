@@ -37,6 +37,7 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
       observations: { P1: observations.P1, P2: observations.P2 },
       actions: decision.actions,
       rationaleText: decision.rationaleText,
+      latencyMs: decision.latencyMs,
       events: applied.events,
       stateAfter: state,
     });
@@ -51,4 +52,3 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
     result,
   };
 }
-
