@@ -487,13 +487,21 @@ export async function openAiCompatAct(params: {
   if (referer) headers["HTTP-Referer"] = referer;
   if (title) headers["X-Title"] = title;
 
+  // Enforce a total wall-clock budget across retries so the agent server responds
+  // within the configured timeout window (instead of timing out after multiple attempts).
+  const deadlineAt = Date.now() + timeoutMs;
+
   async function callOnce(
     extraUserLine?: string,
     maxTokensOverride?: number,
     toolsModeOverride?: "force" | "off",
   ): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
+    const remainingMs = deadlineAt - Date.now();
+    if (!Number.isFinite(remainingMs) || remainingMs < 1000) throw new Error("timeout_budget_exhausted");
+    const attemptTimeoutMs = Math.max(1000, Math.min(timeoutMs, Math.floor(remainingMs)));
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
     let httpStatus = 0;
     let raw: unknown = undefined;
 
