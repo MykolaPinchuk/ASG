@@ -3,6 +3,14 @@
 ## Current slice
 MVP v0 is implemented end-to-end (engine → replays → viewer → agent server/provider plumbing). Recent work focused on OSS model integration and sweeps across providers; next work is making the LLM-agent more reliable (fewer passes/provider errors) without adding strategic “fallback” behavior.
 
+## OSS baselines (default for testing)
+These are the current recommended OSS baselines for ongoing testing (high win-rate and stable/low error rates in recent runs):
+- Chutes: `tngtech/DeepSeek-R1T-Chimera`
+- Chutes: `chutesai/Mistral-Small-3.1-24B-Instruct-2503`
+
+Smoke (1 game each vs GreedyBot, seed=3):
+- `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
+
 ## Known-good models (fallback shortlist)
 If provider/model availability changes, these OpenRouter models have recently worked well end-to-end in this repo:
 - Primary: `x-ai/grok-4.1-fast`
@@ -32,6 +40,8 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Viewer that can load replay JSONs and shows timeline + events + agent rationale, with a Players panel showing agent provider/model when present:
   - `viewer/index.html`
   - Evidence: `96a05b8` (`agent01: checkpoint(viewer): show agent model`), `f1cf8fa` (`agent01: checkpoint(viewer): add in-app explanations + event highlighting`)
+- Viewer now shows per-ply agent latency when present:
+  - `viewer/index.html` reads `turn.latencyMs` (optional)
 - HTTP agent controller + agent server:
   - Controller: `src/controllers/httpAgentController.ts`
   - Server: `src/cli/agentServer.ts` (providers: `stub`, `openai_compat`)
@@ -44,6 +54,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - Evidence: `f6daf7a` (`agent01: checkpoint(misc): OSS allowlist + model auto`)
 - Model evaluation tooling:
   - Agent vs Random: `npm run agent:vs-random` (`src/cli/agentVsRandom.ts`)
+  - Model eval vs MixBot/GreedyBot (prints per-game metrics + optional JSONL live log): `npm run agent:eval-vs-mix` (`src/cli/evalModelsVsMix.ts`)
   - OSS sweep (smoke + full seed run): `npm run agent:sweep-oss` (`src/cli/sweepOssModels.ts`)
   - Evidence: `479cae7` (`agent01: checkpoint(runner): add OSS model sweep`), `2089ade` (`agent01: checkpoint(runner): unique replays per model`)
 - Local run outputs (gitignored) contain sweep + retest results:
@@ -69,6 +80,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - Validate replay JSON: `npm run validate:replay -- replays/<replay>.json`
   - View replay: open `viewer/index.html` (file picker) and select the replay JSON.
   - Agent vs Random (requires `secrets/provider_apis.txt`): `npm run agent:vs-random -- --provider-name nanogpt --model auto --count 3 --start 1 --save-replays true`
+  - OSS baselines (Chutes) vs GreedyBot: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
   - OSS sweep (can take a while; requires provider keys): `npm run agent:sweep-oss -- --providers nanogpt,chutes --max-models 30 --full-seed 3`
 
 ## Known issues / current breakage
