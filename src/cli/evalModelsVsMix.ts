@@ -115,6 +115,7 @@ type Row = {
   model: string;
   opponent: Opponent;
   seeds: number[];
+  plannedGames: number;
   games: number;
   replayPaths?: string[];
   wins: number;
@@ -228,6 +229,7 @@ async function evalOneModel(params: {
   let agentCapturesTotal = 0;
   let trialsWithAnyCapture = 0;
   const replayPaths: string[] = [];
+  let gamesPlayed = 0;
 
   try {
     await waitForServer(`${agentUrl}/act`, 8000);
@@ -286,6 +288,7 @@ async function evalOneModel(params: {
 
       const controllers: Record<PlayerId, Controller> = { P1: agentWrapped, P2: opponentController };
       const replay = await runMatch({ ctx, controllers, seed });
+      gamesPlayed += 1;
 
       // Attach metadata so the viewer shows model/provider and MixBot params.
       const agentInfo = agentController.agentInfo;
@@ -377,22 +380,23 @@ async function evalOneModel(params: {
     await stopServer();
   }
 
-  const games = Math.max(1, params.seeds.length);
-  const winRate = wins / games;
+  const plannedGames = params.seeds.length;
+  const winRate = gamesPlayed > 0 ? wins / gamesPlayed : Number.NaN;
   return {
     provider: String(params.providerName),
     model: params.model,
     opponent: params.opponent,
     seeds: params.seeds.slice(),
-    games,
+    plannedGames,
+    games: gamesPlayed,
     replayPaths: params.saveReplays ? replayPaths : undefined,
     wins,
     draws,
     losses,
     winRate,
-    avgProviderErrorTurns: providerErrorTurnsTotal / games,
-    avgAgentCaptures: agentCapturesTotal / games,
-    captureRate: trialsWithAnyCapture / games,
+    avgProviderErrorTurns: gamesPlayed > 0 ? providerErrorTurnsTotal / gamesPlayed : Number.NaN,
+    avgAgentCaptures: gamesPlayed > 0 ? agentCapturesTotal / gamesPlayed : Number.NaN,
+    captureRate: gamesPlayed > 0 ? trialsWithAnyCapture / gamesPlayed : Number.NaN,
   } satisfies Row;
 }
 
@@ -554,12 +558,13 @@ async function main() {
         model,
         opponent,
         seeds,
-        games: seeds.length,
+        plannedGames: seeds.length,
+        games: 0,
         replayPaths: [],
         wins: 0,
         draws: 0,
         losses: 0,
-        winRate: 0,
+        winRate: Number.NaN,
         avgProviderErrorTurns: 0,
         avgAgentCaptures: 0,
         captureRate: 0,
@@ -571,12 +576,12 @@ async function main() {
   rows.sort((a, b) => b.winRate - a.winRate || a.model.localeCompare(b.model));
 
   const table = [
-    "| provider | opponent | model | games | wins | draws | losses | win rate | non-loss rate | capture rate | avg captures | avg provider-error turns |",
-    "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    "| provider | opponent | model | played | planned | wins | draws | losses | win rate | non-loss rate | capture rate | avg captures | avg provider-error turns |",
+    "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ...rows.map(
       (r) => {
-        const nonLossRate = (r.wins + r.draws) / Math.max(1, r.games);
-        return `| ${r.provider} | ${r.opponent} | ${r.model} | ${r.games} | ${r.wins} | ${r.draws} | ${r.losses} | ${formatPct(r.winRate)} | ${formatPct(
+        const nonLossRate = r.games > 0 ? (r.wins + r.draws) / r.games : Number.NaN;
+        return `| ${r.provider} | ${r.opponent} | ${r.model} | ${r.games} | ${r.plannedGames} | ${r.wins} | ${r.draws} | ${r.losses} | ${formatPct(r.winRate)} | ${formatPct(
           nonLossRate,
         )} | ${formatPct(r.captureRate)} | ${r.avgAgentCaptures.toFixed(2)} | ${r.avgProviderErrorTurns.toFixed(2)} |`;
       },
@@ -593,7 +598,7 @@ async function main() {
       JSON.stringify(
         {
           seeds,
-          games: seeds.length,
+          plannedGames: seeds.length,
           provider: providerName,
           opponent,
           mixGreedyProb: opponent === "mix" ? mixGreedyProb : undefined,
