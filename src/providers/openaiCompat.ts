@@ -142,6 +142,8 @@ function buildSystemPrompt() {
   return [
     "You are an agent that plays a deterministic, turn-based strategy game.",
     "You must respond with VALID JSON ONLY (no markdown, no code fences, no commentary).",
+    "Your response must start with '{' and end with '}' (a single JSON object).",
+    "Do NOT output your reasoning. Think silently; output only the JSON object.",
     "Rules for JSON:",
     "- Use double quotes for all strings and keys.",
     "- No trailing commas.",
@@ -152,6 +154,9 @@ function buildSystemPrompt() {
     `- {"type":"pass"}`,
     `- {"type":"reinforce","amount": <positive integer>}`,
     `- {"type":"move","from":"<node_id>","to":"<node_id>","amount": <positive integer>}`,
+    "Important:",
+    "- Actions apply SEQUENTIALLY in the order you provide (state updates after each action).",
+    "- Use the full action_budget: you can chain multiple moves in one ply (multi-hop) by moving forces, then moving from the destination.",
     "Game rules (important):",
     "- Plies alternate: P1 then P2 then P1 ...",
     "- At start of each ply, ACTIVE player gains supply: baseIncome + sum(supplyYield of nodes they own).",
@@ -218,8 +223,9 @@ function buildUserPromptCompact(params: {
 
   const legal = {
     reinforce: { maxAmount: maxReinforce, costPerStrength: cost, supplyAfterIncome, incomeThisPly },
-    moves: moveOptions.slice(0, 120),
-    notes: "For moves: choose amount between 1 and maxAmount.",
+    moves: moveOptions.slice(0, 60),
+    notes:
+      "For moves: choose amount between 1 and maxAmount. Actions apply in order; later moves may use forces you moved earlier, even if not listed.",
   };
 
   const board = Object.entries(nodes)
@@ -292,7 +298,7 @@ function buildUserPrompt(params: {
 
   const legal = {
     reinforce: { maxAmount: maxReinforce, costPerStrength: cost, supplyAfterIncome, incomeThisPly },
-    moves: moveOptions.slice(0, 120),
+    moves: moveOptions.slice(0, 60),
     notes: "For moves: choose amount between 1 and maxAmount.",
   };
 
@@ -324,6 +330,46 @@ function buildUserPrompt(params: {
 }
 
 const resolvedModelCache = new Map<string, string>();
+
+type ToolsMode = "auto" | "force" | "off";
+
+function parseToolsMode(params: { args: ProviderArgs }): ToolsMode {
+  const raw = (params.args.get("--tools-mode") ?? process.env.ASG_OPENAI_TOOLS_MODE ?? "auto").toLowerCase();
+  if (raw === "auto" || raw === "force" || raw === "off") return raw;
+  throw new Error(`invalid --tools-mode '${raw}' (expected auto|force|off)`);
+}
+
+type ReasoningEffort = "low" | "medium" | "high";
+
+function parseReasoningEffort(params: { args: ProviderArgs; provider: string; resolvedModel: string }): ReasoningEffort | null {
+  const raw = (params.args.get("--reasoning-effort") ?? process.env.ASG_OPENAI_REASONING_EFFORT ?? "").toLowerCase().trim();
+  if (raw === "off" || raw === "false" || raw === "0" || raw === "none") return null;
+  if (raw === "low" || raw === "medium" || raw === "high") return raw;
+  if (raw.length > 0) throw new Error(`invalid --reasoning-effort '${raw}' (expected low|medium|high|off)`);
+
+  // Heuristic default: for "thinking"/reasoning models on OSS providers, request low effort to avoid
+  // spending the entire output budget on chain-of-thought and never emitting the final JSON/tool call.
+  // Avoid touching OpenRouter defaults (keep Grok stable).
+  if (params.provider === "openrouter") return null;
+
+  const m = params.resolvedModel.toLowerCase();
+  const looksLikeReasoningModel =
+    m.includes(":thinking") || m.includes("thinking") || m.includes("reasoning") || m.includes("deepseek-r1") || m.includes("deepseek_r1");
+  return looksLikeReasoningModel ? "low" : null;
+}
+
+function parseIncludeReasoning(params: { args: ProviderArgs; provider: string }): boolean | null {
+  const raw = (params.args.get("--include-reasoning") ?? process.env.ASG_OPENAI_INCLUDE_REASONING ?? "auto").toLowerCase().trim();
+  if (raw === "auto" || raw === "") {
+    // Keep OpenRouter behavior stable unless explicitly configured.
+    if (params.provider === "openrouter") return null;
+    // Default OFF elsewhere: reasoning output often consumes the whole output budget and prevents the final JSON/tool call.
+    return false;
+  }
+  if (raw === "true" || raw === "1" || raw === "on" || raw === "yes") return true;
+  if (raw === "false" || raw === "0" || raw === "off" || raw === "no") return false;
+  throw new Error(`invalid --include-reasoning '${raw}' (expected auto|true|false)`);
+}
 
 async function resolveOpenAiCompatModel(params: {
   args: ProviderArgs;
@@ -456,7 +502,7 @@ export async function openAiCompatAct(params: {
     ? [
         buildSystemPrompt(),
         "Think carefully and aim for an optimal strategy.",
-        `You have about ${thinkSec} seconds to think before timeout; then respond with JSON only.`,
+        `You have up to ${thinkSec} seconds before timeout, but do not use it all; respond as soon as you have a plan (target a few seconds) and output JSON only.`,
       ].join("\n")
     : buildSystemPrompt();
   const promptMode = (args.get("--prompt-mode") ?? process.env.ASG_OPENAI_PROMPT_MODE ?? "full").toLowerCase();
@@ -477,8 +523,15 @@ export async function openAiCompatAct(params: {
     temperature: Number.isFinite(temperature) ? temperature : 0.2,
     max_tokens: Number.isFinite(maxTokens) ? maxTokens : 300,
     // Many OpenAI-compatible providers support this; if ignored, we still parse best-effort.
+    // Note: some providers behave better with forced tool calling when response_format is omitted.
     response_format: { type: "json_object" },
   };
+
+  const toolsModeArg = parseToolsMode({ args });
+  const reasoningEffort = parseReasoningEffort({ args, provider: keysName, resolvedModel });
+  if (reasoningEffort) payload.reasoning_effort = reasoningEffort;
+  const includeReasoning = parseIncludeReasoning({ args, provider: keysName });
+  if (typeof includeReasoning === "boolean") payload.include_reasoning = includeReasoning;
 
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -491,10 +544,21 @@ export async function openAiCompatAct(params: {
   // within the configured timeout window (instead of timing out after multiple attempts).
   const deadlineAt = Date.now() + timeoutMs;
 
+  async function sleep(ms: number) {
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, Math.min(ms, remainingMs)));
+  }
+
   async function callOnce(
     extraUserLine?: string,
     maxTokensOverride?: number,
-    toolsModeOverride?: "force" | "off",
+    toolsModeOverride?: ToolsMode,
+    useToolsOverride?: boolean,
+    omitReasoningEffort?: boolean,
+    omitResponseFormat?: boolean,
+    omitIncludeReasoning?: boolean,
   ): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
     const remainingMs = deadlineAt - Date.now();
     if (!Number.isFinite(remainingMs) || remainingMs < 1000) throw new Error("timeout_budget_exhausted");
@@ -507,17 +571,24 @@ export async function openAiCompatAct(params: {
 
     try {
       const p: any = { ...payload };
+      if (omitReasoningEffort) delete p.reasoning_effort;
+      if (omitResponseFormat) delete p.response_format;
+      if (omitIncludeReasoning) delete p.include_reasoning;
 
       // Prefer tools/function-call when supported (reduces malformed JSON output),
       // but some providers/models reject forced function calling.
       const useToolsArg = (params.args.get("--use-tools") ?? process.env.ASG_OPENAI_USE_TOOLS ?? "true").toLowerCase() !== "false";
-      const toolsMode = toolsModeOverride ?? "force";
-      const useTools = toolsMode === "off" ? false : useToolsArg;
+      const toolsMode = toolsModeOverride ?? toolsModeArg;
+      const useTools =
+        toolsMode === "off" ? false : typeof useToolsOverride === "boolean" ? useToolsOverride : useToolsArg;
       if (useTools) {
         p.tools = buildToolSchema();
-        if (toolsMode !== "off") {
+        if (toolsMode === "force") {
           // Default: force tool call to reduce malformed JSON.
           p.tool_choice = { type: "function", function: { name: "act" } };
+          // If we're forcing a tool call, the tool args are already structured JSON; some providers
+          // fail to emit tool_calls when response_format is also set.
+          delete p.response_format;
         }
       }
 
@@ -624,6 +695,39 @@ export async function openAiCompatAct(params: {
   } catch (e1) {
     // One retry for malformed JSON / parsing issues.
     const msg = e1 instanceof Error ? e1.message : String(e1);
+    const isTransientHttp =
+      msg.startsWith("HTTP 408") ||
+      msg.startsWith("HTTP 425") ||
+      msg.startsWith("HTTP 429") ||
+      msg.startsWith("HTTP 500") ||
+      msg.startsWith("HTTP 502") ||
+      msg.startsWith("HTTP 503") ||
+      msg.startsWith("HTTP 504");
+    const isTimeouty =
+      msg.includes("timeout_budget_exhausted") ||
+      msg.toLowerCase().includes("aborted") ||
+      msg.toLowerCase().includes("aborterror") ||
+      msg.toLowerCase().includes("timed out") ||
+      msg.toLowerCase().includes("timeout");
+
+    const rejectsReasoningEffort =
+      msg.startsWith("HTTP 400") &&
+      (msg.toLowerCase().includes("reasoning_effort") ||
+        msg.toLowerCase().includes("unknown field") ||
+        msg.toLowerCase().includes("unrecognized") ||
+        msg.toLowerCase().includes("invalid") && msg.toLowerCase().includes("reasoning"));
+
+    const rejectsResponseFormat =
+      msg.startsWith("HTTP 400") &&
+      (msg.toLowerCase().includes("response_format") ||
+        msg.toLowerCase().includes("response_mime_type") ||
+        msg.toLowerCase().includes("json_object"));
+
+    const rejectsIncludeReasoning =
+      msg.startsWith("HTTP 400") &&
+      (msg.toLowerCase().includes("include_reasoning") ||
+        msg.toLowerCase().includes("include-reasoning"));
+
     const wantsToolsOff =
       msg.includes("HTTP 400") &&
       (msg.toLowerCase().includes("forced function calling") ||
@@ -638,19 +742,79 @@ export async function openAiCompatAct(params: {
       msg.includes("no message.content") ||
       msg.includes("no message.content or tool_calls") ||
       msg.includes("no JSON object found") ||
-      wantsToolsOff;
+      wantsToolsOff ||
+      isTransientHttp ||
+      isTimeouty ||
+      rejectsReasoningEffort ||
+      rejectsResponseFormat ||
+      rejectsIncludeReasoning;
     if (!shouldRetry) throw new Error(`openai_compat failed: ${msg}`);
 
     try {
+      if (isTransientHttp) {
+        let lastMsg = msg;
+        for (let i = 0; i < 3; i++) {
+          await sleep(500 * 2 ** i);
+          try {
+            const retry = await callOnce(
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              rejectsResponseFormat ? true : undefined,
+              rejectsIncludeReasoning ? true : undefined,
+            );
+            return { ...retry, resolvedModel, provider: keysName, baseUrl };
+          } catch (e) {
+            lastMsg = e instanceof Error ? e.message : String(e);
+            const stillTransient =
+              lastMsg.startsWith("HTTP 408") ||
+              lastMsg.startsWith("HTTP 425") ||
+              lastMsg.startsWith("HTTP 429") ||
+              lastMsg.startsWith("HTTP 500") ||
+              lastMsg.startsWith("HTTP 502") ||
+              lastMsg.startsWith("HTTP 503") ||
+              lastMsg.startsWith("HTTP 504");
+            if (!stillTransient) throw e;
+          }
+        }
+        throw new Error(lastMsg);
+      }
+
+      const gotLengthCutoff = msg.includes("finish_reason=length") || msg.includes("native_finish_reason=max_output_tokens");
+      const likelyThinkingWithoutFinal =
+        gotLengthCutoff && msg.includes("reasoning_content") && msg.includes("content\":null");
+
       const wantsMoreTokens =
-        msg.includes("native_finish_reason=max_output_tokens") ||
-        msg.includes("max_output_tokens") ||
-        msg.includes("finish_reason=length");
-      const bumpedMaxTokens = wantsMoreTokens ? Math.min(8000, Math.max(1200, maxTokens * 4)) : undefined;
+        gotLengthCutoff ||
+        msg.includes("max_output_tokens");
+      // If a thinking model burned the whole budget on reasoning and never produced a tool call / JSON,
+      // prefer trying a SHORT output budget with a very strong "JSON-first" hint instead of simply
+      // raising max_tokens (which can increase latency and timeouts).
+      const bumpedMaxTokens = wantsMoreTokens
+        ? likelyThinkingWithoutFinal
+          ? Math.min(600, Math.max(200, maxTokens))
+          : Math.min(8000, Math.max(1200, maxTokens * 4))
+        : undefined;
+
+      // Forced tool calling seems to encourage some "thinking" models to produce long reasoning and never reach the tool call.
+      // On retry, prefer allowing either a tool call or direct JSON content.
+      const toolsModeOverride: ToolsMode | undefined = wantsToolsOff
+        ? "off"
+        : likelyThinkingWithoutFinal || isTimeouty
+          ? "auto"
+          : undefined;
+
+      const useToolsOverride = wantsToolsOff ? false : undefined;
       const retry = await callOnce(
-        `Your previous output was invalid, empty, or not parseable. Return ONLY a single valid JSON object matching the schema exactly. api_version must be "${request.api_version}".`,
+        `Your previous output was invalid/empty or not parseable. Do NOT explain. Start your response with '{' and return ONLY a single valid JSON object matching the schema exactly. api_version must be "${request.api_version}".`,
         bumpedMaxTokens,
-        wantsToolsOff ? "off" : undefined,
+        toolsModeOverride,
+        useToolsOverride,
+        rejectsReasoningEffort ? true : undefined,
+        rejectsResponseFormat ? true : undefined,
+        rejectsIncludeReasoning ? true : undefined,
       );
       return { ...retry, resolvedModel, provider: keysName, baseUrl };
     } catch (e2) {

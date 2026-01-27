@@ -7,6 +7,7 @@ import { runMatch } from "../game/match.js";
 import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { MixBot } from "../controllers/mixBot.js";
+import { fetchOpenAiCompatModelIds } from "../llm/models.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 
@@ -65,6 +66,23 @@ function parseModelsArg(value: string): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function parseKeysFile(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const idx = line.indexOf(":");
+    const eq = line.indexOf("=");
+    const splitAt = idx >= 0 ? idx : eq >= 0 ? eq : -1;
+    if (splitAt < 0) continue;
+    const k = line.slice(0, splitAt).trim().toLowerCase();
+    const v = line.slice(splitAt + 1).trim();
+    if (!k || !v) continue;
+    out.set(k, v);
+  }
+  return out;
 }
 
 function slugify(value: string): string {
@@ -130,6 +148,9 @@ async function evalOneModel(params: {
   maxTokens: string;
   temperature: string;
   useTools: boolean;
+  toolsMode?: string;
+  thinkHint?: string;
+  reasoningEffort?: string;
   promptMode?: string;
   stopAfterErrors?: number;
   saveReplays: boolean;
@@ -173,6 +194,9 @@ async function evalOneModel(params: {
     "pass",
   ];
   if (params.promptMode) serverArgs.push("--prompt-mode", params.promptMode);
+  if (params.toolsMode) serverArgs.push("--tools-mode", params.toolsMode);
+  if (params.thinkHint) serverArgs.push("--think-hint", params.thinkHint);
+  if (params.reasoningEffort) serverArgs.push("--reasoning-effort", params.reasoningEffort);
   if (params.baseUrl) serverArgs.push("--base-url", params.baseUrl);
   if (params.serverLogDir) serverArgs.push("--log-dir", params.serverLogDir);
 
@@ -366,7 +390,10 @@ async function main() {
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const providerName: ProviderName = args.get("--provider-name") ?? "nanogpt";
-  const baseUrl = args.get("--base-url") ?? undefined;
+  const baseUrl =
+    args.get("--base-url") ??
+    (providerName === "chutes" ? "https://llm.chutes.ai/v1" : undefined) ??
+    (providerName === "openrouter" ? "https://openrouter.ai/api/v1" : undefined);
   const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_models.json";
 
   const seedStart = Number.parseInt(args.get("--seed-start") ?? args.get("--seed") ?? "3", 10);
@@ -380,7 +407,8 @@ async function main() {
   const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
   const maxTokens = args.get("--max-tokens") ?? "200";
   const temperature = args.get("--temperature") ?? "0";
-  const useToolsRaw = (args.get("--use-tools") ?? "true").toLowerCase();
+  const useToolsDefault = providerName !== "chutes";
+  const useToolsRaw = (args.get("--use-tools") ?? (useToolsDefault ? "true" : "false")).toLowerCase();
   const useTools = useToolsRaw !== "false";
   const promptMode = args.get("--prompt-mode") ?? undefined;
   const stopAfterErrorsRaw = args.get("--stop-after-errors") ?? "2";
@@ -392,6 +420,9 @@ async function main() {
   const agentLogDir = args.get("--agent-log-dir") ?? undefined;
   const serverLogDir = args.get("--server-log-dir") ?? undefined;
   const liveOut = args.get("--live-out") ?? undefined;
+  const toolsMode = args.get("--tools-mode") ?? undefined;
+  const thinkHint = args.get("--think-hint") ?? undefined;
+  const reasoningEffort = args.get("--reasoning-effort") ?? undefined;
 
   const modelsRaw = args.get("--models") ?? "";
   const modelsFile = args.get("--models-file");
@@ -435,6 +466,34 @@ async function main() {
   const replaysDir = replaysDirArg ?? path.join("replays", "model_evals", nowStamp());
 
   const rows: Row[] = [];
+
+  const validateModelsDefault = providerName === "chutes" || providerName === "nanogpt";
+  const validateModelsRaw = (args.get("--validate-models") ?? (validateModelsDefault ? "true" : "false")).toLowerCase();
+  const validateModels = validateModelsRaw !== "false";
+  if (validateModels) {
+    try {
+      const keys = parseKeysFile(await readFile(keysFile, "utf8"));
+      const providerKey = keys.get(String(providerName).toLowerCase()) || undefined;
+      const providerBaseUrl =
+        baseUrl ??
+        keys.get(`${String(providerName).toLowerCase()}_base_url`) ??
+        undefined;
+      if (!providerBaseUrl) throw new Error("missing baseUrl");
+      const ids = await fetchOpenAiCompatModelIds({ baseUrl: providerBaseUrl, apiKey: providerKey });
+      const available = new Set(ids);
+      const missing = models.filter((m) => !available.has(m));
+      if (missing.length > 0) {
+        for (const m of missing) console.log(`SKIP model=${m} (not listed by ${providerName} /models)`);
+      }
+      models = models.filter((m) => available.has(m));
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      console.log(`WARN validate-models failed; proceeding without filtering: ${err.split("\n")[0]}`);
+    }
+  }
+
+  if (models.length === 0) throw new Error("All provided models were filtered out (not present on provider).");
+
   for (const model of models) {
     console.log(`=== provider=${providerName} model=${model} ===`);
     try {
@@ -453,6 +512,9 @@ async function main() {
         maxTokens,
         temperature,
         useTools,
+        toolsMode,
+        thinkHint,
+        reasoningEffort,
         promptMode,
         stopAfterErrors,
         saveReplays,
