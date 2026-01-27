@@ -574,6 +574,26 @@ export async function openAiCompatAct(params: {
         }
       }
 
+      // Some providers/models emit the primary text in a separate reasoning field.
+      // Prefer parsing it ONLY if it likely contains the final JSON object.
+      const reasoningText =
+        msg?.reasoning_content ??
+        msg?.reasoning ??
+        msg?.reasoning_text ??
+        msg?.reasoningText ??
+        msg?.analysis ??
+        undefined;
+      if (typeof reasoningText === "string" && reasoningText.length > 0) {
+        const looksLikeJson =
+          reasoningText.trimStart().startsWith("{") ||
+          (reasoningText.includes("{") && (reasoningText.includes("\"actions\"") || reasoningText.includes("'actions'")));
+        if (looksLikeJson) {
+          const extracted = extractJsonObject(reasoningText);
+          const response = validateAgentResponse(extracted, request.api_version);
+          return { response, httpStatus, raw };
+        }
+      }
+
       const choice0 = json?.choices?.[0];
       const finishReason = choice0?.finish_reason ?? choice0?.finishReason;
       const nativeFinishReason = choice0?.native_finish_reason ?? choice0?.nativeFinishReason;
@@ -614,8 +634,11 @@ export async function openAiCompatAct(params: {
     if (!shouldRetry) throw new Error(`openai_compat failed: ${msg}`);
 
     try {
-      const wantsMoreTokens = msg.includes("native_finish_reason=max_output_tokens") || msg.includes("max_output_tokens");
-      const bumpedMaxTokens = wantsMoreTokens ? Math.min(8000, Math.max(4000, maxTokens * 16)) : undefined;
+      const wantsMoreTokens =
+        msg.includes("native_finish_reason=max_output_tokens") ||
+        msg.includes("max_output_tokens") ||
+        msg.includes("finish_reason=length");
+      const bumpedMaxTokens = wantsMoreTokens ? Math.min(8000, Math.max(1200, maxTokens * 4)) : undefined;
       const retry = await callOnce(
         `Your previous output was invalid, empty, or not parseable. Return ONLY a single valid JSON object matching the schema exactly. api_version must be "${request.api_version}".`,
         bumpedMaxTokens,
