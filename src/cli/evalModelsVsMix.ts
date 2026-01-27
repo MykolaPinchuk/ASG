@@ -7,11 +7,13 @@ import { runMatch } from "../game/match.js";
 import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { MixBot } from "../controllers/mixBot.js";
+import { GreedyBot } from "../controllers/greedyBot.js";
 import { fetchOpenAiCompatModelIds } from "../llm/models.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 
 type ProviderName = "nanogpt" | "chutes" | "openrouter" | string;
+type Opponent = "mix" | "greedy";
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -111,6 +113,7 @@ function summarizeAgentTelemetry(latencies: number[]) {
 type Row = {
   provider: string;
   model: string;
+  opponent: Opponent;
   seeds: number[];
   games: number;
   replayPaths?: string[];
@@ -142,6 +145,7 @@ async function evalOneModel(params: {
   scenario: Awaited<ReturnType<typeof loadScenarioFromFile>>;
   adjacency: ReturnType<typeof createAdjacency>;
   seeds: number[];
+  opponent: Opponent;
   mixGreedyProb: number;
   agentTimeoutMs: number;
   openAiTimeoutMs: string;
@@ -230,7 +234,7 @@ async function evalOneModel(params: {
 
     for (let i = 0; i < params.seeds.length; i++) {
       const seed = params.seeds[i]!;
-      const matchId = `${scenario.id}_seed${seed}_agent_vs_mix_${slugify(String(params.providerName))}_${encodeURIComponent(
+      const matchId = `${scenario.id}_seed${seed}_agent_vs_${params.opponent}_${slugify(String(params.providerName))}_${encodeURIComponent(
         params.model,
       )}_trial${i}`;
 
@@ -270,14 +274,17 @@ async function evalOneModel(params: {
         },
       };
 
-      const mixController: Controller = new MixBot({
-        seed: seed + 202,
-        adjacency,
-        scenario,
-        greedyProb: params.mixGreedyProb,
-      });
+      const opponentController: Controller =
+        params.opponent === "mix"
+          ? new MixBot({
+              seed: seed + 202,
+              adjacency,
+              scenario,
+              greedyProb: params.mixGreedyProb,
+            })
+          : new GreedyBot({ adjacency, scenario });
 
-      const controllers: Record<PlayerId, Controller> = { P1: agentWrapped, P2: mixController };
+      const controllers: Record<PlayerId, Controller> = { P1: agentWrapped, P2: opponentController };
       const replay = await runMatch({ ctx, controllers, seed });
 
       // Attach metadata so the viewer shows model/provider and MixBot params.
@@ -289,13 +296,16 @@ async function evalOneModel(params: {
       } as any;
       replay.players = {
         P1: baseAgentMeta,
-        P2: { kind: "mix", greedyProb: params.mixGreedyProb },
+        P2: params.opponent === "mix" ? { kind: "mix", greedyProb: params.mixGreedyProb } : { kind: "greedy" },
       };
 
       if (params.saveReplays) {
         const providerSlug = slugify(String(params.providerName));
         const modelSlug = slugify(params.model);
-        const outFile = path.join(params.replaysDir, `${scenario.id}_seed${seed}_agent_vs_mix_${providerSlug}_${modelSlug}.json`);
+        const outFile = path.join(
+          params.replaysDir,
+          `${scenario.id}_seed${seed}_agent_vs_${params.opponent}_${providerSlug}_${modelSlug}.json`,
+        );
         await mkdir(path.dirname(outFile), { recursive: true });
         await writeFile(outFile, JSON.stringify(replay, null, 2), "utf8");
         replayPaths.push(outFile);
@@ -317,6 +327,7 @@ async function evalOneModel(params: {
       const gameRow = {
         provider: String(params.providerName),
         model: params.model,
+        opponent: params.opponent,
         seed,
         result: resultShort,
         plies,
@@ -331,7 +342,7 @@ async function evalOneModel(params: {
         p95LatencyOkMs: tStats.p95,
       };
       console.log(
-        `game: provider=${String(params.providerName)} model=${params.model} seed=${seed} result=${resultShort} plies=${plies} agentTurns=${agentTurns.length} passTurns=${agentPassTurns} errors=${agentErrors} providerErrors=${providerErrors} avgLatencyOkMs=${tStats.avg ?? "—"} p95LatencyOkMs=${tStats.p95 ?? "—"}${
+        `game: provider=${String(params.providerName)} model=${params.model} opponent=${params.opponent} seed=${seed} result=${resultShort} plies=${plies} agentTurns=${agentTurns.length} passTurns=${agentPassTurns} errors=${agentErrors} providerErrors=${providerErrors} avgLatencyOkMs=${tStats.avg ?? "—"} p95LatencyOkMs=${tStats.p95 ?? "—"}${
           stopAfterErrors ? ` errorTurns=${errorTurns}${earlyStopTriggered ? " earlyStop=true" : ""}` : ""
         }`,
       );
@@ -371,6 +382,7 @@ async function evalOneModel(params: {
   return {
     provider: String(params.providerName),
     model: params.model,
+    opponent: params.opponent,
     seeds: params.seeds.slice(),
     games,
     replayPaths: params.saveReplays ? replayPaths : undefined,
@@ -401,6 +413,9 @@ async function main() {
   const seedsRaw = args.get("--seeds");
   const turnCapRaw = args.get("--turn-cap-plies");
   const turnCapPlies = turnCapRaw ? Number.parseInt(turnCapRaw, 10) : 30;
+  const opponentRaw = (args.get("--opponent") ?? "mix").toLowerCase();
+  if (opponentRaw !== "mix" && opponentRaw !== "greedy") throw new Error("--opponent must be mix|greedy");
+  const opponent = opponentRaw as Opponent;
   const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
 
@@ -495,7 +510,7 @@ async function main() {
   if (models.length === 0) throw new Error("All provided models were filtered out (not present on provider).");
 
   for (const model of models) {
-    console.log(`=== provider=${providerName} model=${model} ===`);
+    console.log(`=== provider=${providerName} opponent=${opponent} model=${model} ===`);
     try {
       const row = await evalOneModel({
         providerName,
@@ -506,6 +521,7 @@ async function main() {
         scenario,
         adjacency,
         seeds,
+        opponent,
         mixGreedyProb,
         agentTimeoutMs,
         openAiTimeoutMs,
@@ -536,6 +552,7 @@ async function main() {
       rows.push({
         provider: String(providerName),
         model,
+        opponent,
         seeds,
         games: seeds.length,
         replayPaths: [],
@@ -554,12 +571,12 @@ async function main() {
   rows.sort((a, b) => b.winRate - a.winRate || a.model.localeCompare(b.model));
 
   const table = [
-    "| provider | model | games | wins | draws | losses | win rate | non-loss rate | capture rate | avg captures | avg provider-error turns |",
-    "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    "| provider | opponent | model | games | wins | draws | losses | win rate | non-loss rate | capture rate | avg captures | avg provider-error turns |",
+    "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ...rows.map(
       (r) => {
         const nonLossRate = (r.wins + r.draws) / Math.max(1, r.games);
-        return `| ${r.provider} | ${r.model} | ${r.games} | ${r.wins} | ${r.draws} | ${r.losses} | ${formatPct(r.winRate)} | ${formatPct(
+        return `| ${r.provider} | ${r.opponent} | ${r.model} | ${r.games} | ${r.wins} | ${r.draws} | ${r.losses} | ${formatPct(r.winRate)} | ${formatPct(
           nonLossRate,
         )} | ${formatPct(r.captureRate)} | ${r.avgAgentCaptures.toFixed(2)} | ${r.avgProviderErrorTurns.toFixed(2)} |`;
       },
@@ -573,7 +590,21 @@ async function main() {
     await mkdir(path.dirname(outPath), { recursive: true });
     await writeFile(
       outPath,
-      JSON.stringify({ seeds, games: seeds.length, provider: providerName, mixGreedyProb, useTools, saveReplays, replaysDir, rows }, null, 2),
+      JSON.stringify(
+        {
+          seeds,
+          games: seeds.length,
+          provider: providerName,
+          opponent,
+          mixGreedyProb: opponent === "mix" ? mixGreedyProb : undefined,
+          useTools,
+          saveReplays,
+          replaysDir,
+          rows,
+        },
+        null,
+        2,
+      ),
       "utf8",
     );
     console.log(`Wrote: ${outPath}`);
