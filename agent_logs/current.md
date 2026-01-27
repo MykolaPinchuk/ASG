@@ -27,3 +27,4 @@
 - 2026-01-26 17:54:39 PST — Added `npm run analyze:agent-io` to summarize `runs/agent_io` (timeouts/HTTP/parse/pass + latency).
 - 2026-01-26 18:37:06 PST — Added `--prompt-mode=compact` option to `openai_compat` (for OSS experimentation; default remains unchanged). Ran 1-game OSS spot checks vs MixBot (seed=3, tc=40): DeepSeek V3.2 + Devstral drew; Qwen3 Next Thinking lost with many provider errors; replays under `replays/model_evals/oss_vs_mix_nanogpt_compact_*`.
 - 2026-01-26 18:56:01 PST — Added an automatic “thinking time” hint for reasoning/thinking model variants (heuristic by model id; configurable via `--think-hint auto|on|off`).
+- 2026-01-26 19:05:40 PST — Set MixBot eval default turn cap to 30 plies (15 turns/player) and added per-game live metrics printing (result/plies/pass/errors + avg/p95 latency). Added `HttpAgentController.telemetry` and optional `--live-out` JSONL append for `agent:vs-random` and `agent:eval-vs-mix`.

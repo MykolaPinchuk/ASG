@@ -101,6 +101,21 @@ function slugify(value: string): string {
     .slice(0, 120);
 }
 
+function percentile(sortedAsc: number[], p: number): number | null {
+  if (sortedAsc.length === 0) return null;
+  const clamped = Math.min(1, Math.max(0, p));
+  const idx = Math.floor(clamped * (sortedAsc.length - 1));
+  return sortedAsc[idx] ?? null;
+}
+
+function summarizeLatencies(latencies: number[]) {
+  const sorted = latencies.slice().sort((a, b) => a - b);
+  const avg = sorted.length ? Math.round(sorted.reduce((s, x) => s + x, 0) / sorted.length) : null;
+  const p50 = percentile(sorted, 0.5);
+  const p95 = percentile(sorted, 0.95);
+  return { avg, p50, p95 };
+}
+
 async function main() {
   const args = parseArgs(process.argv);
 
@@ -120,8 +135,13 @@ async function main() {
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
   const saveReplays = args.get("--save-replays") === "true";
   const outDir = args.get("--out-dir") ?? "replays";
+  const liveOut = args.get("--live-out") ?? undefined;
   const turnCapOverrideRaw = args.get("--turn-cap-plies");
-  const turnCapPliesOverride = turnCapOverrideRaw ? Number.parseInt(turnCapOverrideRaw, 10) : undefined;
+  const turnCapPliesOverride = turnCapOverrideRaw
+    ? Number.parseInt(turnCapOverrideRaw, 10)
+    : opponent === "mix"
+      ? 30
+      : undefined;
   const tag = args.get("--tag") ?? `${providerName}_${model}`;
   const tagSlug = slugify(tag);
 
@@ -302,11 +322,33 @@ async function main() {
       else if (replay.result.winner === agentSide) stats.results.agentWins += 1;
       else stats.results.opponentWins += 1;
 
+      const telemetryOk = agentController.telemetry.filter((t) => !t.error).map((t) => t.latencyMs);
+      const latency = summarizeLatencies(telemetryOk);
+      const agentErrors = agentController.telemetry.filter((t) => !!t.error).length;
+
+      const gameRow = {
+        provider: providerName,
+        model,
+        opponent,
+        seed,
+        plies: summary.plies,
+        result: replay.result.type === "draw" ? "DRAW" : `WIN_${replay.result.winner}`,
+        agentPassTurns: summary.agentPassTurns,
+        providerErrorTurns: summary.providerErrorTurns,
+        agentErrorTurns: agentErrors,
+        avgLatencyOkMs: latency.avg,
+        p95LatencyOkMs: latency.p95,
+      };
+
       console.log(
-        `seed=${seed} plies=${summary.plies} passTurns=${summary.agentPassTurns} providerErrors=${summary.providerErrorTurns} moves=${summary.agentMoveActions} reinforces=${summary.agentReinforceActions} captures=${summary.agentCaptures} result=${
-          replay.result.type === "draw" ? "DRAW" : `WIN_${replay.result.winner}`
-        }`,
+        `game: provider=${providerName} model=${model} opponent=${opponent} seed=${seed} result=${gameRow.result} plies=${summary.plies} passTurns=${summary.agentPassTurns} errors=${agentErrors} providerErrors=${summary.providerErrorTurns} avgLatencyOkMs=${latency.avg ?? "—"} p95LatencyOkMs=${latency.p95 ?? "—"}`,
       );
+
+      if (liveOut) {
+        const dir = path.dirname(liveOut);
+        if (dir && dir !== ".") await mkdir(dir, { recursive: true });
+        await writeFile(liveOut, JSON.stringify(gameRow) + "\n", { flag: "a" });
+      }
 
       if (saveReplays) {
         await mkdir(outDir, { recursive: true });

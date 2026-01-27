@@ -75,6 +75,21 @@ function slugify(value: string): string {
     .slice(0, 160);
 }
 
+function percentile(sortedAsc: number[], p: number): number | null {
+  if (sortedAsc.length === 0) return null;
+  const clamped = Math.min(1, Math.max(0, p));
+  const idx = Math.floor(clamped * (sortedAsc.length - 1));
+  return sortedAsc[idx] ?? null;
+}
+
+function summarizeAgentTelemetry(latencies: number[]) {
+  const sorted = latencies.slice().sort((a, b) => a - b);
+  const avg = sorted.length ? Math.round(sorted.reduce((s, x) => s + x, 0) / sorted.length) : null;
+  const p50 = percentile(sorted, 0.5);
+  const p95 = percentile(sorted, 0.95);
+  return { avg, p50, p95 };
+}
+
 type Row = {
   provider: string;
   model: string;
@@ -118,6 +133,7 @@ async function evalOneModel(params: {
   promptMode?: string;
   saveReplays: boolean;
   replaysDir: string;
+  liveOut?: string;
   agentLogDir?: string;
   serverLogDir?: string;
 }) {
@@ -237,9 +253,39 @@ async function evalOneModel(params: {
         console.log(`saved replay: ${outFile}`);
       }
 
+      const plies = replay.turns.length;
       const agentTurns = replay.turns.filter((t) => t.player === "P1");
+      const agentPassTurns = agentTurns.filter(
+        (t) => (t.actions ?? []).length === 0 || (t.actions ?? []).every((a) => a.type === "pass"),
+      ).length;
       const providerErrors = agentTurns.filter((t) => (t.rationaleText ?? "").includes("server: openai_compat error")).length;
       providerErrorTurnsTotal += providerErrors;
+
+      const telemetryOk = agentController.telemetry.filter((t) => !t.error).map((t) => t.latencyMs);
+      const tStats = summarizeAgentTelemetry(telemetryOk);
+      const agentErrors = agentController.telemetry.filter((t) => !!t.error).length;
+      const resultShort = replay.result.type === "draw" ? "draw" : replay.result.winner === "P1" ? "win" : "loss";
+      const gameRow = {
+        provider: String(params.providerName),
+        model: params.model,
+        seed,
+        result: resultShort,
+        plies,
+        agentTurns: agentTurns.length,
+        agentPassTurns,
+        agentErrorTurns: agentErrors,
+        providerErrorTurns: providerErrors,
+        avgLatencyOkMs: tStats.avg,
+        p95LatencyOkMs: tStats.p95,
+      };
+      console.log(
+        `game: provider=${String(params.providerName)} model=${params.model} seed=${seed} result=${resultShort} plies=${plies} agentTurns=${agentTurns.length} passTurns=${agentPassTurns} errors=${agentErrors} providerErrors=${providerErrors} avgLatencyOkMs=${tStats.avg ?? "—"} p95LatencyOkMs=${tStats.p95 ?? "—"}`,
+      );
+      if (params.liveOut) {
+        const dir = path.dirname(params.liveOut);
+        if (dir && dir !== ".") await mkdir(dir, { recursive: true });
+        await writeFile(params.liveOut, JSON.stringify(gameRow) + "\n", { flag: "a" });
+      }
 
       let agentCaptures = 0;
       for (const t of agentTurns) {
@@ -292,7 +338,7 @@ async function main() {
   const games = Number.parseInt(args.get("--games") ?? args.get("--trials") ?? "3", 10);
   const seedsRaw = args.get("--seeds");
   const turnCapRaw = args.get("--turn-cap-plies");
-  const turnCapPlies = turnCapRaw ? Number.parseInt(turnCapRaw, 10) : undefined;
+  const turnCapPlies = turnCapRaw ? Number.parseInt(turnCapRaw, 10) : 30;
   const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
 
@@ -308,6 +354,7 @@ async function main() {
   const replaysDirArg = args.get("--replays-dir");
   const agentLogDir = args.get("--agent-log-dir") ?? undefined;
   const serverLogDir = args.get("--server-log-dir") ?? undefined;
+  const liveOut = args.get("--live-out") ?? undefined;
 
   const modelsRaw = args.get("--models") ?? "";
   const modelsFile = args.get("--models-file");
@@ -327,7 +374,7 @@ async function main() {
   if (models.length === 0) throw new Error("Provide --models a,b,c or --models-file path/to/models.txt");
   if (!Number.isInteger(seedStart) || seedStart < 0) throw new Error("--seed-start/--seed must be an integer >= 0");
   if (!Number.isInteger(games) || games < 1 || games > 50) throw new Error("--games/--trials must be an integer in [1,50]");
-  if (turnCapPlies !== undefined && (!Number.isInteger(turnCapPlies) || turnCapPlies < 1)) throw new Error("--turn-cap-plies must be >=1");
+  if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be >=1");
   if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
 
   let seeds: number[] = [];
@@ -343,7 +390,7 @@ async function main() {
   }
 
   const scenario = await loadScenarioFromFile(scenarioPath);
-  if (turnCapPlies !== undefined) scenario.settings.turnCapPlies = turnCapPlies;
+  scenario.settings.turnCapPlies = turnCapPlies;
   const adjacency = createAdjacency(scenario);
   const replaysDir = replaysDirArg ?? path.join("replays", "model_evals", nowStamp());
 
@@ -369,6 +416,7 @@ async function main() {
         promptMode,
         saveReplays,
         replaysDir,
+        liveOut,
         agentLogDir,
         serverLogDir,
       });

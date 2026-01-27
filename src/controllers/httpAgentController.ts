@@ -113,6 +113,12 @@ export class HttpAgentController implements Controller {
   private readonly maxResponseBytes: number;
   private readonly logDir?: string;
   private _agentInfo?: AgentResponse["agent_info"];
+  private readonly decisionTelemetry: Array<{
+    ply: number;
+    latencyMs: number;
+    httpStatus?: number;
+    error?: string;
+  }> = [];
 
   constructor(params: HttpAgentControllerParams) {
     this.id = params.id ?? "agent";
@@ -129,6 +135,10 @@ export class HttpAgentController implements Controller {
 
   get agentInfo(): AgentResponse["agent_info"] | undefined {
     return this._agentInfo;
+  }
+
+  get telemetry(): ReadonlyArray<{ ply: number; latencyMs: number; httpStatus?: number; error?: string }> {
+    return this.decisionTelemetry;
   }
 
   async decide(observation: Observation): Promise<ControllerOutput> {
@@ -170,6 +180,7 @@ export class HttpAgentController implements Controller {
     }
 
     const latencyMs = Date.now() - startedAt;
+    this.decisionTelemetry.push({ ply: observation.ply, latencyMs, httpStatus, error });
 
     if (this.logDir) {
       const dir = path.resolve(this.logDir, this.matchId);
