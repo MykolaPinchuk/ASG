@@ -12,6 +12,10 @@ Notes:
 - `openai/gpt-5-mini` is currently unreliable in this harness (frequent empty/partial outputs leading to passes).
 - OpenRouter now defaults to `x-ai/grok-4.1-fast` when `--model` is omitted.
 
+## Regression spec (paid)
+When making harness changes, keep the paid regression check stable and cost-capped:
+- `npm run eval:grok-vs-greedy` (max 3 games; saves replays)
+
 ## Invariants (do not break)
 - Spec is source of truth: `docs/planning/MVP_SPEC.md`.
 - Deterministic replays: same seed + same actions ⇒ identical outcomes.

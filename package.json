@@ -25,6 +25,8 @@
     "agent:sweep-oss": "tsx src/cli/sweepOssModels.ts"
     ,
     "eval:grok-vs-greedy": "tsx src/cli/evalGrokVsGreedy.ts"
+    ,
+    "analyze:agent-io": "tsx src/cli/analyzeAgentIo.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

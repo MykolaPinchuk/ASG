@@ -70,6 +70,10 @@ Runs a small sweep (starts a local agent server automatically) and prints win/dr
 Runs Grok (`x-ai/grok-4.1-fast`) vs `greedy` and always saves replays (hard cap: max 3 games per run):
 - `npm run eval:grok-vs-greedy`
 
+### Debug: summarize agent I/O logs (local)
+Summarizes `runs/agent_io/` into per-match counts: pass turns, timeouts, HTTP errors, parse errors, and latency percentiles:
+- `npm run analyze:agent-io -- --dir runs/agent_io --limit 20`
+
 List models from a provider (requires provider access; some endpoints need an API key):
 - `npm run agent:list-models -- --provider openrouter --base-url https://openrouter.ai/api/v1 --format text --limit 50`
 - `npm run agent:list-models -- --provider nanogpt --keys-file /path/to/provider_apis.txt --format text --limit 50`

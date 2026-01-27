@@ -24,3 +24,4 @@
 - 2026-01-26 17:35:30 PST — Ran Gemini 3 Flash Preview (OpenRouter) vs `greedy` for 3 seeds (3,4,5): 1 win, 2 draws, 0 losses; replays in `replays/model_evals/gemini3_vs_greedy_2026-01-26T17-32-26PST/`.
 - 2026-01-26 17:44:07 PST — Set OpenRouter default model to `x-ai/grok-4.1-fast` when `--model` is omitted (agent server + provider + docs).
 - 2026-01-26 17:48:56 PST — Added `npm run eval:grok-vs-greedy` (cost-capped at 3 games; always saves replays).
+- 2026-01-26 17:54:39 PST — Added `npm run analyze:agent-io` to summarize `runs/agent_io` (timeouts/HTTP/parse/pass + latency).
