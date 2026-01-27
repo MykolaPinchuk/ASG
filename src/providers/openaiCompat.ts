@@ -171,6 +171,17 @@ function buildSystemPrompt() {
   ].join("\n");
 }
 
+function shouldAddThinkingHint(params: { args: ProviderArgs; resolvedModel: string }): boolean {
+  const mode = (params.args.get("--think-hint") ?? process.env.ASG_OPENAI_THINK_HINT ?? "auto").toLowerCase();
+  if (mode === "on" || mode === "true" || mode === "1") return true;
+  if (mode === "off" || mode === "false" || mode === "0") return false;
+  if (mode !== "auto") return false;
+
+  const m = params.resolvedModel.toLowerCase();
+  // Heuristic: add the hint only for models that explicitly advertise reasoning/thinking variants.
+  return m.includes("thinking") || m.includes("reasoner") || m.includes("reasoning") || m.includes("r1");
+}
+
 function sumIncomeFromObservation(obs: any, player: PlayerId, baseIncome: number): number {
   let income = baseIncome;
   const nodes: Record<string, any> = obs?.nodes ?? {};
@@ -436,7 +447,14 @@ export async function openAiCompatAct(params: {
 
   const url = normalizeBaseUrl(baseUrl) + "/chat/completions";
 
-  const system = buildSystemPrompt();
+  const thinkSec = Math.max(1, Math.floor((timeoutMs - 5000) / 1000));
+  const system = shouldAddThinkingHint({ args, resolvedModel })
+    ? [
+        buildSystemPrompt(),
+        "Think carefully and aim for an optimal strategy.",
+        `You have about ${thinkSec} seconds to think before timeout; then respond with JSON only.`,
+      ].join("\n")
+    : buildSystemPrompt();
   const promptMode = (args.get("--prompt-mode") ?? process.env.ASG_OPENAI_PROMPT_MODE ?? "full").toLowerCase();
   if (promptMode !== "full" && promptMode !== "compact") {
     throw new Error(`invalid --prompt-mode '${promptMode}' (expected full|compact)`);
