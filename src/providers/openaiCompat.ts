@@ -180,6 +180,80 @@ function sumIncomeFromObservation(obs: any, player: PlayerId, baseIncome: number
   return income;
 }
 
+function buildUserPromptCompact(params: {
+  request: AgentRequest;
+  scenario: Scenario;
+  adjacency: Record<string, string[]>;
+}) {
+  const { request, scenario, adjacency } = params;
+  const enemy = request.player === "P1" ? "P2" : "P1";
+
+  const settings = scenario.settings;
+  const cost = settings.reinforceCostPerStrength ?? 1;
+  const obs = request.observation ?? {};
+  const supplies = obs.supplies ?? { P1: 0, P2: 0 };
+  const playerSupply = Number.isFinite(supplies?.[request.player]) ? supplies[request.player] : 0;
+  const baseIncome = settings.baseIncome ?? 0;
+  const incomeThisPly = sumIncomeFromObservation(obs, request.player, baseIncome);
+  const supplyAfterIncome = playerSupply + incomeThisPly;
+  const maxReinforce = Math.max(0, Math.floor(supplyAfterIncome / cost));
+
+  const moveOptions: Array<{ from: string; to: string; maxAmount: number }> = [];
+  const nodes: Record<string, any> = obs.nodes ?? {};
+  for (const [nodeId, node] of Object.entries(nodes)) {
+    const f = node?.forces?.[request.player];
+    if (!Number.isFinite(f) || f <= 0) continue;
+    for (const to of adjacency[nodeId] ?? []) {
+      moveOptions.push({ from: nodeId, to, maxAmount: Math.floor(f) });
+    }
+  }
+
+  const legal = {
+    reinforce: { maxAmount: maxReinforce, costPerStrength: cost, supplyAfterIncome, incomeThisPly },
+    moves: moveOptions.slice(0, 120),
+    notes: "For moves: choose amount between 1 and maxAmount.",
+  };
+
+  const board = Object.entries(nodes)
+    .map(([id, node]) => ({
+      id,
+      owner: typeof node?.owner === "string" ? node.owner : null,
+      supplyYield: Number.isFinite(node?.supplyYield) ? Number(node.supplyYield) : 0,
+      forces: {
+        P1: Number.isFinite(node?.forces?.P1) ? Math.floor(Number(node.forces.P1)) : 0,
+        P2: Number.isFinite(node?.forces?.P2) ? Math.floor(Number(node.forces.P2)) : 0,
+      },
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  const info = {
+    match_id: request.match_id,
+    player: request.player,
+    enemy,
+    scenario_id: request.scenario_id,
+    ply: request.ply,
+    action_budget: request.action_budget,
+    hq: { [request.player]: scenario.players[request.player].hq, [enemy]: scenario.players[enemy].hq },
+    settings: {
+      baseIncome: settings.baseIncome,
+      reinforceCostPerStrength: settings.reinforceCostPerStrength,
+      combatVarianceFraction: settings.combatVarianceFraction,
+      turnCapPlies: settings.turnCapPlies,
+    },
+    supplies,
+    legal,
+    adjacency,
+    board,
+  };
+
+  return [
+    "Decide your actions for this ply.",
+    "Return JSON only.",
+    "Context:",
+    JSON.stringify(info),
+  ].join("\n");
+}
+
 function buildUserPrompt(params: {
   request: AgentRequest;
   scenario: Scenario;
@@ -363,7 +437,14 @@ export async function openAiCompatAct(params: {
   const url = normalizeBaseUrl(baseUrl) + "/chat/completions";
 
   const system = buildSystemPrompt();
-  const user = buildUserPrompt({ request, scenario, adjacency });
+  const promptMode = (args.get("--prompt-mode") ?? process.env.ASG_OPENAI_PROMPT_MODE ?? "full").toLowerCase();
+  if (promptMode !== "full" && promptMode !== "compact") {
+    throw new Error(`invalid --prompt-mode '${promptMode}' (expected full|compact)`);
+  }
+  const user =
+    promptMode === "compact"
+      ? buildUserPromptCompact({ request, scenario, adjacency })
+      : buildUserPrompt({ request, scenario, adjacency });
 
   const payload: any = {
     model: resolvedModel,

@@ -128,6 +128,7 @@ async function main() {
   const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
   const maxTokens = args.get("--max-tokens") ?? "200";
   const temperature = args.get("--temperature") ?? "0";
+  const promptMode = args.get("--prompt-mode") ?? undefined;
 
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");
   if (!Number.isInteger(count) || count < 1 || count > 200) throw new Error("--count must be an integer in [1, 200]");
@@ -172,6 +173,7 @@ async function main() {
     "--temperature",
     temperature,
   ];
+  if (promptMode) serverArgs.push("--prompt-mode", promptMode);
   if (baseUrl) serverArgs.push("--base-url", baseUrl);
 
   const child = spawn(tsxBin, serverArgs, {

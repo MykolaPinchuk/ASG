@@ -115,6 +115,7 @@ async function evalOneModel(params: {
   maxTokens: string;
   temperature: string;
   useTools: boolean;
+  promptMode?: string;
   saveReplays: boolean;
   replaysDir: string;
   agentLogDir?: string;
@@ -153,6 +154,7 @@ async function evalOneModel(params: {
     "--fallback",
     "pass",
   ];
+  if (params.promptMode) serverArgs.push("--prompt-mode", params.promptMode);
   if (params.baseUrl) serverArgs.push("--base-url", params.baseUrl);
   if (params.serverLogDir) serverArgs.push("--log-dir", params.serverLogDir);
 
@@ -299,6 +301,7 @@ async function main() {
   const temperature = args.get("--temperature") ?? "0";
   const useToolsRaw = (args.get("--use-tools") ?? "true").toLowerCase();
   const useTools = useToolsRaw !== "false";
+  const promptMode = args.get("--prompt-mode") ?? undefined;
 
   const saveReplaysRaw = (args.get("--save-replays") ?? "true").toLowerCase();
   const saveReplays = saveReplaysRaw !== "false";
@@ -363,6 +366,7 @@ async function main() {
         maxTokens,
         temperature,
         useTools,
+        promptMode,
         saveReplays,
         replaysDir,
         agentLogDir,

@@ -173,6 +173,7 @@ async function runAgentMatch(params: {
   modelsConfigPath: string;
   model: string;
   useTools: boolean;
+  promptMode?: string;
   temperature: string;
   maxTokens: string;
   timeoutMs: string;
@@ -197,6 +198,7 @@ async function runAgentMatch(params: {
   args.set("--temperature", params.temperature);
   args.set("--max-tokens", params.maxTokens);
   args.set("--use-tools", params.useTools ? "true" : "false");
+  if (params.promptMode) args.set("--prompt-mode", params.promptMode);
 
   const agentPlayer: PlayerId = "P1";
   const random = new RandomBot({ seed: params.seed + 202, adjacency, scenario });
@@ -283,6 +285,7 @@ async function main() {
   const timeoutMs = args.get("--timeout-ms") ?? "60000";
   const maxTokens = args.get("--max-tokens") ?? "180";
   const temperature = args.get("--temperature") ?? "0";
+  const promptMode = args.get("--prompt-mode") ?? undefined;
 
   if (!Number.isInteger(maxModels) || maxModels < 1 || maxModels > 80) throw new Error("--max-models must be in [1,80]");
   if (!Number.isInteger(smokeTurnCap) || smokeTurnCap < 2) throw new Error("--smoke-turn-cap must be >=2");
@@ -348,6 +351,7 @@ async function main() {
         modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
         model,
         useTools,
+        promptMode,
         temperature,
         maxTokens,
         timeoutMs,
@@ -367,17 +371,18 @@ async function main() {
 
       if (smokeOk) {
         const fullReplayPath = path.join("replays", `${path.basename(scenarioPath, ".json")}_seed${fullSeed}_${provider}_${encodeURIComponent(model)}_full.json`);
-        const full = await runAgentMatch({
-          provider,
-          baseUrl,
-          keysFilePath,
-          modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
-          model,
-          useTools,
-          temperature,
-          maxTokens,
-          timeoutMs,
-          baseScenario,
+      const full = await runAgentMatch({
+        provider,
+        baseUrl,
+        keysFilePath,
+        modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
+        model,
+        useTools,
+        promptMode,
+        temperature,
+        maxTokens,
+        timeoutMs,
+        baseScenario,
           adjacency,
           seed: fullSeed,
           turnCapPlies: fullTurnCap,
