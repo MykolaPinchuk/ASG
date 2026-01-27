@@ -320,7 +320,7 @@ export async function openAiCompatAct(params: {
     process.env.OPENAI_API_KEY ??
     keys.get(keysName) ??
     "";
-  const model =
+  let model =
     args.get("--model") ??
     process.env[`ASG_${providerName}_MODEL`] ??
     process.env.ASG_OPENAI_MODEL ??
@@ -343,6 +343,12 @@ export async function openAiCompatAct(params: {
 
   if (!baseUrl) throw new Error("openai_compat requires --base-url (e.g. https://openrouter.ai/api/v1)");
   if (!apiKey) throw new Error("openai_compat requires --api-key (or ASG_OPENAI_API_KEY/OPENAI_API_KEY)");
+  if (!model) {
+    const baseUrlNorm = baseUrl ? normalizeBaseUrl(baseUrl) : "";
+    if (keysName === "openrouter" || baseUrlNorm.includes("openrouter.ai")) {
+      model = "x-ai/grok-4.1-fast";
+    }
+  }
   if (!model) throw new Error("openai_compat requires --model (or set it to 'auto')");
 
   const resolvedModel = await resolveOpenAiCompatModel({

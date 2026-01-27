@@ -23,6 +23,8 @@
     "agent:eval-vs-mix": "tsx src/cli/evalModelsVsMix.ts"
     ,
     "agent:sweep-oss": "tsx src/cli/sweepOssModels.ts"
+    ,
+    "eval:grok-vs-greedy": "tsx src/cli/evalGrokVsGreedy.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

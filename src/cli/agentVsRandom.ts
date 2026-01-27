@@ -113,7 +113,9 @@ async function main() {
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const providerName = args.get("--provider-name") ?? "nanogpt";
   const baseUrl = args.get("--base-url") ?? undefined; // optional; keys-file may contain it
-  const model = args.get("--model") ?? "auto";
+  const providerKey = providerName.toLowerCase();
+  const modelArg = args.get("--model");
+  const model = modelArg ?? (providerKey === "openrouter" ? "x-ai/grok-4.1-fast" : "auto");
   const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_models.json";
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
   const saveReplays = args.get("--save-replays") === "true";
@@ -133,6 +135,9 @@ async function main() {
   if (!["random", "greedy", "mix"].includes(opponent)) throw new Error("--opponent must be random, greedy, or mix");
   if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
   if (!Number.isInteger(agentTimeoutMs) || agentTimeoutMs < 1000) throw new Error("--agent-timeout-ms must be an integer >= 1000");
+  if (providerKey === "openrouter" && model === "auto") {
+    throw new Error("--model auto is not supported for OpenRouter; omit --model to default to x-ai/grok-4.1-fast, or pass --model <id>");
+  }
   if (turnCapPliesOverride !== undefined) {
     if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
   }

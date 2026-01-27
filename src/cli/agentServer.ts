@@ -425,6 +425,10 @@ async function main() {
         process.env[`ASG_${providerNameRaw.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_BASE_URL`] ??
         process.env.ASG_OPENAI_BASE_URL ??
         undefined;
+      const modelArg0 = args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? undefined;
+      // Opinionated default for this repo's current prototype: OpenRouter -> Grok 4.1 Fast.
+      // Allows omitting --model when using OpenRouter.
+      if (!modelArg0 && providerKey === "openrouter") args.set("--model", "x-ai/grok-4.1-fast");
       const modelArg = args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? undefined;
       agentInfo = {
         provider: providerKey,

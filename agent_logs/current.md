@@ -21,3 +21,6 @@
 - 2026-01-26 16:19:15 PST — Fixed OpenRouter integration edge cases in `openai_compat` (retry with higher output tokens on OpenAI “empty_output/max_output_tokens”; retry with tools disabled on Gemini forced-function-call 400s). Re-tested OpenRouter models vs `mix` and saved replays under `replays/model_evals/seed3_vs_mix/openrouter_1game_tc120_fixed_2026-01-26T23-55-02Z/`.
 - 2026-01-26 16:45:40 PST — Ran Grok 4.1 Fast (OpenRouter) vs `greedy` for 3 seeds (3,4,5): 3-0-0; replays in `replays/model_evals/grok_vs_greedy_2026-01-26T16-38-41PST/`.
 - 2026-01-26 17:00:50 PST — Ran OpenRouter `google/gemini-3-flash-preview` and `anthropic/claude-haiku-4.5` vs `mix` (seed=3): both won; replays in `replays/model_evals/seed3_vs_mix/openrouter_newmodels_2026-01-26T16-59-03PST/`.
+- 2026-01-26 17:35:30 PST — Ran Gemini 3 Flash Preview (OpenRouter) vs `greedy` for 3 seeds (3,4,5): 1 win, 2 draws, 0 losses; replays in `replays/model_evals/gemini3_vs_greedy_2026-01-26T17-32-26PST/`.
+- 2026-01-26 17:44:07 PST — Set OpenRouter default model to `x-ai/grok-4.1-fast` when `--model` is omitted (agent server + provider + docs).
+- 2026-01-26 17:48:56 PST — Added `npm run eval:grok-vs-greedy` (cost-capped at 3 games; always saves replays).

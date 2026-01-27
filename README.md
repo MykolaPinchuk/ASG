@@ -47,7 +47,8 @@ Keys stay local (env vars / `secrets/`), never committed.
 
 Example (OpenRouter):
 - `export ASG_OPENROUTER_API_KEY='...'`
-- `npm run agent:server -- --provider openai_compat --provider-name openrouter --base-url https://openrouter.ai/api/v1 --model <model_id>`
+- `npm run agent:server -- --provider openai_compat --provider-name openrouter --base-url https://openrouter.ai/api/v1`
+  - Defaults to `x-ai/grok-4.1-fast`; override with `--model <model_id>`
 
 ### OSS-only model allowlist (priority from TML-bench)
 ASG includes an OSS allowlist at `configs/oss_models.json` (priority ordered; derived from TML-bench).
@@ -64,6 +65,10 @@ Quick smoke test (1 LLM decision only): add `--turn-cap-plies 2` to `npm run mat
 ### Baseline check: agent vs random
 Runs a small sweep (starts a local agent server automatically) and prints win/draw rates:
 - `npm run agent:vs-random -- --provider-name nanogpt --keys-file secrets/provider_apis.txt --model auto --turn-cap-plies 20 --start 1 --count 2`
+
+### Baseline check: Grok vs Greedy (cost-capped)
+Runs Grok (`x-ai/grok-4.1-fast`) vs `greedy` and always saves replays (hard cap: max 3 games per run):
+- `npm run eval:grok-vs-greedy`
 
 List models from a provider (requires provider access; some endpoints need an API key):
 - `npm run agent:list-models -- --provider openrouter --base-url https://openrouter.ai/api/v1 --format text --limit 50`
