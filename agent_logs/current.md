@@ -1,7 +1,7 @@
 # agent_logs/current.md
 
 ## Agent
-- id: agent01
+- id: agent02
 
 ## Timestamp (Pacific)
 - start: 2026-01-26
@@ -14,3 +14,10 @@
 
 ## Log
 
+- 2026-01-26 12:52:58 PST — Onboarded (read current state + spec); verified `npm run typecheck` and `npm run match`+`validate:replay` smoke run; next focus: reduce `openai_compat` parse/provider-error passes without adding strategic fallbacks.
+- 2026-01-26 13:11:54 PST — Added deterministic `mix` bot (coinflip between Greedy and Random, configurable via `--mix-greedy-prob`) and wired it into `npm run match`, replay schema, and viewer.
+- 2026-01-26 13:52:23 PST — Ran seed=3 eval vs `mix` (pGreedy=0.5) for a few models; NanoGPT models drew with many captures, Chutes models lost due to frequent `openai_compat` errors (results under `runs/model_evals/seed3_vs_mix/`).
+- 2026-01-26 15:20:19 PST — Ran NanoGPT eval vs `mix` with 3 games/model (seeds 3,4,5) at turnCapPlies=120; saved 9 replays under `replays/model_evals/seed3_vs_mix/nanogpt_games3_tc120/` and wrote summary `runs/model_evals/seed3_vs_mix/nanogpt_seed3_games3_tc120_summary.json`.
+- 2026-01-26 16:19:15 PST — Fixed OpenRouter integration edge cases in `openai_compat` (retry with higher output tokens on OpenAI “empty_output/max_output_tokens”; retry with tools disabled on Gemini forced-function-call 400s). Re-tested OpenRouter models vs `mix` and saved replays under `replays/model_evals/seed3_vs_mix/openrouter_1game_tc120_fixed_2026-01-26T23-55-02Z/`.
+- 2026-01-26 16:45:40 PST — Ran Grok 4.1 Fast (OpenRouter) vs `greedy` for 3 seeds (3,4,5): 3-0-0; replays in `replays/model_evals/grok_vs_greedy_2026-01-26T16-38-41PST/`.
+- 2026-01-26 17:00:50 PST — Ran OpenRouter `google/gemini-3-flash-preview` and `anthropic/claude-haiku-4.5` vs `mix` (seed=3): both won; replays in `replays/model_evals/seed3_vs_mix/openrouter_newmodels_2026-01-26T16-59-03PST/`.

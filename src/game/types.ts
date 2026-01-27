@@ -97,6 +97,7 @@ export interface Replay {
     PlayerId,
     | { kind: "greedy" }
     | { kind: "random" }
+    | { kind: "mix"; greedyProb: number }
     | {
         kind: "agent";
         agentUrl?: string;

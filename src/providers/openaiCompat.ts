@@ -378,7 +378,11 @@ export async function openAiCompatAct(params: {
   if (referer) headers["HTTP-Referer"] = referer;
   if (title) headers["X-Title"] = title;
 
-  async function callOnce(extraUserLine?: string): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
+  async function callOnce(
+    extraUserLine?: string,
+    maxTokensOverride?: number,
+    toolsModeOverride?: "force" | "off",
+  ): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let httpStatus = 0;
@@ -387,11 +391,21 @@ export async function openAiCompatAct(params: {
     try {
       const p: any = { ...payload };
 
-      // Prefer tools/function-call when supported (reduces malformed JSON output).
-      const useTools = (params.args.get("--use-tools") ?? process.env.ASG_OPENAI_USE_TOOLS ?? "true").toLowerCase() !== "false";
+      // Prefer tools/function-call when supported (reduces malformed JSON output),
+      // but some providers/models reject forced function calling.
+      const useToolsArg = (params.args.get("--use-tools") ?? process.env.ASG_OPENAI_USE_TOOLS ?? "true").toLowerCase() !== "false";
+      const toolsMode = toolsModeOverride ?? "force";
+      const useTools = toolsMode === "off" ? false : useToolsArg;
       if (useTools) {
         p.tools = buildToolSchema();
-        p.tool_choice = { type: "function", function: { name: "act" } };
+        if (toolsMode !== "off") {
+          // Default: force tool call to reduce malformed JSON.
+          p.tool_choice = { type: "function", function: { name: "act" } };
+        }
+      }
+
+      if (maxTokensOverride !== undefined && Number.isFinite(maxTokensOverride)) {
+        p.max_tokens = Math.max(1, Math.floor(maxTokensOverride));
       }
 
       if (extraUserLine) {
@@ -421,12 +435,46 @@ export async function openAiCompatAct(params: {
         return { response, httpStatus, raw };
       }
 
-      const content = msg?.content;
-      if (typeof content !== "string" || content.length === 0) throw new Error("no message.content or tool_calls");
+      // Some OpenAI-compatible providers still emit the legacy function_call field.
+      const functionCallArgs = msg?.function_call?.arguments;
+      if (typeof functionCallArgs === "string" && functionCallArgs.length > 0) {
+        const extracted = extractJsonObject(functionCallArgs);
+        const response = validateAgentResponse(extracted, request.api_version);
+        return { response, httpStatus, raw };
+      }
+      if (isObject(functionCallArgs)) {
+        const response = validateAgentResponse(functionCallArgs, request.api_version);
+        return { response, httpStatus, raw };
+      }
 
-      const extracted = extractJsonObject(content);
-      const response = validateAgentResponse(extracted, request.api_version);
-      return { response, httpStatus, raw };
+      const content = msg?.content;
+      if (typeof content === "string" && content.length > 0) {
+        const extracted = extractJsonObject(content);
+        const response = validateAgentResponse(extracted, request.api_version);
+        return { response, httpStatus, raw };
+      }
+      if (Array.isArray(content) && content.length > 0) {
+        const textParts = content
+          .map((p: any) => p?.text ?? p?.content ?? p?.value ?? "")
+          .filter((s: any) => typeof s === "string" && s.length > 0);
+        const joined = textParts.join("\n");
+        if (joined.length > 0) {
+          const extracted = extractJsonObject(joined);
+          const response = validateAgentResponse(extracted, request.api_version);
+          return { response, httpStatus, raw };
+        }
+      }
+
+      const choice0 = json?.choices?.[0];
+      const finishReason = choice0?.finish_reason ?? choice0?.finishReason;
+      const nativeFinishReason = choice0?.native_finish_reason ?? choice0?.nativeFinishReason;
+      const choiceKeys = isObject(choice0) ? Object.keys(choice0).slice(0, 30).join(",") : "";
+      const msgKeys = isObject(msg) ? Object.keys(msg).slice(0, 30).join(",") : "";
+      const snippet = typeof text === "string" ? text.replace(/\s+/g, " ").slice(0, 600) : "";
+      throw new Error(
+        `empty_output (finish_reason=${finishReason ?? ""} native_finish_reason=${nativeFinishReason ?? ""}) (choiceKeys=[${choiceKeys}] messageKeys=[${msgKeys}] bodySnippet=${snippet})`,
+      );
+
     } finally {
       clearTimeout(timeout);
     }
@@ -439,18 +487,30 @@ export async function openAiCompatAct(params: {
   } catch (e1) {
     // One retry for malformed JSON / parsing issues.
     const msg = e1 instanceof Error ? e1.message : String(e1);
+    const wantsToolsOff =
+      msg.includes("HTTP 400") &&
+      (msg.toLowerCase().includes("forced function calling") ||
+        msg.toLowerCase().includes("function_calling_config") ||
+        msg.toLowerCase().includes("tool_config") ||
+        msg.toLowerCase().includes("response_mime_type"));
     const shouldRetry =
       msg.includes("JSON") ||
       msg.includes("Unexpected") ||
       msg.includes("Expected ','") ||
+      msg.includes("empty_output") ||
       msg.includes("no message.content") ||
       msg.includes("no message.content or tool_calls") ||
-      msg.includes("no JSON object found");
+      msg.includes("no JSON object found") ||
+      wantsToolsOff;
     if (!shouldRetry) throw new Error(`openai_compat failed: ${msg}`);
 
     try {
+      const wantsMoreTokens = msg.includes("native_finish_reason=max_output_tokens") || msg.includes("max_output_tokens");
+      const bumpedMaxTokens = wantsMoreTokens ? Math.min(8000, Math.max(4000, maxTokens * 16)) : undefined;
       const retry = await callOnce(
-        `Your previous output was invalid or not parseable. Return ONLY a single valid JSON object matching the schema exactly. api_version must be "${request.api_version}".`,
+        `Your previous output was invalid, empty, or not parseable. Return ONLY a single valid JSON object matching the schema exactly. api_version must be "${request.api_version}".`,
+        bumpedMaxTokens,
+        wantsToolsOff ? "off" : undefined,
       );
       return { ...retry, resolvedModel, provider: keysName, baseUrl };
     } catch (e2) {

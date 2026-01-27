@@ -22,6 +22,7 @@ Start here (in order):
 ## Quickstart (run + watch)
 - Install deps: `npm install`
 - Run a match (writes JSON under `replays/`): `npm run match -- --seed 1 --p1 greedy --p2 random`
+- Intermediate bot (mix of greedy + random): `npm run match -- --seed 1 --p1 mix --p2 random --mix-greedy-prob 0.5`
 - Validate replay: `npm run validate:replay -- replays/<file>.json`
 - Check determinism (same seed/actions ⇒ same replay, ignoring `createdAt`): `npm run check:determinism -- --seed 1 --p1 greedy --p2 random`
 - Batch run (quick win/draw rate glance): `npm run batch -- --start 1 --count 20 --p1 greedy --p2 greedy`

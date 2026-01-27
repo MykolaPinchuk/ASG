@@ -5,10 +5,14 @@ import net from "node:net";
 import { createAdjacency } from "../game/scenario.js";
 import { runMatch } from "../game/match.js";
 import { RandomBot } from "../controllers/randomBot.js";
+import { GreedyBot } from "../controllers/greedyBot.js";
+import { MixBot } from "../controllers/mixBot.js";
 import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
+
+type OpponentName = "random" | "greedy" | "mix";
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -104,6 +108,8 @@ async function main() {
   const start = Number.parseInt(args.get("--start") ?? "1", 10);
   const count = Number.parseInt(args.get("--count") ?? "5", 10);
   const agentSide = (args.get("--agent-side") ?? "P1") as PlayerId;
+  const opponent = (args.get("--opponent") ?? "random") as OpponentName;
+  const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const providerName = args.get("--provider-name") ?? "nanogpt";
   const baseUrl = args.get("--base-url") ?? undefined; // optional; keys-file may contain it
@@ -124,6 +130,8 @@ async function main() {
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");
   if (!Number.isInteger(count) || count < 1 || count > 200) throw new Error("--count must be an integer in [1, 200]");
   if (agentSide !== "P1" && agentSide !== "P2") throw new Error("--agent-side must be P1 or P2");
+  if (!["random", "greedy", "mix"].includes(opponent)) throw new Error("--opponent must be random, greedy, or mix");
+  if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
   if (!Number.isInteger(agentTimeoutMs) || agentTimeoutMs < 1000) throw new Error("--agent-timeout-ms must be an integer >= 1000");
   if (turnCapPliesOverride !== undefined) {
     if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
@@ -183,7 +191,7 @@ async function main() {
 
     const stats: {
       seeds: { start: number; count: number };
-      matchup: { agentSide: PlayerId; opponent: "random"; providerName: string; model: string; modelsConfig: string };
+      matchup: { agentSide: PlayerId; opponent: OpponentName; providerName: string; model: string; modelsConfig: string };
       results: { agentWins: number; opponentWins: number; draws: number };
       avgPlies: number;
       avgAgentPassTurns: number;
@@ -196,7 +204,7 @@ async function main() {
       sampleReplay?: string;
     } = {
       seeds: { start, count },
-      matchup: { agentSide, opponent: "random", providerName, model, modelsConfig },
+      matchup: { agentSide, opponent, providerName, model, modelsConfig },
       results: { agentWins: 0, opponentWins: 0, draws: 0 },
       avgPlies: 0,
       avgAgentPassTurns: 0,
@@ -219,7 +227,7 @@ async function main() {
 
     for (let i = 0; i < count; i++) {
       const seed = start + i;
-      const matchId = `${scenario.id}_seed${seed}_agent_vs_random_${tagSlug}`;
+      const matchId = `${scenario.id}_seed${seed}_agent_vs_${opponent}_${tagSlug}`;
 
       const agentController = new HttpAgentController({
         id: "agent",
@@ -234,16 +242,18 @@ async function main() {
         logDir: "runs/agent_io",
       });
 
-      const randomController = new RandomBot({
-        seed: seed + (agentSide === "P1" ? 202 : 101),
-        adjacency,
-        scenario,
-      });
+      const opponentSeed = seed + (agentSide === "P1" ? 202 : 101);
+      const opponentController: Controller =
+        opponent === "random"
+          ? new RandomBot({ seed: opponentSeed, adjacency, scenario })
+          : opponent === "mix"
+            ? new MixBot({ seed: opponentSeed, adjacency, scenario, greedyProb: mixGreedyProb })
+            : new GreedyBot({ adjacency, scenario });
 
       const controllers: Record<PlayerId, Controller> =
         agentSide === "P1"
-          ? { P1: agentController, P2: randomController }
-          : { P1: randomController, P2: agentController };
+          ? { P1: agentController, P2: opponentController }
+          : { P1: opponentController, P2: agentController };
 
       const replay = await runMatch({ ctx, controllers, seed });
 
@@ -257,8 +267,18 @@ async function main() {
         modelMode: model === "auto" ? ("auto" as const) : ("explicit" as const),
       };
       replay.players = {
-        P1: agentSide === "P1" ? { ...baseAgentMeta, ...(agentInfo ?? {}) } : { kind: "random" },
-        P2: agentSide === "P2" ? { ...baseAgentMeta, ...(agentInfo ?? {}) } : { kind: "random" },
+        P1:
+          agentSide === "P1"
+            ? { ...baseAgentMeta, ...(agentInfo ?? {}) }
+            : opponent === "mix"
+              ? { kind: "mix", greedyProb: mixGreedyProb }
+              : { kind: opponent },
+        P2:
+          agentSide === "P2"
+            ? { ...baseAgentMeta, ...(agentInfo ?? {}) }
+            : opponent === "mix"
+              ? { kind: "mix", greedyProb: mixGreedyProb }
+              : { kind: opponent },
       };
 
       const summary = summarizeReplay(replay, agentSide);
@@ -283,7 +303,7 @@ async function main() {
 
       if (saveReplays) {
         await mkdir(outDir, { recursive: true });
-        const outFile = path.join(outDir, `${scenario.id}_seed${seed}_agent_vs_random_${tagSlug}.json`);
+        const outFile = path.join(outDir, `${scenario.id}_seed${seed}_agent_vs_${opponent}_${tagSlug}.json`);
         await writeFile(outFile, JSON.stringify(replay, null, 2), "utf8");
         if (i === 0) stats.sampleReplay = outFile;
       }

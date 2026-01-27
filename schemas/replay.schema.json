@@ -46,6 +46,15 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["kind", "greedyProb"],
+          "properties": {
+            "kind": { "const": "mix" },
+            "greedyProb": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["kind"],
           "properties": {
             "kind": { "const": "agent" },

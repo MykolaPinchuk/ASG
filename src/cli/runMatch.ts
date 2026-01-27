@@ -5,11 +5,12 @@ import { createInitialState } from "../game/engine.js";
 import { runMatch } from "../game/match.js";
 import { GreedyBot } from "../controllers/greedyBot.js";
 import { RandomBot } from "../controllers/randomBot.js";
+import { MixBot } from "../controllers/mixBot.js";
 import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import type { Controller } from "../controllers/controller.js";
 
-type ControllerName = "greedy" | "random" | "agent";
+type ControllerName = "greedy" | "random" | "mix" | "agent";
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -39,9 +40,20 @@ function controllerFromName(params: {
     matchId: string;
     logDir?: string;
   };
+  mix?: {
+    greedyProb: number;
+  };
   player: "P1" | "P2";
 }): Controller {
   if (params.name === "random") return new RandomBot({ seed: params.seed, adjacency: params.adjacency, scenario: params.scenario });
+  if (params.name === "mix") {
+    return new MixBot({
+      seed: params.seed,
+      adjacency: params.adjacency,
+      scenario: params.scenario,
+      greedyProb: params.mix?.greedyProb ?? 0.5,
+    });
+  }
   if (params.name === "agent") {
     if (!params.agent?.url) throw new Error("Controller=agent requires --agent-url");
     return new HttpAgentController({
@@ -66,6 +78,7 @@ async function main() {
   const p1 = (args.get("--p1") ?? "greedy") as ControllerName;
   const p2 = (args.get("--p2") ?? "greedy") as ControllerName;
   const seed = Number.parseInt(args.get("--seed") ?? "1", 10);
+  const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
   const agentUrl = args.get("--agent-url");
   // Default must accommodate real LLM latency (even via a local agent server).
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
@@ -73,6 +86,8 @@ async function main() {
   const agentLogDir = args.get("--agent-log-dir") ?? undefined;
   const turnCapOverrideRaw = args.get("--turn-cap-plies");
   const turnCapPliesOverride = turnCapOverrideRaw ? Number.parseInt(turnCapOverrideRaw, 10) : undefined;
+
+  if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
 
   const scenario = await loadScenarioFromFile(scenarioPath);
   if (turnCapPliesOverride !== undefined) {
@@ -93,6 +108,7 @@ async function main() {
       adjacency,
       scenario,
       agent: agentUrl ? { url: agentUrl, timeoutMs: agentTimeoutMs, apiVersion: agentApiVersion, matchId, logDir: agentLogDir } : undefined,
+      mix: { greedyProb: mixGreedyProb },
       player: "P1",
     }),
     P2: controllerFromName({
@@ -101,6 +117,7 @@ async function main() {
       adjacency,
       scenario,
       agent: agentUrl ? { url: agentUrl, timeoutMs: agentTimeoutMs, apiVersion: agentApiVersion, matchId, logDir: agentLogDir } : undefined,
+      mix: { greedyProb: mixGreedyProb },
       player: "P2",
     }),
   };
@@ -114,7 +131,9 @@ async function main() {
             agentUrl: agentUrl ?? undefined,
             ...(controllers.P1 instanceof HttpAgentController ? (controllers.P1.agentInfo ?? {}) : {}),
           }
-        : { kind: p1 },
+        : p1 === "mix"
+          ? { kind: "mix", greedyProb: mixGreedyProb }
+          : { kind: p1 },
     P2:
       p2 === "agent"
         ? {
@@ -122,7 +141,9 @@ async function main() {
             agentUrl: agentUrl ?? undefined,
             ...(controllers.P2 instanceof HttpAgentController ? (controllers.P2.agentInfo ?? {}) : {}),
           }
-        : { kind: p2 },
+        : p2 === "mix"
+          ? { kind: "mix", greedyProb: mixGreedyProb }
+          : { kind: p2 },
   };
 
   const outArg = args.get("--out");

@@ -918,7 +918,10 @@
         function fmtPlayer(pid) {
           const meta = p[pid];
           if (!meta || !meta.kind) return `${pid}: (unknown)`;
-          if (meta.kind !== "agent") return `${pid}: ${meta.kind}`;
+          if (meta.kind !== "agent") {
+            if (meta.kind === "mix" && typeof meta.greedyProb === "number") return `${pid}: mix (pGreedy=${meta.greedyProb})`;
+            return `${pid}: ${meta.kind}`;
+          }
           const bits = [];
           if (meta.provider) bits.push(`provider=${meta.provider}`);
           if (meta.model) bits.push(`model=${meta.model}`);
