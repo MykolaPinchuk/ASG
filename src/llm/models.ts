@@ -9,6 +9,8 @@ export type OssModelsConfigV1 = {
     {
       priority: string[];
       allow?: string[];
+      deny?: string[];
+      denyPrefixes?: string[];
     }
   >;
 };
@@ -34,16 +36,35 @@ export async function loadOssModelsConfig(filePath: string): Promise<OssModelsCo
         throw new Error(`Invalid models config at ${filePath}: providers.${provider}.allow must be string[]`);
       }
     }
+    if ((entry as any).deny !== undefined) {
+      const deny = (entry as any).deny;
+      if (!Array.isArray(deny) || deny.some((v) => typeof v !== "string" || v.length === 0)) {
+        throw new Error(`Invalid models config at ${filePath}: providers.${provider}.deny must be string[]`);
+      }
+    }
+    if ((entry as any).denyPrefixes !== undefined) {
+      const denyPrefixes = (entry as any).denyPrefixes;
+      if (!Array.isArray(denyPrefixes) || denyPrefixes.some((v) => typeof v !== "string" || v.length === 0)) {
+        throw new Error(`Invalid models config at ${filePath}: providers.${provider}.denyPrefixes must be string[]`);
+      }
+    }
   }
 
   return json as OssModelsConfigV1;
 }
 
-export function getProviderAllowlist(config: OssModelsConfigV1, provider: string): { priority: string[]; allow: string[] } {
+export function getProviderAllowlist(config: OssModelsConfigV1, provider: string): {
+  priority: string[];
+  allow: string[];
+  deny: string[];
+  denyPrefixes: string[];
+} {
   const entry = config.providers[provider.toLowerCase()] ?? config.providers[provider];
   const priority = entry?.priority ?? [];
   const allow = entry?.allow ?? priority;
-  return { priority, allow };
+  const deny = entry?.deny ?? [];
+  const denyPrefixes = entry?.denyPrefixes ?? [];
+  return { priority, allow, deny, denyPrefixes };
 }
 
 export function normalizeBaseUrl(baseUrl: string): string {
@@ -81,4 +102,3 @@ export async function fetchOpenAiCompatModelIds(params: { baseUrl: string; apiKe
 
   return extractModelIds(payload);
 }
-

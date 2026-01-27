@@ -171,15 +171,12 @@ function buildSystemPrompt() {
   ].join("\n");
 }
 
-function shouldAddThinkingHint(params: { args: ProviderArgs; resolvedModel: string }): boolean {
-  const mode = (params.args.get("--think-hint") ?? process.env.ASG_OPENAI_THINK_HINT ?? "auto").toLowerCase();
-  if (mode === "on" || mode === "true" || mode === "1") return true;
+function shouldAddThinkingHint(params: { args: ProviderArgs }): boolean {
+  // Default: ON for all models (can be disabled).
+  const mode = (params.args.get("--think-hint") ?? process.env.ASG_OPENAI_THINK_HINT ?? "on").toLowerCase();
   if (mode === "off" || mode === "false" || mode === "0") return false;
-  if (mode !== "auto") return false;
-
-  const m = params.resolvedModel.toLowerCase();
-  // Heuristic: add the hint only for models that explicitly advertise reasoning/thinking variants.
-  return m.includes("thinking") || m.includes("reasoner") || m.includes("reasoning") || m.includes("r1");
+  if (mode === "on" || mode === "true" || mode === "1") return true;
+  throw new Error(`invalid --think-hint '${mode}' (expected on|off)`);
 }
 
 function sumIncomeFromObservation(obs: any, player: PlayerId, baseIncome: number): number {
@@ -357,14 +354,21 @@ async function resolveOpenAiCompatModel(params: {
   if (cached) return cached;
 
   const config = await loadOssModelsConfig(modelsConfigPath);
-  const { priority, allow } = getProviderAllowlist(config, modelsProvider);
+  const { priority, allow, deny, denyPrefixes } = getProviderAllowlist(config, modelsProvider);
   if (priority.length === 0 && allow.length === 0) {
     throw new Error(`model=auto has no allowlist for provider '${modelsProvider}' in ${modelsConfigPath}`);
   }
 
   const ids = await fetchOpenAiCompatModelIds({ baseUrl, apiKey });
   const available = new Set(ids);
-  const candidateOrder = Array.from(new Set([...priority, ...allow]));
+  const denySet = new Set(deny);
+  const denyPrefixesNorm = denyPrefixes.map((p) => p.toLowerCase());
+  const candidateOrder = Array.from(new Set([...priority, ...allow])).filter((m) => {
+    if (denySet.has(m)) return false;
+    const lower = m.toLowerCase();
+    if (denyPrefixesNorm.some((p) => lower.startsWith(p))) return false;
+    return true;
+  });
   const chosen = candidateOrder.find((m) => available.has(m));
   if (!chosen) {
     const sample = ids.slice(0, 30).join(", ");
@@ -448,7 +452,7 @@ export async function openAiCompatAct(params: {
   const url = normalizeBaseUrl(baseUrl) + "/chat/completions";
 
   const thinkSec = Math.max(1, Math.floor((timeoutMs - 5000) / 1000));
-  const system = shouldAddThinkingHint({ args, resolvedModel })
+  const system = shouldAddThinkingHint({ args })
     ? [
         buildSystemPrompt(),
         "Think carefully and aim for an optimal strategy.",

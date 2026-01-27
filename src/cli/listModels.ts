@@ -87,6 +87,8 @@ async function main() {
 
   let allow: string[] = [];
   let priority: string[] = [];
+  let deny: string[] = [];
+  let denyPrefixes: string[] = [];
   let availablePriority: string[] = [];
   let missingPriority: string[] = [];
   if (modelsConfigPath) {
@@ -94,12 +96,19 @@ async function main() {
     const lists = getProviderAllowlist(config, modelsProvider);
     allow = lists.allow;
     priority = lists.priority;
+    deny = lists.deny;
+    denyPrefixes = lists.denyPrefixes;
     const availableSet = new Set(ids);
     availablePriority = priority.filter((m) => availableSet.has(m));
     missingPriority = priority.filter((m) => !availableSet.has(m));
     if (onlyAllowed && allow.length > 0) {
       const allowSet = new Set(allow);
       ids = ids.filter((id) => allowSet.has(id));
+    }
+    if (deny.length > 0 || denyPrefixes.length > 0) {
+      const denySet = new Set(deny);
+      const denyPrefixesNorm = denyPrefixes.map((p) => p.toLowerCase());
+      ids = ids.filter((id) => !denySet.has(id) && !denyPrefixesNorm.some((p) => id.toLowerCase().startsWith(p)));
     }
   }
 

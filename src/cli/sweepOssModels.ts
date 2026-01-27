@@ -7,6 +7,7 @@ import { RandomBot } from "../controllers/randomBot.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 import { openAiCompatAct } from "../providers/openaiCompat.js";
+import { getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
 
 type ProviderName = "nanogpt" | "chutes" | "openrouter";
 
@@ -80,7 +81,13 @@ async function fetchModels(params: { baseUrl: string; apiKey?: string }): Promis
   return extractModelIds(json);
 }
 
-function pickOssCandidates(provider: ProviderName, all: string[], max: number): string[] {
+function pickOssCandidates(
+  provider: ProviderName,
+  all: string[],
+  max: number,
+  extraDeny: string[],
+  extraDenyPrefixes: string[],
+): string[] {
   const denyPrefixes = [
     "openai/",
     "anthropic/",
@@ -96,7 +103,6 @@ function pickOssCandidates(provider: ProviderName, all: string[], max: number): 
     "deepseek-ai/",
     "qwen/",
     "Qwen/",
-    "meta-llama/",
     "mistralai/",
     "zai-org/",
     "microsoft/",
@@ -106,7 +112,16 @@ function pickOssCandidates(provider: ProviderName, all: string[], max: number): 
     "nvidia/",
   ];
 
-  const filtered = all.filter((id) => id.includes("/") && !denyPrefixes.some((p) => id.toLowerCase().startsWith(p)));
+  const denySet = new Set(extraDeny);
+  const extraDenyPrefixesNorm = extraDenyPrefixes.map((p) => p.toLowerCase());
+  const filtered = all.filter((id) => {
+    if (!id.includes("/")) return false;
+    const lower = id.toLowerCase();
+    if (denyPrefixes.some((p) => lower.startsWith(p))) return false;
+    if (denySet.has(id)) return false;
+    if (extraDenyPrefixesNorm.some((p) => lower.startsWith(p))) return false;
+    return true;
+  });
 
   const preferred: string[] = [];
   const rest: string[] = [];
@@ -286,6 +301,8 @@ async function main() {
   const maxTokens = args.get("--max-tokens") ?? "180";
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;
+  const modelsConfigPath = args.get("--models-config") ?? "configs/oss_models.json";
+  const modelsConfig = await loadOssModelsConfig(modelsConfigPath);
 
   if (!Number.isInteger(maxModels) || maxModels < 1 || maxModels > 80) throw new Error("--max-models must be in [1,80]");
   if (!Number.isInteger(smokeTurnCap) || smokeTurnCap < 2) throw new Error("--smoke-turn-cap must be >=2");
@@ -331,7 +348,8 @@ async function main() {
       continue;
     }
 
-    const candidates = pickOssCandidates(provider, ids, maxModels);
+    const { deny, denyPrefixes } = getProviderAllowlist(modelsConfig, provider);
+    const candidates = pickOssCandidates(provider, ids, maxModels, deny, denyPrefixes);
     const providerOutDir = path.join(outRoot, provider);
     await mkdir(providerOutDir, { recursive: true });
     await writeFile(path.join(providerOutDir, "models.txt"), candidates.join("\n") + "\n", "utf8");
