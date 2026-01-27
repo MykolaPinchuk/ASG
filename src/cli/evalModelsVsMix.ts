@@ -131,13 +131,15 @@ async function evalOneModel(params: {
   temperature: string;
   useTools: boolean;
   promptMode?: string;
+  stopAfterErrors?: number;
   saveReplays: boolean;
   replaysDir: string;
   liveOut?: string;
   agentLogDir?: string;
   serverLogDir?: string;
 }) {
-  const scenario = params.scenario;
+  // Clone per model so any early-stop turn-cap tweaks do not leak across models.
+  const scenario = structuredClone(params.scenario);
   const adjacency = params.adjacency;
   const ctx = { scenario, adjacency };
 
@@ -221,6 +223,29 @@ async function evalOneModel(params: {
         logDir: params.agentLogDir,
       });
 
+      let errorTurns = 0;
+      let earlyStopTriggered = false;
+      const stopAfterErrors = Number.isInteger(params.stopAfterErrors) ? Math.max(0, params.stopAfterErrors!) : 0;
+      const agentWrapped: Controller = {
+        id: agentController.id,
+        decide: async (obs) => {
+          const out = await agentController.decide(obs);
+          const last = agentController.telemetry[agentController.telemetry.length - 1];
+          const isAgentErr = !!last?.error || (out.rationaleText ?? "").startsWith("agent error:");
+          const isProviderErr = (out.rationaleText ?? "").includes("server: openai_compat error");
+          if (isAgentErr || isProviderErr) errorTurns += 1;
+
+          if (!earlyStopTriggered && stopAfterErrors > 0 && errorTurns >= stopAfterErrors) {
+            // Force a draw on the next applyTurn by tightening the turn cap to the upcoming ply.
+            const nextPly = obs.ply + 1;
+            scenario.settings.turnCapPlies = Math.min(scenario.settings.turnCapPlies ?? nextPly, nextPly);
+            earlyStopTriggered = true;
+          }
+
+          return out;
+        },
+      };
+
       const mixController: Controller = new MixBot({
         seed: seed + 202,
         adjacency,
@@ -228,7 +253,7 @@ async function evalOneModel(params: {
         greedyProb: params.mixGreedyProb,
       });
 
-      const controllers: Record<PlayerId, Controller> = { P1: agentController, P2: mixController };
+      const controllers: Record<PlayerId, Controller> = { P1: agentWrapped, P2: mixController };
       const replay = await runMatch({ ctx, controllers, seed });
 
       // Attach metadata so the viewer shows model/provider and MixBot params.
@@ -275,11 +300,16 @@ async function evalOneModel(params: {
         agentPassTurns,
         agentErrorTurns: agentErrors,
         providerErrorTurns: providerErrors,
+        stopAfterErrors: stopAfterErrors || undefined,
+        errorTurns: stopAfterErrors ? errorTurns : undefined,
+        earlyStop: stopAfterErrors ? earlyStopTriggered : undefined,
         avgLatencyOkMs: tStats.avg,
         p95LatencyOkMs: tStats.p95,
       };
       console.log(
-        `game: provider=${String(params.providerName)} model=${params.model} seed=${seed} result=${resultShort} plies=${plies} agentTurns=${agentTurns.length} passTurns=${agentPassTurns} errors=${agentErrors} providerErrors=${providerErrors} avgLatencyOkMs=${tStats.avg ?? "—"} p95LatencyOkMs=${tStats.p95 ?? "—"}`,
+        `game: provider=${String(params.providerName)} model=${params.model} seed=${seed} result=${resultShort} plies=${plies} agentTurns=${agentTurns.length} passTurns=${agentPassTurns} errors=${agentErrors} providerErrors=${providerErrors} avgLatencyOkMs=${tStats.avg ?? "—"} p95LatencyOkMs=${tStats.p95 ?? "—"}${
+          stopAfterErrors ? ` errorTurns=${errorTurns}${earlyStopTriggered ? " earlyStop=true" : ""}` : ""
+        }`,
       );
       if (params.liveOut) {
         const dir = path.dirname(params.liveOut);
@@ -299,6 +329,11 @@ async function evalOneModel(params: {
       if (replay.result.type === "draw") draws += 1;
       else if (replay.result.winner === "P1") wins += 1;
       else losses += 1;
+
+      if (stopAfterErrors > 0 && errorTurns >= stopAfterErrors) {
+        console.log(`stopAfterErrors=${stopAfterErrors} hit (errorTurns=${errorTurns}); moving to next model`);
+        break;
+      }
     }
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
@@ -348,6 +383,8 @@ async function main() {
   const useToolsRaw = (args.get("--use-tools") ?? "true").toLowerCase();
   const useTools = useToolsRaw !== "false";
   const promptMode = args.get("--prompt-mode") ?? undefined;
+  const stopAfterErrorsRaw = args.get("--stop-after-errors") ?? "2";
+  const stopAfterErrors = Number.parseInt(stopAfterErrorsRaw, 10);
 
   const saveReplaysRaw = (args.get("--save-replays") ?? "true").toLowerCase();
   const saveReplays = saveReplaysRaw !== "false";
@@ -376,6 +413,9 @@ async function main() {
   if (!Number.isInteger(games) || games < 1 || games > 50) throw new Error("--games/--trials must be an integer in [1,50]");
   if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be >=1");
   if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
+  if (!Number.isInteger(stopAfterErrors) || stopAfterErrors < 0 || stopAfterErrors > 100) {
+    throw new Error("--stop-after-errors must be an integer in [0, 100]");
+  }
 
   let seeds: number[] = [];
   if (seedsRaw) {
@@ -414,6 +454,7 @@ async function main() {
         temperature,
         useTools,
         promptMode,
+        stopAfterErrors,
         saveReplays,
         replaysDir,
         liveOut,

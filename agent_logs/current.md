@@ -29,3 +29,4 @@
 - 2026-01-26 18:56:01 PST — Added an automatic “thinking time” hint for reasoning/thinking model variants (heuristic by model id; configurable via `--think-hint auto|on|off`).
 - 2026-01-26 19:05:40 PST — Set MixBot eval default turn cap to 30 plies (15 turns/player) and added per-game live metrics printing (result/plies/pass/errors + avg/p95 latency). Added `HttpAgentController.telemetry` and optional `--live-out` JSONL append for `agent:vs-random` and `agent:eval-vs-mix`.
 - 2026-01-26 19:44:22 PST — Added OSS denylist support in `configs/oss_models.json` (deny + denyPrefixes) and applied it to sweeps + model listing + model=auto selection. Removed llama + selected Qwen2.5/Qwen3 models from future OSS runs.
+- 2026-01-26 19:59:03 PST — Added `--stop-after-errors` (default 2) to `agent:eval-vs-mix`: if a model accumulates 2 error turns (agent/server/provider), the current match is ended early via turn-cap tightening and remaining games for that model are skipped.
