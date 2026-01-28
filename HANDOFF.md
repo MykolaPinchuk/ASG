@@ -1,7 +1,11 @@
 # HANDOFF
 
 ## Current slice
-MVP v0 is implemented end-to-end (engine → replays → viewer → agent server/provider plumbing). Recent work focused on OSS model integration and sweeps across providers; next work is making the LLM-agent more reliable (fewer passes/provider errors) without adding strategic “fallback” behavior.
+MVP v0 is implemented end-to-end (engine → replays → viewer → agent server/provider plumbing). Recent work focused on OSS model integration and sweeps across providers, plus evaluation tooling + viewer observability.
+
+Branching:
+- `master` is now the default branch.
+- Ongoing work should land on `v05` (pre-v1 hardening).
 
 ## OSS baselines (default for testing)
 These are the current recommended OSS baselines for ongoing testing (high win-rate and stable/low error rates in recent runs):
@@ -14,11 +18,11 @@ Smoke (1 game each vs GreedyBot, seed=3):
 ## Known-good models (fallback shortlist)
 If provider/model availability changes, these OpenRouter models have recently worked well end-to-end in this repo:
 - Primary: `x-ai/grok-4.1-fast`
-- Fallback: `google/gemini-3-flash-preview`
 
 Notes:
 - `openai/gpt-5-mini` is currently unreliable in this harness (frequent empty/partial outputs leading to passes).
 - OpenRouter now defaults to `x-ai/grok-4.1-fast` when `--model` is omitted.
+- Recent OpenRouter runs showed `google/gemini-2.5-flash` and `google/gemini-3-flash-preview` producing mostly `pass` actions vs `GreedyBot` (losses), so they are not currently a recommended fallback.
 
 ## Regression spec (paid)
 When making harness changes, keep the paid regression check stable and cost-capped:
@@ -60,16 +64,21 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Local run outputs (gitignored) contain sweep + retest results:
   - `runs/model_sweeps/2026-01-26T04-05-58-850Z/summary.md`
   - `runs/model_retests/2026-01-26T05-13-32_seed5_rerun/seed5_results.json`
+  - More recent key runs:
+    - OSS full run (post-fixes): `runs/model_sweeps/oss_fullrun_2026-01-27T13-12-04Z/combined_summary.md`
+    - OSS winners vs Mix+Greedy (3 games each): `runs/model_sweeps/oss_winners_3x_mix_3x_greedy_2026-01-27T20-51-39Z/winners_eval_summary.md`
+    - OSS baseline smoke: `runs/model_sweeps/oss_baselines_smoke_2026-01-27T23-06-00Z/results.json`
 
-### Next (ordered)
-1) Improve reliability of LLM→actions (without adding strategic fallback):
-   - Reduce “pass because provider error / malformed JSON” turns.
-   - Continue tightening `openai_compat` parsing/tool-use behavior in `src/providers/openaiCompat.ts`.
-2) Improve agent prompt/context (informational only, minimal strategy):
-   - Ensure the agent sees win conditions, income/supply, combat mechanics, and action constraints clearly.
-3) Improve run observability:
-   - Ensure replays clearly indicate which player is the agent and which provider/model was used (viewer reads `replay.players`).
-4) Optional: add OpenRouter key and include it in sweeps (currently skipped if not present in `secrets/provider_apis.txt`).
+### v0.5 Next (pre-v1, ordered)
+1) Reduce draw rate via *tuning only* (no new mechanics):
+   - Add a small tuning sweep tool and promote tuned defaults into scenario settings.
+2) Improve viewer “debug speed”:
+   - Add a match summary panel (captures, pass/error counts, latency stats).
+   - Add per-turn badges for `pass` / `invalid_action` / provider errors.
+3) Improve agent observability in replays:
+   - Persist additional per-turn diagnostics (e.g., http status / error string) so failures are visible in the viewer without opening logs.
+4) Continue `openai_compat` robustness work (no strategic fallback):
+   - Focus on “thinking-only / no final JSON” behavior for some providers/models.
 
 ### Open questions
 - What “OSS-only” means per provider in practice (some providers mix OSS + closed models in `/models` lists; current allowlist approach is prefix-based + explicit config in `configs/oss_models.json`).
