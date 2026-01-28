@@ -8,12 +8,18 @@ Branching:
 - Ongoing work should land on `v05` (pre-v1 hardening).
 
 ## OSS baselines (default for testing)
-These are the current recommended OSS baselines for ongoing testing (high win-rate and stable/low error rates in recent runs):
-- Chutes: `tngtech/DeepSeek-R1T-Chimera`
-- Chutes: `chutesai/Mistral-Small-3.1-24B-Instruct-2503`
+These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):
+- Chutes:
+  - `tngtech/DeepSeek-R1T-Chimera`
+  - `chutesai/Mistral-Small-3.1-24B-Instruct-2503`
+  - `deepseek-ai/DeepSeek-V3-0324-TEE`
+- NanoGPT:
+  - `deepseek/deepseek-v3.2`
+  - `mistralai/devstral-2-123b-instruct-2512`
 
 Smoke (1 game each vs GreedyBot, seed=3):
-- `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
+- Chutes: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
+- NanoGPT: `npm run agent:eval-vs-mix -- --provider-name nanogpt --opponent greedy --models-file configs/oss_baselines_nanogpt.txt --games 1 --seed 3`
 
 ## Known-good models (fallback shortlist)
 If provider/model availability changes, these OpenRouter models have recently worked well end-to-end in this repo:
@@ -52,10 +58,16 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - Evidence: `b5e1bb7` (`agent01: checkpoint(runner): add agent server (stub + openai compat)`)
 - OpenAI-compatible provider plumbing with robustness (parsing/tool-call retry, error surfacing into rationale):
   - `src/providers/openaiCompat.ts`
-  - Evidence: `1277255` (`agent01: checkpoint(runner): tool-call + retry`)
+  - Evidence: `1277255` (`agent01: checkpoint(runner): tool-call + retry`), `e39f815` (`agent03: checkpoint(runner): OSS reliability retries + timeout buffer`), `c34d49c` (`agent03: checkpoint(runner): stricter JSON validation + better budget-empty retries`)
+- Mechanics-only prompt policy for fairness (remove strategy-like hints):
+  - `src/providers/openaiCompat.ts`
+  - Evidence: `cd39e17` (`agent03: checkpoint(runner): remove strategic guidance from prompts`), `e35fd22` (`agent03: checkpoint(runner): clarify sequential mechanics wording`)
 - OSS model allowlist/priority list (derived from TML-bench) + model listing:
   - `configs/oss_models.json`, `src/llm/models.ts`, `npm run agent:list-models`
   - Evidence: `f6daf7a` (`agent01: checkpoint(misc): OSS allowlist + model auto`)
+- OSS diagnostics writeup (tests + failure modes + lessons):
+  - `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`
+  - Evidence: `ed12392` (`agent03: checkpoint(docs): document OSS debugging + learnings`), `db8aa63` (`agent03: checkpoint(docs): add no-strategy sweep rerun results`)
 - Model evaluation tooling:
   - Agent vs Random: `npm run agent:vs-random` (`src/cli/agentVsRandom.ts`)
   - Model eval vs MixBot/GreedyBot (prints per-game metrics + optional JSONL live log): `npm run agent:eval-vs-mix` (`src/cli/evalModelsVsMix.ts`)
@@ -95,6 +107,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
 ## Known issues / current breakage
 - Provider flakiness: capacity/rate-limit errors can cause many agent passes (esp. some Chutes models); these are surfaced as `openai_compat failed: ...` in rationale.
 - Some models produce malformed JSON/tool output; `openai_compat` retries once but can still fail and fall back to `pass`.
+- Important: earlier “big win-rate” OSS results were shown to be driven by prompt strategy hints; after removing hints, re-runs produced 0 wins in the same one-ply micro-sweep setup (see `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`).
 
 ## Git notes (handoff)
 - Intentionally uncommitted local-only data:

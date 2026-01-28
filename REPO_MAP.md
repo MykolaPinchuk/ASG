@@ -13,6 +13,7 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/MVP_SPEC.md` — normative MVP rules/spec (source of truth).
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.
 - `docs/planning/ROADMAP.md` — post-MVP direction.
+- `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md` — OSS provider debugging notes (failure modes + tests).
 - `viewer/index.html` — replay viewer (load `replays/*.json`).
 - `scenarios/scenario_01.json` — initial scenario data.
 - `schemas/replay.schema.json` — replay JSON schema.
