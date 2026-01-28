@@ -137,8 +137,8 @@ async function main() {
   const modelArg = args.get("--model");
   const model = modelArg ?? (providerKey === "openrouter" ? "x-ai/grok-4.1-fast" : "auto");
   const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_baselines.json";
-  // Keep a small buffer over the agent server's typical upstream timeout (so we don't abort right as it responds).
-  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "70000", 10);
+  // Keep a buffer over the agent server's upstream timeout (so we don't abort right as it responds).
+  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "95000", 10);
   const saveReplays = args.get("--save-replays") === "true";
   const outDir = args.get("--out-dir") ?? "replays";
   const liveOut = args.get("--live-out") ?? undefined;
@@ -151,7 +151,7 @@ async function main() {
   const tag = args.get("--tag") ?? `${providerName}_${model}`;
   const tagSlug = slugify(tag);
 
-  const openAiTimeoutMs = args.get("--timeout-ms") ?? (looksLikeReasoningModelId(model) ? "65000" : "60000");
+  const openAiTimeoutMs = args.get("--timeout-ms") ?? (looksLikeReasoningModelId(model) ? "80000" : "60000");
   const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;

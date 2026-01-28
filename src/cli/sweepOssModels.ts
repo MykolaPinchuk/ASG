@@ -366,7 +366,7 @@ async function main() {
       const smokeSeed = smokeSeedStart + i;
       const useTools = provider !== "chutes"; // chutes appears less compatible with tools
 
-      const timeoutMs = timeoutMsArg ?? (looksLikeReasoningModelId(model) ? "65000" : "60000");
+      const timeoutMs = timeoutMsArg ?? (looksLikeReasoningModelId(model) ? "80000" : "60000");
       const maxTokens = maxTokensArg ?? (looksLikeReasoningModelId(model) ? "600" : "180");
 
       const smokeReplayPath = path.join("replays", `${path.basename(scenarioPath, ".json")}_seed${smokeSeed}_${provider}_${encodeURIComponent(model)}_smoke.json`);

@@ -427,7 +427,7 @@ async function main() {
   const opponent = opponentRaw as Opponent;
   const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
   // Keep a small buffer over the agent server's typical upstream timeout (so we don't abort right as it responds).
-  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "70000", 10);
+  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "95000", 10);
 
   const openAiTimeoutMsArg = args.get("--timeout-ms");
   const maxTokens = args.get("--max-tokens") ?? "600";
@@ -551,7 +551,7 @@ async function main() {
         opponent,
         mixGreedyProb,
         agentTimeoutMs,
-        openAiTimeoutMs: openAiTimeoutMsArg ?? (looksLikeReasoningModelId(model) ? "65000" : "60000"),
+        openAiTimeoutMs: openAiTimeoutMsArg ?? (looksLikeReasoningModelId(model) ? "80000" : "60000"),
         maxTokens,
         temperature,
         useTools,

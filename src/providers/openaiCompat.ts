@@ -195,6 +195,7 @@ function buildToolSchema() {
             rationale_text: { type: "string" },
             actions: {
               type: "array",
+              minItems: 1,
               items: {
                 oneOf: [
                   { type: "object", additionalProperties: false, required: ["type"], properties: { type: { const: "pass" } } },
@@ -749,12 +750,12 @@ export async function openAiCompatAct(params: {
   // Default must accommodate typical remote OpenAI-compatible provider latency.
   // "Thinking"/reasoning OSS models frequently return just after 60s; give them a small buffer by default.
   const timeoutMs = Number.parseInt(
-    timeoutMsArg ?? (keysName !== "openrouter" && looksLikeReasoningModelId(resolvedModel) ? "65000" : "60000"),
+    timeoutMsArg ?? (keysName !== "openrouter" && looksLikeReasoningModelId(resolvedModel) ? "80000" : "60000"),
     10,
   );
   // OSS reasoning models are prone to "budget-empty" (no JSON/tool output) when max_tokens is too low.
   const maxTokens = Number.parseInt(
-    maxTokensArg ?? (keysName !== "openrouter" && looksLikeReasoningModelId(resolvedModel) ? "600" : "300"),
+    maxTokensArg ?? (keysName !== "openrouter" && looksLikeReasoningModelId(resolvedModel) ? "800" : "300"),
     10,
   );
 
