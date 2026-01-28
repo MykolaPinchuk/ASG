@@ -95,6 +95,11 @@ function slugify(value: string): string {
     .slice(0, 160);
 }
 
+function looksLikeReasoningModelId(modelId: string): boolean {
+  const m = modelId.toLowerCase();
+  return m.includes(":thinking") || m.includes("thinking") || m.includes("reasoning") || m.includes("deepseek-r1") || m.includes("deepseek_r1");
+}
+
 function percentile(sortedAsc: number[], p: number): number | null {
   if (sortedAsc.length === 0) return null;
   const clamped = Math.min(1, Math.max(0, p));
@@ -424,7 +429,7 @@ async function main() {
   // Keep a small buffer over the agent server's typical upstream timeout (so we don't abort right as it responds).
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "70000", 10);
 
-  const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
+  const openAiTimeoutMsArg = args.get("--timeout-ms");
   const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const useToolsDefault = providerName !== "chutes";
@@ -546,7 +551,7 @@ async function main() {
         opponent,
         mixGreedyProb,
         agentTimeoutMs,
-        openAiTimeoutMs,
+        openAiTimeoutMs: openAiTimeoutMsArg ?? (looksLikeReasoningModelId(model) ? "65000" : "60000"),
         maxTokens,
         temperature,
         useTools,

@@ -230,7 +230,8 @@ function buildSystemPrompt() {
     "You are an agent that plays a deterministic, turn-based strategy game.",
     "You must respond with VALID JSON ONLY (no markdown, no code fences, no commentary).",
     "Your response must start with '{' and end with '}' (a single JSON object).",
-    "Do NOT output your reasoning. Think silently; output only the JSON object.",
+    "Do NOT output any text outside the JSON object.",
+    "Think silently; you may include a short rationale_text inside the JSON if you want.",
     "After you output the JSON object, STOP. Do not add any extra text after the final '}'.",
     "Rules for JSON:",
     "- Use double quotes for all strings and keys.",
@@ -245,7 +246,8 @@ function buildSystemPrompt() {
     "Important:",
     "- Actions apply SEQUENTIALLY in the order you provide (state updates after each action).",
     "- You may output up to action_budget actions per ply (the runner may truncate to action_budget).",
-    "- Since actions are sequential, a later move may use forces moved earlier in the same ply.",
+    "- Since actions are sequential, a later move may use forces moved earlier in the same ply (you can move a stack multiple edges by chaining moves).",
+    "- Example (mechanics): if A-B and B-C are edges and you have 5 forces at A, you can do move A→B amount 5, then move B→C amount 5 in the same ply.",
     "Game rules (important):",
     "- Plies alternate: P1 then P2 then P1 ...",
     "- At start of each ply, ACTIVE player gains supply: baseIncome + sum(supplyYield of nodes they own).",
@@ -261,8 +263,9 @@ function buildSystemPrompt() {
     "- do not exceed available forces at the from node.",
     "- reinforce costs supply: amount * reinforceCostPerStrength.",
     "Never output an empty actions array; include at least one action.",
-    "If you cannot find a legal action, you may return pass.",
-    "Keep rationale_text short (<= 1 sentence) or omit it.",
+    "Avoid pass if you have any legal non-pass action.",
+    "If you truly cannot find a legal non-pass action, you may return pass.",
+    "Keep rationale_text short (<= 3 sentences) or omit it.",
   ].join("\n");
 }
 
@@ -705,10 +708,9 @@ export async function openAiCompatAct(params: {
     process.env.ASG_OPENAI_MODEL ??
     keys.get(`${keysName}_model`) ??
     "";
-  // Default must accommodate typical remote OpenAI-compatible provider latency.
-  const timeoutMs = Number.parseInt(args.get("--timeout-ms") ?? process.env.ASG_OPENAI_TIMEOUT_MS ?? "60000", 10);
+  const timeoutMsArg = args.get("--timeout-ms") ?? process.env.ASG_OPENAI_TIMEOUT_MS ?? undefined;
   const temperature = Number.parseFloat(args.get("--temperature") ?? process.env.ASG_OPENAI_TEMPERATURE ?? "0");
-  const maxTokens = Number.parseInt(args.get("--max-tokens") ?? process.env.ASG_OPENAI_MAX_TOKENS ?? "300", 10);
+  const maxTokensArg = args.get("--max-tokens") ?? process.env.ASG_OPENAI_MAX_TOKENS ?? undefined;
   const referer =
     args.get("--referer") ??
     process.env[`ASG_${providerName}_REFERER`] ??
@@ -743,6 +745,18 @@ export async function openAiCompatAct(params: {
   let resolvedModel = resolved.resolvedModel;
   let autoCandidateIdx =
     autoCacheKey && autoCandidates ? Math.max(0, autoCandidates.findIndex((m) => m === resolvedModel)) : 0;
+
+  // Default must accommodate typical remote OpenAI-compatible provider latency.
+  // "Thinking"/reasoning OSS models frequently return just after 60s; give them a small buffer by default.
+  const timeoutMs = Number.parseInt(
+    timeoutMsArg ?? (keysName !== "openrouter" && looksLikeReasoningModelId(resolvedModel) ? "65000" : "60000"),
+    10,
+  );
+  // OSS reasoning models are prone to "budget-empty" (no JSON/tool output) when max_tokens is too low.
+  const maxTokens = Number.parseInt(
+    maxTokensArg ?? (keysName !== "openrouter" && looksLikeReasoningModelId(resolvedModel) ? "600" : "300"),
+    10,
+  );
 
   const url = normalizeBaseUrl(baseUrl) + "/chat/completions";
 
@@ -1362,6 +1376,31 @@ export async function openAiCompatAct(params: {
             );
             return { ...retry2, resolvedModel, provider: keysName, baseUrl };
           }
+        }
+
+        // For stubborn parse/formatting failures, try one last time with forced tool calling (when allowed).
+        const msgRetry = eRetry instanceof Error ? eRetry.message : String(eRetry);
+        const stillJsonFailure =
+          msgRetry.includes("JSON invalid") ||
+          msgRetry.includes("no JSON object found") ||
+          msgRetry.includes("no JSON object") ||
+          msgRetry.includes("Unexpected end of JSON") ||
+          msgRetry.includes("Expected ','") ||
+          msgRetry.includes("Unexpected token") ||
+          msgRetry.includes("empty_output") ||
+          msgRetry.toLowerCase().includes("empty_response");
+        if (stillJsonFailure && !wantsToolsOff) {
+          const retry2 = await callOnce(
+            `Your previous output was still invalid. Output ONLY one JSON object matching the schema now. No extra text. api_version must be "${request.api_version}".`,
+            Math.max(1200, Math.min(8000, maxTokens * 4)),
+            "force",
+            useToolsOverride,
+            rejectsReasoningEffort ? true : undefined,
+            omitResponseFormatRetry ? true : undefined,
+            rejectsIncludeReasoning ? true : undefined,
+            undefined,
+          );
+          return { ...retry2, resolvedModel, provider: keysName, baseUrl };
         }
         throw eRetry;
       }

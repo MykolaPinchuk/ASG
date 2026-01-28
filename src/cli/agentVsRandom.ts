@@ -101,6 +101,11 @@ function slugify(value: string): string {
     .slice(0, 120);
 }
 
+function looksLikeReasoningModelId(modelId: string): boolean {
+  const m = modelId.toLowerCase();
+  return m.includes(":thinking") || m.includes("thinking") || m.includes("reasoning") || m.includes("deepseek-r1") || m.includes("deepseek_r1");
+}
+
 function percentile(sortedAsc: number[], p: number): number | null {
   if (sortedAsc.length === 0) return null;
   const clamped = Math.min(1, Math.max(0, p));
@@ -146,7 +151,7 @@ async function main() {
   const tag = args.get("--tag") ?? `${providerName}_${model}`;
   const tagSlug = slugify(tag);
 
-  const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
+  const openAiTimeoutMs = args.get("--timeout-ms") ?? (looksLikeReasoningModelId(model) ? "65000" : "60000");
   const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;

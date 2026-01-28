@@ -53,6 +53,11 @@ function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function looksLikeReasoningModelId(modelId: string): boolean {
+  const m = modelId.toLowerCase();
+  return m.includes(":thinking") || m.includes("thinking") || m.includes("reasoning") || m.includes("deepseek-r1") || m.includes("deepseek_r1");
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -297,8 +302,8 @@ async function main() {
   const fullSeed = Number.parseInt(args.get("--full-seed") ?? "3", 10);
   const smokeSeedStart = Number.parseInt(args.get("--smoke-seed-start") ?? "1000", 10);
 
-  const timeoutMs = args.get("--timeout-ms") ?? "60000";
-  const maxTokens = args.get("--max-tokens") ?? "180";
+  const timeoutMsArg = args.get("--timeout-ms") ?? undefined;
+  const maxTokensArg = args.get("--max-tokens") ?? undefined;
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;
   const modelsConfigPath = args.get("--models-config") ?? "configs/oss_models.json";
@@ -360,6 +365,9 @@ async function main() {
       const model = candidates[i]!;
       const smokeSeed = smokeSeedStart + i;
       const useTools = provider !== "chutes"; // chutes appears less compatible with tools
+
+      const timeoutMs = timeoutMsArg ?? (looksLikeReasoningModelId(model) ? "65000" : "60000");
+      const maxTokens = maxTokensArg ?? (looksLikeReasoningModelId(model) ? "600" : "180");
 
       const smokeReplayPath = path.join("replays", `${path.basename(scenarioPath, ".json")}_seed${smokeSeed}_${provider}_${encodeURIComponent(model)}_smoke.json`);
       const smoke = await runAgentMatch({
