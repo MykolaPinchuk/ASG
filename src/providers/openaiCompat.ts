@@ -259,6 +259,8 @@ function buildSystemPrompt() {
     "- If after a move both sides have forces at the destination, combat resolves immediately with randomness:",
     "  let A=attackerStrength, D=defenderStrength, n=floor(min(A,D)*combatVarianceFraction) (at least 1), noise ~ Uniform[-n, +n], delta=(A-D)+noise.",
     "  if delta>0 attacker wins with delta remaining; if delta<0 defender wins with -delta; if delta==0 coin flip winner with 1 remaining.",
+    "  (Optional mechanics math) attacker win probability:",
+    "  let deltaBase=A-D. Attacker wins if noise > -deltaBase; tie (noise == -deltaBase) is 50/50. Since noise is uniform over integers [-n..+n], you can compute this exactly if you want.",
     "- After combat (or if no defender forces), if you have forces>0 and enemy has 0 at a node, you capture it (owner becomes you).",
     "- You WIN immediately if you capture the enemy HQ node.",
     "Rules reminders:",
