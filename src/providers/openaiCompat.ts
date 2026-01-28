@@ -411,6 +411,11 @@ function buildUserPromptCompact(params: {
 
   const distMyHqToEnemyHq = distToEnemyHq[myHq];
   const canCaptureEnemyHqThisPly = Number.isInteger(distMyHqToEnemyHq) && distMyHqToEnemyHq <= maxChain;
+  const myHqForces = Math.max(0, Math.floor(Number(nodes?.[myHq]?.forces?.[request.player] ?? 0)));
+  const enemyHqDefenders = Math.max(0, Math.floor(Number(nodes?.[enemyHq]?.forces?.[enemy] ?? 0)));
+
+  const chainMovesWithAmount = (path: string[], amount: number) =>
+    chainEdges(path).map((e) => ({ ...e, amount: Math.max(1, Math.floor(amount)) }));
 
   const towardEnemyFrom = moveOptions
     .slice()
@@ -445,10 +450,11 @@ function buildUserPromptCompact(params: {
         toBestResource: chainEdges(pathToBestResource),
         towardEnemyNoCombat: chainEdges(pathToSafeStage),
         winThisPly: canCaptureEnemyHqThisPly ? chainEdges(pathToEnemyHq) : [],
+        winThisPlyMoveAll: canCaptureEnemyHqThisPly && myHqForces > 0 ? chainMovesWithAmount(pathToEnemyHq, myHqForces) : [],
       },
       towardEnemyFrom,
       note: canCaptureEnemyHqThisPly
-        ? "You can capture enemyHq THIS PLY by following strategy.suggestedChains.winThisPly with maximum forces. Do NOT reinforce this ply (it wastes an action)."
+        ? `You can attempt to capture enemyHq THIS PLY by following strategy.suggestedChains.winThisPlyMoveAll (amount=${myHqForces}). Enemy HQ defenders=${enemyHqDefenders}; do NOT send 1. Do NOT reinforce this ply (it wastes an action).`
         : "Shorter distance to enemyHq is usually better when attacking. Capturing enemyHq wins immediately.",
     },
     adjacency,
