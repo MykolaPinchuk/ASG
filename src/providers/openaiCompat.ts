@@ -248,6 +248,7 @@ function buildSystemPrompt() {
     "- Actions apply SEQUENTIALLY in the order you provide (state updates after each action).",
     "- You may output up to action_budget actions per ply (the runner may truncate to action_budget).",
     "- Since actions are sequential, a later move may use forces moved earlier in the same ply (you can move a stack multiple edges by chaining moves).",
+    "- Since actions are sequential, you can also reinforce and then move those newly added forces in the same ply.",
     "- Example (mechanics): if A-B and B-C are edges and you have 5 forces at A, you can do move A→B amount 5, then move B→C amount 5 in the same ply.",
     "Game rules (important):",
     "- Plies alternate: P1 then P2 then P1 ...",
