@@ -403,7 +403,7 @@ function buildUserPromptCompact(params: {
       },
       towardEnemyFrom,
       note: canCaptureEnemyHqThisPly
-        ? "You can capture enemyHq THIS PLY by following strategy.suggestedChains.winThisPly with maximum forces."
+        ? "You can capture enemyHq THIS PLY by following strategy.suggestedChains.winThisPly with maximum forces. Do NOT reinforce this ply (it wastes an action)."
         : "Shorter distance to enemyHq is usually better when attacking. Capturing enemyHq wins immediately.",
     },
     adjacency,

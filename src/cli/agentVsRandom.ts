@@ -147,7 +147,7 @@ async function main() {
   const tagSlug = slugify(tag);
 
   const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
-  const maxTokens = args.get("--max-tokens") ?? "200";
+  const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;
 

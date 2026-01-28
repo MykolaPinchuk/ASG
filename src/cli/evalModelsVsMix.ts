@@ -425,7 +425,7 @@ async function main() {
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "70000", 10);
 
   const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
-  const maxTokens = args.get("--max-tokens") ?? "200";
+  const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const useToolsDefault = providerName !== "chutes";
   const useToolsRaw = (args.get("--use-tools") ?? (useToolsDefault ? "true" : "false")).toLowerCase();
