@@ -99,6 +99,20 @@ After checkpoint `cd39e17` (mechanics-only prompt):
 - `npm run agent:eval-vs-mix -- --provider-name chutes --opponent greedy --turn-cap-plies 2 --games 1 --seed-start 3 --save-replays false --think-hint off`
 - `npm run agent:eval-vs-mix -- --provider-name nanogpt --opponent greedy --turn-cap-plies 2 --games 1 --seed-start 3 --save-replays false --think-hint off`
 
+## Re-run: same “improvement” sweeps without strategy hints
+
+To verify that the earlier win-rate jump was not driven by prompt strategy hints, we re-ran the same style of 10-model micro-sweeps after removing strategy-like guidance (`cd39e17` + wording cleanup `e35fd22`).
+
+NanoGPT (10 models, 1 game each; `turnCapPlies=2`, `max_tokens=600`, `think-hint off`):
+- Output: `runs/live/sweep_agent03_nanogpt_noStrategy_2026-01-28T13-00-01Z.jsonl`
+- Result: 0 wins; mixture of (a) timeouts/provider errors for some “thinking” models and (b) clean JSON but no immediate win within 1 ply.
+
+Chutes (10 models, 1 game each; same knobs):
+- Output: `runs/live/sweep_agent03_chutes_noStrategy_2026-01-28T13-08-07Z.jsonl`
+- Result: 0 wins; mostly “clean” calls (no provider error) but no one-ply win without strategy hints; a few timeouts persisted.
+
+Takeaway: the big win-rate jump in the earlier “postfix” sweeps was primarily attributable to strategy-like prompt guidance, not just reliability fixes. This confirms the importance of keeping prompts mechanics-only for fair evaluation.
+
 ## What we learned
 
 1) **Most “providerErrors” were not game-logic issues**; they were upstream instability, timeouts, or “budget-empty” completions.
@@ -112,4 +126,3 @@ After checkpoint `cd39e17` (mechanics-only prompt):
 - `c34d49c` — stricter JSON/action validation + better budget-empty retry handling
 - `6b9db39` — (debug experiment) move-all “win chain” hint (strategy-like; later removed)
 - `cd39e17` — remove strategy guidance from prompts (mechanics-only)
-
