@@ -145,6 +145,10 @@ function buildSystemPrompt() {
     "Your response must start with '{' and end with '}' (a single JSON object).",
     "Do NOT output your reasoning. Think silently; output only the JSON object.",
     "After you output the JSON object, STOP. Do not add any extra text after the final '}'.",
+    "Heuristics (not rules):",
+    "- Use the full action_budget to chain moves and make progress every ply.",
+    "- Prefer concentrating forces into one strong stack (moving 1 unit is usually weak).",
+    "- Prefer actions that reduce distance to the enemy HQ; capturing enemy HQ wins immediately.",
     "Rules for JSON:",
     "- Use double quotes for all strings and keys.",
     "- No trailing commas.",
@@ -194,6 +198,50 @@ function sumIncomeFromObservation(obs: any, player: PlayerId, baseIncome: number
   return income;
 }
 
+function bfsDistances(adjacency: Record<string, string[]>, start: string): Record<string, number> {
+  const dist: Record<string, number> = {};
+  if (!start || !adjacency[start]) return dist;
+  const q: string[] = [start];
+  dist[start] = 0;
+  while (q.length > 0) {
+    const cur = q.shift()!;
+    const nd = dist[cur]! + 1;
+    for (const n of adjacency[cur] ?? []) {
+      if (dist[n] === undefined) {
+        dist[n] = nd;
+        q.push(n);
+      }
+    }
+  }
+  return dist;
+}
+
+function buildShortestPathTowardTarget(
+  adjacency: Record<string, string[]>,
+  distToTarget: Record<string, number>,
+  start: string,
+  maxNodes = 64,
+): string[] {
+  const out: string[] = [];
+  if (!start || distToTarget[start] === undefined) return out;
+  let cur = start;
+  out.push(cur);
+  for (let i = 0; i < maxNodes; i++) {
+    const d = distToTarget[cur];
+    if (d === undefined || d <= 0) break;
+    const neighbors = adjacency[cur] ?? [];
+    const next = neighbors
+      .slice()
+      .sort((a, b) => (distToTarget[a] ?? 999) - (distToTarget[b] ?? 999) || a.localeCompare(b))
+      .find((n) => (distToTarget[n] ?? 999) < d);
+    if (!next) break;
+    cur = next;
+    out.push(cur);
+    if (distToTarget[cur] === 0) break;
+  }
+  return out;
+}
+
 function buildUserPromptCompact(params: {
   request: AgentRequest;
   scenario: Scenario;
@@ -241,6 +289,43 @@ function buildUserPromptCompact(params: {
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
+  const enemyHq = scenario.players[enemy].hq;
+  const distToEnemyHq = bfsDistances(adjacency, enemyHq);
+  const myHq = scenario.players[request.player].hq;
+  const pathToEnemyHq = buildShortestPathTowardTarget(adjacency, distToEnemyHq, myHq);
+  const resourceNodes = board.filter((n) => (n.supplyYield ?? 0) > 0).map((n) => n.id);
+  const distToResource: Record<string, Record<string, number>> = {};
+  for (const r of resourceNodes) distToResource[r] = bfsDistances(adjacency, r);
+  const bestResource = resourceNodes
+    .slice()
+    .sort((a, b) => (distToResource[a]?.[myHq] ?? 999) - (distToResource[b]?.[myHq] ?? 999) || a.localeCompare(b))[0];
+  const distToBestResource = bestResource ? distToResource[bestResource] ?? {} : {};
+  const pathToBestResource = bestResource ? buildShortestPathTowardTarget(adjacency, distToBestResource, myHq) : [];
+
+  const ownerById: Record<string, string | null> = {};
+  for (const n of board) ownerById[n.id] = typeof n.owner === "string" ? n.owner : null;
+  const safePrefix: string[] = [];
+  for (const nodeId of pathToEnemyHq) {
+    const owner = ownerById[nodeId] ?? null;
+    if (owner === enemy) break;
+    safePrefix.push(nodeId);
+  }
+  const safeEnemyStageTarget = safePrefix[safePrefix.length - 1] ?? null;
+  const distToSafeStage = safeEnemyStageTarget ? bfsDistances(adjacency, safeEnemyStageTarget) : {};
+  const pathToSafeStage = safeEnemyStageTarget ? buildShortestPathTowardTarget(adjacency, distToSafeStage, myHq) : [];
+
+  const maxChain = Math.max(0, request.action_budget);
+  const chainEdges = (path: string[]) =>
+    path
+      .slice(0, Math.min(path.length, maxChain + 1))
+      .slice(0, -1)
+      .map((from, i) => ({ from, to: path[i + 1]! }));
+
+  const towardEnemyFrom = moveOptions
+    .slice()
+    .sort((a, b) => (distToEnemyHq[a.to] ?? 999) - (distToEnemyHq[b.to] ?? 999))
+    .slice(0, 12);
+
   const info = {
     match_id: request.match_id,
     player: request.player,
@@ -257,6 +342,21 @@ function buildUserPromptCompact(params: {
     },
     supplies,
     legal,
+    strategy: {
+      enemyHq,
+      myHq,
+      distToEnemyHq,
+      resourceNodes,
+      bestResource,
+      pathToEnemyHq,
+      pathToBestResource,
+      suggestedChains: {
+        toBestResource: chainEdges(pathToBestResource),
+        towardEnemyNoCombat: chainEdges(pathToSafeStage),
+      },
+      towardEnemyFrom,
+      note: "Shorter distance to enemyHq is usually better when attacking. Capturing enemyHq wins immediately.",
+    },
     adjacency,
     board,
   };
@@ -276,6 +376,10 @@ function buildUserPrompt(params: {
 }) {
   const { request, scenario, adjacency } = params;
   const enemy = request.player === "P1" ? "P2" : "P1";
+  const enemyHq = scenario.players[enemy].hq;
+  const myHq = scenario.players[request.player].hq;
+  const distToEnemyHq = bfsDistances(adjacency, enemyHq);
+  const pathToEnemyHq = buildShortestPathTowardTarget(adjacency, distToEnemyHq, myHq);
 
   const settings = scenario.settings;
   const cost = settings.reinforceCostPerStrength ?? 1;
@@ -300,7 +404,8 @@ function buildUserPrompt(params: {
   const legal = {
     reinforce: { maxAmount: maxReinforce, costPerStrength: cost, supplyAfterIncome, incomeThisPly },
     moves: moveOptions.slice(0, 60),
-    notes: "For moves: choose amount between 1 and maxAmount.",
+    notes:
+      "For moves: choose amount between 1 and maxAmount. Actions apply in order; later moves may use forces you moved earlier, even if not listed.",
   };
 
   const info = {
@@ -319,6 +424,13 @@ function buildUserPrompt(params: {
     },
     adjacency,
     legal,
+    strategy: {
+      enemyHq,
+      myHq,
+      distToEnemyHq,
+      pathToEnemyHq,
+      note: "Shorter distance to enemyHq is usually better when attacking. Capturing enemyHq wins immediately.",
+    },
     observation: request.observation,
   };
 
@@ -604,7 +716,7 @@ export async function openAiCompatAct(params: {
         `You have up to ${thinkSec} seconds before timeout, but do not use it all; respond as soon as you have a plan (target a few seconds) and output JSON only.`,
       ].join("\n")
     : buildSystemPrompt();
-  const promptMode = (args.get("--prompt-mode") ?? process.env.ASG_OPENAI_PROMPT_MODE ?? "full").toLowerCase();
+  const promptMode = (args.get("--prompt-mode") ?? process.env.ASG_OPENAI_PROMPT_MODE ?? "compact").toLowerCase();
   if (promptMode !== "full" && promptMode !== "compact") {
     throw new Error(`invalid --prompt-mode '${promptMode}' (expected full|compact)`);
   }
