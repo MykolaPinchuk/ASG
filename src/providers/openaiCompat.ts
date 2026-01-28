@@ -232,10 +232,6 @@ function buildSystemPrompt() {
     "Your response must start with '{' and end with '}' (a single JSON object).",
     "Do NOT output your reasoning. Think silently; output only the JSON object.",
     "After you output the JSON object, STOP. Do not add any extra text after the final '}'.",
-    "Heuristics (not rules):",
-    "- Use the full action_budget to chain moves and make progress every ply.",
-    "- Prefer concentrating forces into one strong stack (moving 1 unit is usually weak).",
-    "- Prefer actions that reduce distance to the enemy HQ; capturing enemy HQ wins immediately.",
     "Rules for JSON:",
     "- Use double quotes for all strings and keys.",
     "- No trailing commas.",
@@ -264,7 +260,7 @@ function buildSystemPrompt() {
     "- do not exceed available forces at the from node.",
     "- reinforce costs supply: amount * reinforceCostPerStrength.",
     "Never output an empty actions array; include at least one action.",
-    "Only return pass if you truly cannot find ANY legal non-pass action.",
+    "If you cannot find a legal action, you may return pass.",
     "Keep rationale_text short (<= 1 sentence) or omit it.",
   ].join("\n");
 }
@@ -360,7 +356,10 @@ function buildUserPromptCompact(params: {
 
   const legal = {
     reinforce: { maxAmount: maxReinforce, costPerStrength: cost, supplyAfterIncome, incomeThisPly },
-    moves: moveOptions.slice(0, 60),
+    moves: moveOptions
+      .slice()
+      .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || a.maxAmount - b.maxAmount)
+      .slice(0, 60),
     notes:
       "For moves: choose amount between 1 and maxAmount. Actions apply in order; later moves may use forces you moved earlier, even if not listed.",
   };
@@ -376,51 +375,6 @@ function buildUserPromptCompact(params: {
       },
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
-
-  const enemyHq = scenario.players[enemy].hq;
-  const distToEnemyHq = bfsDistances(adjacency, enemyHq);
-  const myHq = scenario.players[request.player].hq;
-  const pathToEnemyHq = buildShortestPathTowardTarget(adjacency, distToEnemyHq, myHq);
-  const resourceNodes = board.filter((n) => (n.supplyYield ?? 0) > 0).map((n) => n.id);
-  const distToResource: Record<string, Record<string, number>> = {};
-  for (const r of resourceNodes) distToResource[r] = bfsDistances(adjacency, r);
-  const bestResource = resourceNodes
-    .slice()
-    .sort((a, b) => (distToResource[a]?.[myHq] ?? 999) - (distToResource[b]?.[myHq] ?? 999) || a.localeCompare(b))[0];
-  const distToBestResource = bestResource ? distToResource[bestResource] ?? {} : {};
-  const pathToBestResource = bestResource ? buildShortestPathTowardTarget(adjacency, distToBestResource, myHq) : [];
-
-  const ownerById: Record<string, string | null> = {};
-  for (const n of board) ownerById[n.id] = typeof n.owner === "string" ? n.owner : null;
-  const safePrefix: string[] = [];
-  for (const nodeId of pathToEnemyHq) {
-    const owner = ownerById[nodeId] ?? null;
-    if (owner === enemy) break;
-    safePrefix.push(nodeId);
-  }
-  const safeEnemyStageTarget = safePrefix[safePrefix.length - 1] ?? null;
-  const distToSafeStage = safeEnemyStageTarget ? bfsDistances(adjacency, safeEnemyStageTarget) : {};
-  const pathToSafeStage = safeEnemyStageTarget ? buildShortestPathTowardTarget(adjacency, distToSafeStage, myHq) : [];
-
-  const maxChain = Math.max(0, request.action_budget);
-  const chainEdges = (path: string[]) =>
-    path
-      .slice(0, Math.min(path.length, maxChain + 1))
-      .slice(0, -1)
-      .map((from, i) => ({ from, to: path[i + 1]! }));
-
-  const distMyHqToEnemyHq = distToEnemyHq[myHq];
-  const canCaptureEnemyHqThisPly = Number.isInteger(distMyHqToEnemyHq) && distMyHqToEnemyHq <= maxChain;
-  const myHqForces = Math.max(0, Math.floor(Number(nodes?.[myHq]?.forces?.[request.player] ?? 0)));
-  const enemyHqDefenders = Math.max(0, Math.floor(Number(nodes?.[enemyHq]?.forces?.[enemy] ?? 0)));
-
-  const chainMovesWithAmount = (path: string[], amount: number) =>
-    chainEdges(path).map((e) => ({ ...e, amount: Math.max(1, Math.floor(amount)) }));
-
-  const towardEnemyFrom = moveOptions
-    .slice()
-    .sort((a, b) => (distToEnemyHq[a.to] ?? 999) - (distToEnemyHq[b.to] ?? 999))
-    .slice(0, 12);
 
   const info = {
     match_id: request.match_id,
@@ -438,25 +392,6 @@ function buildUserPromptCompact(params: {
     },
     supplies,
     legal,
-    strategy: {
-      enemyHq,
-      myHq,
-      distToEnemyHq,
-      resourceNodes,
-      bestResource,
-      pathToEnemyHq,
-      pathToBestResource,
-      suggestedChains: {
-        toBestResource: chainEdges(pathToBestResource),
-        towardEnemyNoCombat: chainEdges(pathToSafeStage),
-        winThisPly: canCaptureEnemyHqThisPly ? chainEdges(pathToEnemyHq) : [],
-        winThisPlyMoveAll: canCaptureEnemyHqThisPly && myHqForces > 0 ? chainMovesWithAmount(pathToEnemyHq, myHqForces) : [],
-      },
-      towardEnemyFrom,
-      note: canCaptureEnemyHqThisPly
-        ? `You can attempt to capture enemyHq THIS PLY by following strategy.suggestedChains.winThisPlyMoveAll (amount=${myHqForces}). Enemy HQ defenders=${enemyHqDefenders}; do NOT send 1. Do NOT reinforce this ply (it wastes an action).`
-        : "Shorter distance to enemyHq is usually better when attacking. Capturing enemyHq wins immediately.",
-    },
     adjacency,
     board,
   };
@@ -476,10 +411,6 @@ function buildUserPrompt(params: {
 }) {
   const { request, scenario, adjacency } = params;
   const enemy = request.player === "P1" ? "P2" : "P1";
-  const enemyHq = scenario.players[enemy].hq;
-  const myHq = scenario.players[request.player].hq;
-  const distToEnemyHq = bfsDistances(adjacency, enemyHq);
-  const pathToEnemyHq = buildShortestPathTowardTarget(adjacency, distToEnemyHq, myHq);
 
   const settings = scenario.settings;
   const cost = settings.reinforceCostPerStrength ?? 1;
@@ -503,7 +434,10 @@ function buildUserPrompt(params: {
 
   const legal = {
     reinforce: { maxAmount: maxReinforce, costPerStrength: cost, supplyAfterIncome, incomeThisPly },
-    moves: moveOptions.slice(0, 60),
+    moves: moveOptions
+      .slice()
+      .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || a.maxAmount - b.maxAmount)
+      .slice(0, 60),
     notes:
       "For moves: choose amount between 1 and maxAmount. Actions apply in order; later moves may use forces you moved earlier, even if not listed.",
   };
@@ -524,13 +458,6 @@ function buildUserPrompt(params: {
     },
     adjacency,
     legal,
-    strategy: {
-      enemyHq,
-      myHq,
-      distToEnemyHq,
-      pathToEnemyHq,
-      note: "Shorter distance to enemyHq is usually better when attacking. Capturing enemyHq wins immediately.",
-    },
     observation: request.observation,
   };
 
@@ -822,7 +749,7 @@ export async function openAiCompatAct(params: {
   const system = shouldAddThinkingHint({ args })
     ? [
         buildSystemPrompt(),
-        "Think carefully and aim for an optimal strategy.",
+        "Think silently and choose legal actions.",
         `You have up to ${thinkSec} seconds before timeout, but do not use it all; respond as soon as you have a plan (target a few seconds) and output JSON only.`,
       ].join("\n")
     : buildSystemPrompt();
