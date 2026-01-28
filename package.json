@@ -26,7 +26,8 @@
     ,
     "eval:grok-vs-greedy": "tsx src/cli/evalGrokVsGreedy.ts"
     ,
-    "analyze:agent-io": "tsx src/cli/analyzeAgentIo.ts"
+    "analyze:agent-io": "tsx src/cli/analyzeAgentIo.ts",
+    "oss:rank": "tsx src/cli/rankOssModels.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

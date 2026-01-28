@@ -131,7 +131,7 @@ async function main() {
   const providerKey = providerName.toLowerCase();
   const modelArg = args.get("--model");
   const model = modelArg ?? (providerKey === "openrouter" ? "x-ai/grok-4.1-fast" : "auto");
-  const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_models.json";
+  const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_baselines.json";
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
   const saveReplays = args.get("--save-replays") === "true";
   const outDir = args.get("--out-dir") ?? "replays";

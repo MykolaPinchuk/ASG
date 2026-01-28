@@ -93,6 +93,9 @@ type MatchSummary = {
   totalPlies: number;
   ok: number;
   passOnly: number;
+  providerErrors: number;
+  passOnlyProviderErrors: number;
+  fallbacks: number;
   httpErrors: number;
   parseErrors: number;
   timeouts: number;
@@ -107,6 +110,9 @@ function summarizeMatch(matchId: string, entries: LoggedIo[]): MatchSummary {
   let totalPlies = 0;
   let ok = 0;
   let passOnly = 0;
+  let providerErrors = 0;
+  let passOnlyProviderErrors = 0;
+  let fallbacks = 0;
   let httpErrors = 0;
   let parseErrors = 0;
   let timeouts = 0;
@@ -131,8 +137,17 @@ function summarizeMatch(matchId: string, entries: LoggedIo[]): MatchSummary {
       continue;
     }
     if (!resp || !Array.isArray(resp.actions)) continue;
+    const rationale = typeof resp.rationale_text === "string" ? resp.rationale_text : "";
+    const isProviderError =
+      rationale.includes("server: openai_compat error") ||
+      rationale.includes("openai_compat failed") ||
+      rationale.includes("server: openai_compat failed");
+    if (isProviderError) providerErrors += 1;
+    if (rationale.includes("fallback=stub")) fallbacks += 1;
     ok += 1;
-    if (passOnlyActions(resp.actions)) passOnly += 1;
+    const isPassOnly = passOnlyActions(resp.actions);
+    if (isPassOnly) passOnly += 1;
+    if (isPassOnly && isProviderError) passOnlyProviderErrors += 1;
     if (!provider || !model) {
       const info = resp.agent_info;
       if (info && typeof info === "object") {
@@ -156,6 +171,9 @@ function summarizeMatch(matchId: string, entries: LoggedIo[]): MatchSummary {
     totalPlies,
     ok,
     passOnly,
+    providerErrors,
+    passOnlyProviderErrors,
+    fallbacks,
     httpErrors,
     parseErrors,
     timeouts,
@@ -228,6 +246,9 @@ async function main() {
     String(s.totalPlies),
     String(s.ok),
     String(s.passOnly),
+    String(s.providerErrors),
+    String(s.passOnlyProviderErrors),
+    String(s.fallbacks),
     String(s.timeouts),
     String(s.httpErrors),
     String(s.parseErrors),
@@ -236,7 +257,24 @@ async function main() {
     s.latencyMs.p95 === null ? "" : String(s.latencyMs.p95),
   ]);
 
-  const header = ["matchId", "pl", "provider", "model", "plies", "ok", "pass", "timeouts", "http", "parse", "err", "latAvg", "latP95"];
+  const header = [
+    "matchId",
+    "pl",
+    "provider",
+    "model",
+    "plies",
+    "ok",
+    "pass",
+    "provErr",
+    "passProv",
+    "fallback",
+    "timeouts",
+    "http",
+    "parse",
+    "err",
+    "latAvg",
+    "latP95",
+  ];
   const all = [header, ...rows];
   const widths = header.map((_, col) => Math.min(60, Math.max(...all.map((r) => (r[col] ?? "").length))));
 

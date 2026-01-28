@@ -330,6 +330,62 @@ function buildUserPrompt(params: {
 }
 
 const resolvedModelCache = new Map<string, string>();
+const autoCandidateCache = new Map<string, string[]>();
+const deniedAutoModels = new Map<string, Map<string, { untilMs: number; reason: string }>>();
+
+const DEFAULT_OSS_BASELINES_CONFIG_PATH = "configs/oss_baselines.json";
+const AUTO_MODEL_DENY_TTL_MS = 5 * 60 * 1000;
+
+function getDeniedEntry(cacheKey: string, model: string): { untilMs: number; reason: string } | undefined {
+  const byModel = deniedAutoModels.get(cacheKey);
+  const e = byModel?.get(model);
+  if (!e) return undefined;
+  if (Date.now() >= e.untilMs) {
+    byModel?.delete(model);
+    return undefined;
+  }
+  return e;
+}
+
+function markAutoModelDenied(params: { cacheKey: string; model: string; reason: string }) {
+  const { cacheKey, model, reason } = params;
+  const untilMs = Date.now() + AUTO_MODEL_DENY_TTL_MS;
+  const byModel = deniedAutoModels.get(cacheKey) ?? new Map<string, { untilMs: number; reason: string }>();
+  byModel.set(model, { untilMs, reason });
+  deniedAutoModels.set(cacheKey, byModel);
+  // Ensure the next resolve doesn't keep returning a model we just denied.
+  resolvedModelCache.delete(cacheKey);
+}
+
+function pickFirstHealthyAutoModel(cacheKey: string, candidates: string[]): string {
+  for (const m of candidates) {
+    if (!getDeniedEntry(cacheKey, m)) return m;
+  }
+  // If everything is denied, pick the best candidate anyway (avoid getting stuck).
+  return candidates[0] ?? "";
+}
+
+function pickNextHealthyAutoModel(cacheKey: string, candidates: string[], afterIndex: number): { model: string; idx: number } | null {
+  for (let i = Math.max(0, afterIndex + 1); i < candidates.length; i++) {
+    const m = candidates[i]!;
+    if (!getDeniedEntry(cacheKey, m)) return { model: m, idx: i };
+  }
+  return null;
+}
+
+function looksLikeModelUnavailableError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  if (m.includes("no instances available")) return true;
+  if (m.includes("no instance available")) return true;
+  if (m.includes("no workers available")) return true;
+  if (m.includes("no worker available")) return true;
+  if (m.includes("model not found")) return true;
+  if (m.includes("unknown model")) return true;
+  if (m.includes("does not exist") && m.includes("model")) return true;
+  // Chutes-specific pattern we see frequently in practice.
+  if (m.startsWith("http 503") && m.includes("chute_id") && m.includes("no instances")) return true;
+  return false;
+}
 
 type ToolsMode = "auto" | "force" | "off";
 
@@ -378,15 +434,18 @@ async function resolveOpenAiCompatModel(params: {
   baseUrl: string;
   apiKey: string;
   model: string;
-}): Promise<string> {
+}): Promise<
+  | { mode: "explicit"; resolvedModel: string }
+  | { mode: "auto"; resolvedModel: string; cacheKey: string; candidates: string[] }
+> {
   const { args, keys, keysName, baseUrl, apiKey } = params;
   const modelRaw = params.model;
-  if (modelRaw !== "auto") return modelRaw;
+  if (modelRaw !== "auto") return { mode: "explicit", resolvedModel: modelRaw };
 
   const modelsConfigPath =
     args.get("--models-config") ??
     process.env.ASG_MODELS_CONFIG ??
-    "configs/oss_models.json";
+    DEFAULT_OSS_BASELINES_CONFIG_PATH;
 
   const modelsProvider = (
     args.get("--models-provider") ??
@@ -396,35 +455,42 @@ async function resolveOpenAiCompatModel(params: {
   ).toLowerCase();
 
   const cacheKey = `${normalizeBaseUrl(baseUrl)}|${modelsProvider}|${modelsConfigPath}`;
-  const cached = resolvedModelCache.get(cacheKey);
-  if (cached) return cached;
+  const cachedCandidates = autoCandidateCache.get(cacheKey);
+  let candidates: string[] | undefined = cachedCandidates;
+  if (!candidates) {
+    const config = await loadOssModelsConfig(modelsConfigPath);
+    const { priority, allow, deny, denyPrefixes } = getProviderAllowlist(config, modelsProvider);
+    if (priority.length === 0 && allow.length === 0) {
+      throw new Error(`model=auto has no allowlist for provider '${modelsProvider}' in ${modelsConfigPath}`);
+    }
 
-  const config = await loadOssModelsConfig(modelsConfigPath);
-  const { priority, allow, deny, denyPrefixes } = getProviderAllowlist(config, modelsProvider);
-  if (priority.length === 0 && allow.length === 0) {
-    throw new Error(`model=auto has no allowlist for provider '${modelsProvider}' in ${modelsConfigPath}`);
+    const ids = await fetchOpenAiCompatModelIds({ baseUrl, apiKey });
+    const available = new Set(ids);
+    const denySet = new Set(deny);
+    const denyPrefixesNorm = denyPrefixes.map((p) => p.toLowerCase());
+    const candidateOrder = Array.from(new Set([...priority, ...allow])).filter((m) => {
+      if (denySet.has(m)) return false;
+      const lower = m.toLowerCase();
+      if (denyPrefixesNorm.some((p) => lower.startsWith(p))) return false;
+      return true;
+    });
+    candidates = candidateOrder.filter((m) => available.has(m));
+    if (candidates.length === 0) {
+      const sample = ids.slice(0, 30).join(", ");
+      throw new Error(
+        `model=auto could not find an allowed model for provider '${modelsProvider}' at ${normalizeBaseUrl(baseUrl)}; sample available models: ${sample}`,
+      );
+    }
+    autoCandidateCache.set(cacheKey, candidates);
   }
 
-  const ids = await fetchOpenAiCompatModelIds({ baseUrl, apiKey });
-  const available = new Set(ids);
-  const denySet = new Set(deny);
-  const denyPrefixesNorm = denyPrefixes.map((p) => p.toLowerCase());
-  const candidateOrder = Array.from(new Set([...priority, ...allow])).filter((m) => {
-    if (denySet.has(m)) return false;
-    const lower = m.toLowerCase();
-    if (denyPrefixesNorm.some((p) => lower.startsWith(p))) return false;
-    return true;
-  });
-  const chosen = candidateOrder.find((m) => available.has(m));
-  if (!chosen) {
-    const sample = ids.slice(0, 30).join(", ");
-    throw new Error(
-      `model=auto could not find an allowed model for provider '${modelsProvider}' at ${normalizeBaseUrl(baseUrl)}; sample available models: ${sample}`,
-    );
-  }
+  const cachedResolved = resolvedModelCache.get(cacheKey);
+  const cachedOk = cachedResolved && candidates.includes(cachedResolved) && !getDeniedEntry(cacheKey, cachedResolved);
+  const chosen = cachedOk ? cachedResolved! : pickFirstHealthyAutoModel(cacheKey, candidates);
+  if (!chosen) throw new Error("model=auto internal error: no candidates");
 
   resolvedModelCache.set(cacheKey, chosen);
-  return chosen;
+  return { mode: "auto", resolvedModel: chosen, cacheKey, candidates };
 }
 
 export async function openAiCompatAct(params: {
@@ -486,7 +552,7 @@ export async function openAiCompatAct(params: {
   }
   if (!model) throw new Error("openai_compat requires --model (or set it to 'auto')");
 
-  const resolvedModel = await resolveOpenAiCompatModel({
+  const resolved = await resolveOpenAiCompatModel({
     args,
     keys,
     keysName,
@@ -494,6 +560,11 @@ export async function openAiCompatAct(params: {
     apiKey,
     model,
   });
+  const autoCacheKey = resolved.mode === "auto" ? resolved.cacheKey : undefined;
+  const autoCandidates = resolved.mode === "auto" ? resolved.candidates : undefined;
+  let resolvedModel = resolved.resolvedModel;
+  let autoCandidateIdx =
+    autoCacheKey && autoCandidates ? Math.max(0, autoCandidates.findIndex((m) => m === resolvedModel)) : 0;
 
   const url = normalizeBaseUrl(baseUrl) + "/chat/completions";
 
@@ -528,8 +599,6 @@ export async function openAiCompatAct(params: {
   };
 
   const toolsModeArg = parseToolsMode({ args });
-  const reasoningEffort = parseReasoningEffort({ args, provider: keysName, resolvedModel });
-  if (reasoningEffort) payload.reasoning_effort = reasoningEffort;
   const includeReasoning = parseIncludeReasoning({ args, provider: keysName });
   if (typeof includeReasoning === "boolean") payload.include_reasoning = includeReasoning;
 
@@ -559,6 +628,7 @@ export async function openAiCompatAct(params: {
     omitReasoningEffort?: boolean,
     omitResponseFormat?: boolean,
     omitIncludeReasoning?: boolean,
+    modelOverride?: string,
   ): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
     const remainingMs = deadlineAt - Date.now();
     if (!Number.isFinite(remainingMs) || remainingMs < 1000) throw new Error("timeout_budget_exhausted");
@@ -571,9 +641,15 @@ export async function openAiCompatAct(params: {
 
     try {
       const p: any = { ...payload };
+      const modelForAttempt = modelOverride ?? resolvedModel;
+      p.model = modelForAttempt;
       if (omitReasoningEffort) delete p.reasoning_effort;
       if (omitResponseFormat) delete p.response_format;
       if (omitIncludeReasoning) delete p.include_reasoning;
+      if (!omitReasoningEffort) {
+        const effort = parseReasoningEffort({ args, provider: keysName, resolvedModel: modelForAttempt });
+        if (effort) p.reasoning_effort = effort;
+      }
 
       // Prefer tools/function-call when supported (reduces malformed JSON output),
       // but some providers/models reject forced function calling.
@@ -751,6 +827,40 @@ export async function openAiCompatAct(params: {
     if (!shouldRetry) throw new Error(`openai_compat failed: ${msg}`);
 
     try {
+      // If we're in model=auto mode and the chosen model is temporarily unavailable (e.g. Chutes has
+      // no instances for the chute_id), try the next best OSS baseline before other retries.
+      if (autoCacheKey && autoCandidates && looksLikeModelUnavailableError(msg)) {
+        let lastMsg = msg;
+        let current = resolvedModel;
+        let idx = autoCandidateIdx;
+        for (let attempts = 0; attempts < autoCandidates.length; attempts++) {
+          const next = pickNextHealthyAutoModel(autoCacheKey, autoCandidates, idx);
+          if (!next) break;
+          markAutoModelDenied({ cacheKey: autoCacheKey, model: current, reason: lastMsg });
+          current = next.model;
+          idx = next.idx;
+          autoCandidateIdx = idx;
+          resolvedModel = current;
+          resolvedModelCache.set(autoCacheKey, resolvedModel);
+          try {
+            const retry = await callOnce(
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              rejectsResponseFormat ? true : undefined,
+              rejectsIncludeReasoning ? true : undefined,
+              resolvedModel,
+            );
+            return { ...retry, resolvedModel, provider: keysName, baseUrl };
+          } catch (e) {
+            lastMsg = e instanceof Error ? e.message : String(e);
+            if (!looksLikeModelUnavailableError(lastMsg)) break;
+          }
+        }
+      }
+
       if (isTransientHttp) {
         let lastMsg = msg;
         for (let i = 0; i < 3; i++) {
@@ -764,6 +874,7 @@ export async function openAiCompatAct(params: {
               undefined,
               rejectsResponseFormat ? true : undefined,
               rejectsIncludeReasoning ? true : undefined,
+              undefined,
             );
             return { ...retry, resolvedModel, provider: keysName, baseUrl };
           } catch (e) {
@@ -815,6 +926,7 @@ export async function openAiCompatAct(params: {
         rejectsReasoningEffort ? true : undefined,
         rejectsResponseFormat ? true : undefined,
         rejectsIncludeReasoning ? true : undefined,
+        undefined,
       );
       return { ...retry, resolvedModel, provider: keysName, baseUrl };
     } catch (e2) {
