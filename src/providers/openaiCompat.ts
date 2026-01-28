@@ -252,6 +252,7 @@ function buildSystemPrompt() {
     "Game rules (important):",
     "- Plies alternate: P1 then P2 then P1 ...",
     "- At start of each ply, ACTIVE player gains supply: baseIncome + sum(supplyYield of nodes they own).",
+    "- Owning a node with supplyYield > 0 increases your income each ply.",
     "- Reinforce adds forces to your HQ only and costs: amount * reinforceCostPerStrength (you can spend the income gained this ply).",
     "- Move transfers forces along an edge. You cannot move more forces than you have at the 'from' node.",
     "- If after a move both sides have forces at the destination, combat resolves immediately with randomness:",
@@ -766,7 +767,7 @@ export async function openAiCompatAct(params: {
     ? [
         buildSystemPrompt(),
         "Think silently and choose legal actions.",
-        `You have up to ${thinkSec} seconds before timeout, but do not use it all; respond as soon as you have a plan (target a few seconds) and output JSON only.`,
+        `You have up to ${thinkSec} seconds before timeout. Use the time to think if needed, but output the JSON object before timeout.`,
       ].join("\n")
     : buildSystemPrompt();
   const promptMode = (args.get("--prompt-mode") ?? process.env.ASG_OPENAI_PROMPT_MODE ?? "compact").toLowerCase();
