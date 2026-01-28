@@ -383,6 +383,20 @@ function buildUserPromptCompact(params: {
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
+  const myHq = scenario.players[request.player].hq;
+  const enemyHq = scenario.players[enemy].hq;
+  const distToMyHq = bfsDistances(adjacency, myHq);
+  const distToEnemyHq = bfsDistances(adjacency, enemyHq);
+  const distances = board.map((n) => ({
+    id: n.id,
+    toMyHq: distToMyHq[n.id] ?? null,
+    toEnemyHq: distToEnemyHq[n.id] ?? null,
+  }));
+
+  const supplyNodes = board
+    .filter((n) => n.supplyYield > 0)
+    .map((n) => ({ id: n.id, supplyYield: n.supplyYield, owner: n.owner }));
+
   const info = {
     match_id: request.match_id,
     player: request.player,
@@ -398,9 +412,11 @@ function buildUserPromptCompact(params: {
       turnCapPlies: settings.turnCapPlies,
     },
     supplies,
+    supplyNodes,
     legal,
     adjacency,
     board,
+    distances,
   };
 
   return [
@@ -449,6 +465,11 @@ function buildUserPrompt(params: {
       "For moves: choose amount between 1 and maxAmount. Actions apply in order; later moves may use forces you moved earlier, even if not listed.",
   };
 
+  const myHq = scenario.players[request.player].hq;
+  const enemyHq = scenario.players[enemy].hq;
+  const distToMyHq = bfsDistances(adjacency, myHq);
+  const distToEnemyHq = bfsDistances(adjacency, enemyHq);
+
   const info = {
     match_id: request.match_id,
     player: request.player,
@@ -465,6 +486,18 @@ function buildUserPrompt(params: {
     },
     adjacency,
     legal,
+    supplyNodes: Object.entries(nodes)
+      .map(([id, node]) => ({
+        id,
+        supplyYield: Number.isFinite(node?.supplyYield) ? Number(node.supplyYield) : 0,
+        owner: typeof node?.owner === "string" ? node.owner : null,
+      }))
+      .filter((n) => n.supplyYield > 0)
+      .sort((a, b) => a.id.localeCompare(b.id)),
+    distances: Object.keys(adjacency)
+      .slice()
+      .sort()
+      .map((id) => ({ id, toMyHq: distToMyHq[id] ?? null, toEnemyHq: distToEnemyHq[id] ?? null })),
     observation: request.observation,
   };
 
