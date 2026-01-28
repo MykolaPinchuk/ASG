@@ -37,7 +37,7 @@ The match runner can call an external agent over HTTP (`POST /act`) per `docs/pl
 - Run a match vs the agent:
   - `npm run match -- --seed 1 --p1 greedy --p2 agent --agent-url http://127.0.0.1:8787`
   - Optional: log raw request/response per ply under `runs/`: add `--agent-log-dir runs/agent_io`
-  - If using a real LLM and you see timeouts, increase the client timeout: add `--agent-timeout-ms 60000` (default is 60000).
+  - If using a real LLM and you see timeouts, increase the client timeout: add `--agent-timeout-ms 70000` (default is 70000).
 
 The replay viewer shows controller/model metadata (when present) in the **Players** panel.
 

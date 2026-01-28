@@ -81,7 +81,8 @@ async function main() {
   const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
   const agentUrl = args.get("--agent-url");
   // Default must accommodate real LLM latency (even via a local agent server).
-  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
+  // Keep a small buffer over the agent server's typical upstream timeout (so we don't abort right as it responds).
+  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "70000", 10);
   const agentApiVersion = args.get("--agent-api-version") ?? "0.1";
   const agentLogDir = args.get("--agent-log-dir") ?? undefined;
   const turnCapOverrideRaw = args.get("--turn-cap-plies");

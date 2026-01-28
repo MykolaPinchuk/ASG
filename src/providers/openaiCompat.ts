@@ -144,6 +144,7 @@ function buildSystemPrompt() {
     "You must respond with VALID JSON ONLY (no markdown, no code fences, no commentary).",
     "Your response must start with '{' and end with '}' (a single JSON object).",
     "Do NOT output your reasoning. Think silently; output only the JSON object.",
+    "After you output the JSON object, STOP. Do not add any extra text after the final '}'.",
     "Rules for JSON:",
     "- Use double quotes for all strings and keys.",
     "- No trailing commas.",
@@ -387,6 +388,31 @@ function looksLikeModelUnavailableError(msg: string): boolean {
   return false;
 }
 
+function looksLikeReasoningTruncationWithoutAnswer(msg: string): boolean {
+  // We see this pattern frequently for "thinking"/reasoning models on OpenAI-compatible OSS providers:
+  // - content/tool_calls are empty
+  // - model spent its budget on reasoning (sometimes hidden as reasoning_tokens with no reasoning text)
+  // - sometimes finish_reason=length, but we also see finish_reason=stop with empty content.
+  //
+  // We only have the flattened error message string here, so use robust substring checks.
+  const m = msg.toLowerCase();
+
+  const contentEmpty =
+    m.includes("content\":null") ||
+    m.includes("content\":\"\"") ||
+    m.includes("no message.content") ||
+    m.includes("no message.content or tool_calls");
+  if (!contentEmpty) return false;
+
+  const hasReasoningSignal =
+    m.includes("finish_reason=length") ||
+    m.includes("native_finish_reason=max_output_tokens") ||
+    m.includes("reasoning_tokens") ||
+    m.includes("reasoning_content") ||
+    (m.includes("messagekeys=[") && m.includes("reasoning"));
+  return hasReasoningSignal;
+}
+
 type ToolsMode = "auto" | "force" | "off";
 
 function parseToolsMode(params: { args: ProviderArgs }): ToolsMode {
@@ -396,6 +422,11 @@ function parseToolsMode(params: { args: ProviderArgs }): ToolsMode {
 }
 
 type ReasoningEffort = "low" | "medium" | "high";
+
+function looksLikeReasoningModelId(modelId: string): boolean {
+  const m = modelId.toLowerCase();
+  return m.includes(":thinking") || m.includes("thinking") || m.includes("reasoning") || m.includes("deepseek-r1") || m.includes("deepseek_r1");
+}
 
 function parseReasoningEffort(params: { args: ProviderArgs; provider: string; resolvedModel: string }): ReasoningEffort | null {
   const raw = (params.args.get("--reasoning-effort") ?? process.env.ASG_OPENAI_REASONING_EFFORT ?? "").toLowerCase().trim();
@@ -408,10 +439,7 @@ function parseReasoningEffort(params: { args: ProviderArgs; provider: string; re
   // Avoid touching OpenRouter defaults (keep Grok stable).
   if (params.provider === "openrouter") return null;
 
-  const m = params.resolvedModel.toLowerCase();
-  const looksLikeReasoningModel =
-    m.includes(":thinking") || m.includes("thinking") || m.includes("reasoning") || m.includes("deepseek-r1") || m.includes("deepseek_r1");
-  return looksLikeReasoningModel ? "low" : null;
+  return looksLikeReasoningModelId(params.resolvedModel) ? "low" : null;
 }
 
 function parseIncludeReasoning(params: { args: ProviderArgs; provider: string }): boolean | null {
@@ -612,6 +640,10 @@ export async function openAiCompatAct(params: {
   // Enforce a total wall-clock budget across retries so the agent server responds
   // within the configured timeout window (instead of timing out after multiple attempts).
   const deadlineAt = Date.now() + timeoutMs;
+  // For heavy "thinking"/reasoning models we often see an initial hang/slow response. Reserve a slice of time
+  // for at least one retry, rather than letting the first request consume the entire wall-clock budget.
+  const reserveRetryMs = looksLikeReasoningModelId(resolvedModel) ? Math.min(25_000, Math.floor(timeoutMs * 0.4)) : 0;
+  let callOnceCount = 0;
 
   async function sleep(ms: number) {
     if (!Number.isFinite(ms) || ms <= 0) return;
@@ -630,9 +662,16 @@ export async function openAiCompatAct(params: {
     omitIncludeReasoning?: boolean,
     modelOverride?: string,
   ): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
+    const attemptIdx = callOnceCount++;
     const remainingMs = deadlineAt - Date.now();
     if (!Number.isFinite(remainingMs) || remainingMs < 1000) throw new Error("timeout_budget_exhausted");
-    const attemptTimeoutMs = Math.max(1000, Math.min(timeoutMs, Math.floor(remainingMs)));
+    let attemptTimeoutMs = Math.max(1000, Math.min(timeoutMs, Math.floor(remainingMs)));
+    if (attemptIdx === 0 && reserveRetryMs > 0) {
+      const remainingInt = Math.floor(remainingMs);
+      const reserved = Math.min(reserveRetryMs, Math.max(0, remainingInt - 1000));
+      const capped = remainingInt - reserved;
+      if (capped >= 1000) attemptTimeoutMs = Math.min(attemptTimeoutMs, capped);
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
@@ -771,14 +810,24 @@ export async function openAiCompatAct(params: {
   } catch (e1) {
     // One retry for malformed JSON / parsing issues.
     const msg = e1 instanceof Error ? e1.message : String(e1);
+    const isEmptyResponse =
+      msg.toLowerCase().includes("\"code\":\"empty_response\"") ||
+      msg.toLowerCase().includes("code\":\"empty_response\"") ||
+      msg.toLowerCase().includes("code=empty_response") ||
+      msg.toLowerCase().includes("empty_response");
+    const gotLengthCutoff = msg.includes("finish_reason=length") || msg.includes("native_finish_reason=max_output_tokens");
+    const likelyThinkingWithoutFinal = looksLikeReasoningTruncationWithoutAnswer(msg);
+    const likelyBudgetEmpty = likelyThinkingWithoutFinal || isEmptyResponse;
+    const seemsGlmModel = msg.toLowerCase().includes("glm");
     const isTransientHttp =
-      msg.startsWith("HTTP 408") ||
-      msg.startsWith("HTTP 425") ||
-      msg.startsWith("HTTP 429") ||
-      msg.startsWith("HTTP 500") ||
-      msg.startsWith("HTTP 502") ||
-      msg.startsWith("HTTP 503") ||
-      msg.startsWith("HTTP 504");
+      !isEmptyResponse &&
+      (msg.startsWith("HTTP 408") ||
+        msg.startsWith("HTTP 425") ||
+        msg.startsWith("HTTP 429") ||
+        msg.startsWith("HTTP 500") ||
+        msg.startsWith("HTTP 502") ||
+        msg.startsWith("HTTP 503") ||
+        msg.startsWith("HTTP 504"));
     const isTimeouty =
       msg.includes("timeout_budget_exhausted") ||
       msg.toLowerCase().includes("aborted") ||
@@ -827,9 +876,9 @@ export async function openAiCompatAct(params: {
     if (!shouldRetry) throw new Error(`openai_compat failed: ${msg}`);
 
     try {
-      // If we're in model=auto mode and the chosen model is temporarily unavailable (e.g. Chutes has
-      // no instances for the chute_id), try the next best OSS baseline before other retries.
-      if (autoCacheKey && autoCandidates && looksLikeModelUnavailableError(msg)) {
+      // If we're in model=auto mode and the chosen model is clearly failing (unavailable/timeout/budget-empty),
+      // try the next best OSS baseline before other retries.
+      if (autoCacheKey && autoCandidates && (looksLikeModelUnavailableError(msg) || isTimeouty || likelyBudgetEmpty)) {
         let lastMsg = msg;
         let current = resolvedModel;
         let idx = autoCandidateIdx;
@@ -856,7 +905,20 @@ export async function openAiCompatAct(params: {
             return { ...retry, resolvedModel, provider: keysName, baseUrl };
           } catch (e) {
             lastMsg = e instanceof Error ? e.message : String(e);
-            if (!looksLikeModelUnavailableError(lastMsg)) break;
+            const lastBudgetEmpty =
+              looksLikeReasoningTruncationWithoutAnswer(lastMsg) ||
+              lastMsg.toLowerCase().includes("\"code\":\"empty_response\"") ||
+              lastMsg.toLowerCase().includes("empty_response");
+            if (
+              !(
+                looksLikeModelUnavailableError(lastMsg) ||
+                lastBudgetEmpty ||
+                lastMsg.toLowerCase().includes("timeout") ||
+                lastMsg.toLowerCase().includes("aborted")
+              )
+            ) {
+              break;
+            }
           }
         }
       }
@@ -893,19 +955,16 @@ export async function openAiCompatAct(params: {
         throw new Error(lastMsg);
       }
 
-      const gotLengthCutoff = msg.includes("finish_reason=length") || msg.includes("native_finish_reason=max_output_tokens");
-      const likelyThinkingWithoutFinal =
-        gotLengthCutoff && msg.includes("reasoning_content") && msg.includes("content\":null");
-
       const wantsMoreTokens =
         gotLengthCutoff ||
-        msg.includes("max_output_tokens");
-      // If a thinking model burned the whole budget on reasoning and never produced a tool call / JSON,
-      // prefer trying a SHORT output budget with a very strong "JSON-first" hint instead of simply
-      // raising max_tokens (which can increase latency and timeouts).
+        msg.includes("max_output_tokens") ||
+        msg.toLowerCase().includes("very low max_tokens") ||
+        msg.toLowerCase().includes("low max_tokens");
+      // If a model burned the whole budget on reasoning (or the provider explicitly reports "empty_response" / low max_tokens),
+      // retry with a larger output budget + stronger instruction to emit JSON immediately.
       const bumpedMaxTokens = wantsMoreTokens
-        ? likelyThinkingWithoutFinal
-          ? Math.min(600, Math.max(200, maxTokens))
+        ? likelyBudgetEmpty
+          ? 4000
           : Math.min(8000, Math.max(1200, maxTokens * 4))
         : undefined;
 
@@ -913,22 +972,52 @@ export async function openAiCompatAct(params: {
       // On retry, prefer allowing either a tool call or direct JSON content.
       const toolsModeOverride: ToolsMode | undefined = wantsToolsOff
         ? "off"
-        : likelyThinkingWithoutFinal || isTimeouty
+        : likelyBudgetEmpty || isTimeouty
           ? "auto"
           : undefined;
 
       const useToolsOverride = wantsToolsOff ? false : undefined;
-      const retry = await callOnce(
-        `Your previous output was invalid/empty or not parseable. Do NOT explain. Start your response with '{' and return ONLY a single valid JSON object matching the schema exactly. api_version must be "${request.api_version}".`,
-        bumpedMaxTokens,
-        toolsModeOverride,
-        useToolsOverride,
-        rejectsReasoningEffort ? true : undefined,
-        rejectsResponseFormat ? true : undefined,
-        rejectsIncludeReasoning ? true : undefined,
-        undefined,
-      );
-      return { ...retry, resolvedModel, provider: keysName, baseUrl };
+      const omitResponseFormatRetry = rejectsResponseFormat || (likelyBudgetEmpty && seemsGlmModel);
+      const retryLine = likelyBudgetEmpty
+        ? `Your previous output was empty/truncated. Output ONLY the JSON object now. No reasoning, no extra text. Start with '{' (no whitespace before it) and end with '}'. api_version must be "${request.api_version}".`
+        : `Your previous output was invalid/empty or not parseable. Do NOT explain. Start your response with '{' and return ONLY a single valid JSON object matching the schema exactly. api_version must be "${request.api_version}".`;
+      try {
+        const retry = await callOnce(
+          retryLine,
+          bumpedMaxTokens,
+          toolsModeOverride,
+          useToolsOverride,
+          rejectsReasoningEffort ? true : undefined,
+          omitResponseFormatRetry ? true : undefined,
+          rejectsIncludeReasoning ? true : undefined,
+          undefined,
+        );
+        return { ...retry, resolvedModel, provider: keysName, baseUrl };
+      } catch (eRetry) {
+        // Some "thinking" models still produce no final content/tool call on the first retry.
+        // If we still see the same "budget empty" pattern and have time left, try once more with a larger budget.
+        if (likelyBudgetEmpty) {
+          const msgRetry = eRetry instanceof Error ? eRetry.message : String(eRetry);
+          const stillBudgetEmpty =
+            looksLikeReasoningTruncationWithoutAnswer(msgRetry) ||
+            msgRetry.toLowerCase().includes("\"code\":\"empty_response\"") ||
+            msgRetry.toLowerCase().includes("empty_response");
+          if (stillBudgetEmpty) {
+            const retry2 = await callOnce(
+              `Your previous output was still empty/truncated. Output ONLY the JSON object now. No reasoning, no extra text. Start with '{' and end with '}'. api_version must be "${request.api_version}".`,
+              8000,
+              toolsModeOverride,
+              useToolsOverride,
+              rejectsReasoningEffort ? true : undefined,
+              omitResponseFormatRetry ? true : undefined,
+              rejectsIncludeReasoning ? true : undefined,
+              undefined,
+            );
+            return { ...retry2, resolvedModel, provider: keysName, baseUrl };
+          }
+        }
+        throw eRetry;
+      }
     } catch (e2) {
       const msg2 = e2 instanceof Error ? e2.message : String(e2);
       throw new Error(`openai_compat failed: ${msg2}`);

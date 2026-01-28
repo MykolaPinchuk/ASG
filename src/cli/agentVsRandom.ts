@@ -132,7 +132,8 @@ async function main() {
   const modelArg = args.get("--model");
   const model = modelArg ?? (providerKey === "openrouter" ? "x-ai/grok-4.1-fast" : "auto");
   const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_baselines.json";
-  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
+  // Keep a small buffer over the agent server's typical upstream timeout (so we don't abort right as it responds).
+  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "70000", 10);
   const saveReplays = args.get("--save-replays") === "true";
   const outDir = args.get("--out-dir") ?? "replays";
   const liveOut = args.get("--live-out") ?? undefined;

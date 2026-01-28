@@ -421,7 +421,8 @@ async function main() {
   if (opponentRaw !== "mix" && opponentRaw !== "greedy") throw new Error("--opponent must be mix|greedy");
   const opponent = opponentRaw as Opponent;
   const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
-  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
+  // Keep a small buffer over the agent server's typical upstream timeout (so we don't abort right as it responds).
+  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "70000", 10);
 
   const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
   const maxTokens = args.get("--max-tokens") ?? "200";
