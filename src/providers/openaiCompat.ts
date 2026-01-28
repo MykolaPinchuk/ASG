@@ -80,6 +80,49 @@ function extractJsonObject(text: string): unknown {
   }
 }
 
+function tryExtractCompleteJsonObject(text: string): unknown | null {
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === "\"") inString = false;
+      continue;
+    }
+    if (ch === "\"") {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") {
+      depth += 1;
+      continue;
+    }
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        const slice = text.slice(start, i + 1);
+        try {
+          return JSON.parse(slice);
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function validateAgentResponse(json: unknown, expectedApiVersion: string): AgentResponse {
   if (!isObject(json)) throw new Error("model output must be a JSON object");
   const apiVersionRaw = (json as any).api_version;
@@ -321,6 +364,9 @@ function buildUserPromptCompact(params: {
       .slice(0, -1)
       .map((from, i) => ({ from, to: path[i + 1]! }));
 
+  const distMyHqToEnemyHq = distToEnemyHq[myHq];
+  const canCaptureEnemyHqThisPly = Number.isInteger(distMyHqToEnemyHq) && distMyHqToEnemyHq <= maxChain;
+
   const towardEnemyFrom = moveOptions
     .slice()
     .sort((a, b) => (distToEnemyHq[a.to] ?? 999) - (distToEnemyHq[b.to] ?? 999))
@@ -353,9 +399,12 @@ function buildUserPromptCompact(params: {
       suggestedChains: {
         toBestResource: chainEdges(pathToBestResource),
         towardEnemyNoCombat: chainEdges(pathToSafeStage),
+        winThisPly: canCaptureEnemyHqThisPly ? chainEdges(pathToEnemyHq) : [],
       },
       towardEnemyFrom,
-      note: "Shorter distance to enemyHq is usually better when attacking. Capturing enemyHq wins immediately.",
+      note: canCaptureEnemyHqThisPly
+        ? "You can capture enemyHq THIS PLY by following strategy.suggestedChains.winThisPly with maximum forces."
+        : "Shorter distance to enemyHq is usually better when attacking. Capturing enemyHq wins immediately.",
     },
     adjacency,
     board,
@@ -531,6 +580,16 @@ function parseToolsMode(params: { args: ProviderArgs }): ToolsMode {
   const raw = (params.args.get("--tools-mode") ?? process.env.ASG_OPENAI_TOOLS_MODE ?? "auto").toLowerCase();
   if (raw === "auto" || raw === "force" || raw === "off") return raw;
   throw new Error(`invalid --tools-mode '${raw}' (expected auto|force|off)`);
+}
+
+type StreamMode = "auto" | "on" | "off";
+
+function parseStreamMode(params: { args: ProviderArgs }): StreamMode {
+  const raw = (params.args.get("--stream") ?? process.env.ASG_OPENAI_STREAM ?? "auto").toLowerCase().trim();
+  if (raw === "auto" || raw === "") return "auto";
+  if (raw === "true" || raw === "1" || raw === "on" || raw === "yes") return "on";
+  if (raw === "false" || raw === "0" || raw === "off" || raw === "no") return "off";
+  throw new Error(`invalid --stream '${raw}' (expected auto|on|off)`);
 }
 
 type ReasoningEffort = "low" | "medium" | "high";
@@ -741,6 +800,7 @@ export async function openAiCompatAct(params: {
   const toolsModeArg = parseToolsMode({ args });
   const includeReasoning = parseIncludeReasoning({ args, provider: keysName });
   if (typeof includeReasoning === "boolean") payload.include_reasoning = includeReasoning;
+  const streamMode = parseStreamMode({ args });
 
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -823,6 +883,12 @@ export async function openAiCompatAct(params: {
         p.max_tokens = Math.max(1, Math.floor(maxTokensOverride));
       }
 
+      const maxTokensForAttempt = Number.isFinite(p.max_tokens) ? Number(p.max_tokens) : maxTokens;
+      const wantsStream =
+        streamMode === "on" ||
+        (streamMode === "auto" && (looksLikeReasoningModelId(modelForAttempt) || maxTokensForAttempt >= 800));
+      if (wantsStream) p.stream = true;
+
       if (extraUserLine) {
         p.messages = p.messages.slice();
         p.messages.push({ role: "user", content: extraUserLine });
@@ -833,9 +899,196 @@ export async function openAiCompatAct(params: {
         headers,
         body: JSON.stringify(p),
         signal: controller.signal,
-      }).finally(() => clearTimeout(timeout));
+      });
 
       httpStatus = res.status;
+      const contentType = res.headers.get("content-type") ?? "";
+
+      // Streaming early-stop: parse SSE chunks and abort as soon as we have a valid JSON/tool response.
+      if (p.stream && contentType.toLowerCase().includes("event-stream") && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        let contentText = "";
+        let reasoningText = "";
+        const toolArgsByIndex = new Map<number, string>();
+        let finishReason: string | undefined = undefined;
+        let nativeFinishReason: string | undefined = undefined;
+        let rawSnippet = "";
+        const MAX_SNIPPET = 50_000;
+        const MAX_ACC = 200_000;
+
+        const tryReturn = (candidate: unknown): { response: AgentResponse; httpStatus: number; raw: unknown } | null => {
+          try {
+            const response = validateAgentResponse(candidate, request.api_version);
+            return {
+              response,
+              httpStatus,
+              raw: { status: res.status, body: rawSnippet, streamed: true },
+            };
+          } catch {
+            return null;
+          }
+        };
+
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            if (rawSnippet.length < MAX_SNIPPET) rawSnippet += chunk.slice(0, MAX_SNIPPET - rawSnippet.length);
+            buf += chunk;
+
+            while (true) {
+              let idx = buf.indexOf("\n\n");
+              let delimLen = 2;
+              const idx2 = buf.indexOf("\r\n\r\n");
+              if (idx2 >= 0 && (idx < 0 || idx2 < idx)) {
+                idx = idx2;
+                delimLen = 4;
+              }
+              if (idx < 0) break;
+              const event = buf.slice(0, idx);
+              buf = buf.slice(idx + delimLen);
+
+              const lines = event.split(/\r?\n/);
+              const dataLines: string[] = [];
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith("data:")) continue;
+                dataLines.push(trimmed.slice(5).trim());
+              }
+              const data = dataLines.join("\n").trim();
+              if (!data) continue;
+              if (data === "[DONE]") {
+                buf = "";
+                break;
+              }
+
+              let chunkJson: any;
+              try {
+                chunkJson = JSON.parse(data);
+              } catch {
+                continue;
+              }
+              const choice0 = chunkJson?.choices?.[0];
+              if (choice0?.finish_reason || choice0?.finishReason) finishReason = choice0.finish_reason ?? choice0.finishReason;
+              if (choice0?.native_finish_reason || choice0?.nativeFinishReason) {
+                nativeFinishReason = choice0.native_finish_reason ?? choice0.nativeFinishReason;
+              }
+
+              const delta = choice0?.delta ?? choice0?.message ?? {};
+              const deltaContent = delta?.content ?? delta?.text ?? delta?.value ?? undefined;
+              if (typeof deltaContent === "string" && deltaContent.length > 0 && contentText.length < MAX_ACC) {
+                contentText += deltaContent.slice(0, MAX_ACC - contentText.length);
+              }
+
+              const deltaReasoning =
+                delta?.reasoning_content ??
+                delta?.reasoning ??
+                delta?.reasoning_text ??
+                delta?.reasoningText ??
+                delta?.analysis ??
+                undefined;
+              if (typeof deltaReasoning === "string" && deltaReasoning.length > 0 && reasoningText.length < MAX_ACC) {
+                reasoningText += deltaReasoning.slice(0, MAX_ACC - reasoningText.length);
+              }
+
+              const deltaToolCalls = delta?.tool_calls ?? delta?.toolCalls;
+              if (Array.isArray(deltaToolCalls)) {
+                for (const tc of deltaToolCalls) {
+                  const tcIdx = Number.isInteger(tc?.index) ? Number(tc.index) : 0;
+                  const part = tc?.function?.arguments;
+                  if (typeof part === "string" && part.length > 0) {
+                    const prev = toolArgsByIndex.get(tcIdx) ?? "";
+                    if (prev.length < MAX_ACC) toolArgsByIndex.set(tcIdx, prev + part.slice(0, MAX_ACC - prev.length));
+                  }
+                }
+              }
+
+              const deltaFnArgs = delta?.function_call?.arguments;
+              if (typeof deltaFnArgs === "string" && deltaFnArgs.length > 0) {
+                const prev = toolArgsByIndex.get(0) ?? "";
+                if (prev.length < MAX_ACC) toolArgsByIndex.set(0, prev + deltaFnArgs.slice(0, MAX_ACC - prev.length));
+              }
+
+              const tool0 = toolArgsByIndex.get(0);
+              if (tool0) {
+                const parsed = tryExtractCompleteJsonObject(tool0);
+                if (parsed) {
+                  const maybe = tryReturn(parsed);
+                  if (maybe) {
+                    try {
+                      await reader.cancel();
+                    } catch {
+                      // ignore
+                    }
+                    return maybe;
+                  }
+                }
+              }
+              if (contentText) {
+                const parsed = tryExtractCompleteJsonObject(contentText);
+                if (parsed) {
+                  const maybe = tryReturn(parsed);
+                  if (maybe) {
+                    try {
+                      await reader.cancel();
+                    } catch {
+                      // ignore
+                    }
+                    return maybe;
+                  }
+                }
+              }
+              if (reasoningText && (reasoningText.includes("{") || reasoningText.includes("\"actions\""))) {
+                const parsed = tryExtractCompleteJsonObject(reasoningText);
+                if (parsed) {
+                  const maybe = tryReturn(parsed);
+                  if (maybe) {
+                    try {
+                      await reader.cancel();
+                    } catch {
+                      // ignore
+                    }
+                    return maybe;
+                  }
+                }
+              }
+            }
+          }
+        } finally {
+          try {
+            await reader.cancel();
+          } catch {
+            // ignore
+          }
+        }
+
+        // End-of-stream fallback parsing (best-effort).
+        raw = { status: res.status, body: rawSnippet, streamed: true };
+
+        const tool0 = toolArgsByIndex.get(0);
+        if (tool0 && tool0.length > 0) {
+          const extracted = extractJsonObject(tool0);
+          const response = validateAgentResponse(extracted, request.api_version);
+          return { response, httpStatus, raw };
+        }
+        if (contentText && contentText.length > 0) {
+          const extracted = extractJsonObject(contentText);
+          const response = validateAgentResponse(extracted, request.api_version);
+          return { response, httpStatus, raw };
+        }
+
+        throw new Error(
+          `empty_output (finish_reason=${finishReason ?? ""} native_finish_reason=${nativeFinishReason ?? ""}) (choiceKeys=[] messageKeys=[] bodySnippet=${String(
+            rawSnippet,
+          )
+            .replace(/\s+/g, " ")
+            .slice(0, 600)})`,
+        );
+      }
+
       const text = await res.text();
       raw = { status: res.status, body: text };
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 500)}`);
