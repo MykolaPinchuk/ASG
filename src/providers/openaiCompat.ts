@@ -124,13 +124,57 @@ function tryExtractCompleteJsonObject(text: string): unknown | null {
 }
 
 function validateAgentResponse(json: unknown, expectedApiVersion: string): AgentResponse {
-  if (!isObject(json)) throw new Error("model output must be a JSON object");
-  const apiVersionRaw = (json as any).api_version;
+  if (!isObject(json)) throw new Error("JSON invalid: model output must be an object");
+
+  const coerceInt = (value: unknown): number | null => {
+    if (typeof value === "number" && Number.isFinite(value)) return Math.floor(value);
+    if (typeof value === "string") {
+      const t = value.trim();
+      if (/^\d+$/.test(t)) return Number.parseInt(t, 10);
+    }
+    return null;
+  };
+
+  const actionsRaw = (json as any).actions;
+  if (!Array.isArray(actionsRaw)) throw new Error("JSON invalid: actions must be an array");
+  if (actionsRaw.length === 0) throw new Error("JSON invalid: actions must be a non-empty array");
+
+  const actions: Action[] = [];
+  for (const a of actionsRaw) {
+    if (!isObject(a)) throw new Error("JSON invalid: each action must be an object");
+    const type = (a as any).type;
+
+    if (type === "pass") {
+      actions.push({ type: "pass" });
+      continue;
+    }
+
+    if (type === "reinforce") {
+      const amount = coerceInt((a as any).amount);
+      if (amount === null || amount < 1) throw new Error("JSON invalid: reinforce.amount must be an integer >= 1");
+      actions.push({ type: "reinforce", amount });
+      continue;
+    }
+
+    if (type === "move") {
+      const fromRaw = (a as any).from;
+      const toRaw = (a as any).to;
+      const amount = coerceInt((a as any).amount);
+      const from = typeof fromRaw === "string" ? fromRaw.trim() : "";
+      const to = typeof toRaw === "string" ? toRaw.trim() : "";
+      if (!from) throw new Error("JSON invalid: move.from must be a non-empty string");
+      if (!to) throw new Error("JSON invalid: move.to must be a non-empty string");
+      if (amount === null || amount < 1) throw new Error("JSON invalid: move.amount must be an integer >= 1");
+      actions.push({ type: "move", from, to, amount });
+      continue;
+    }
+
+    throw new Error(`JSON invalid: unknown action type '${String(type)}'`);
+  }
+
   // Some models omit or corrupt api_version; treat it as metadata and force the expected version.
   const apiVersion = expectedApiVersion;
-  if (!Array.isArray(json.actions)) throw new Error("actions must be an array");
-  const actions = json.actions as Action[];
-  const rationale_text = typeof json.rationale_text === "string" ? json.rationale_text : undefined;
+  const rationale_text = typeof (json as any).rationale_text === "string" ? (json as any).rationale_text : undefined;
   return { api_version: apiVersion, actions, rationale_text };
 }
 
@@ -219,7 +263,8 @@ function buildSystemPrompt() {
     "- move only along an edge from the provided adjacency list.",
     "- do not exceed available forces at the from node.",
     "- reinforce costs supply: amount * reinforceCostPerStrength.",
-    "If unsure or you cannot find a legal action, return pass.",
+    "Never output an empty actions array; include at least one action.",
+    "Only return pass if you truly cannot find ANY legal non-pass action.",
     "Keep rationale_text short (<= 1 sentence) or omit it.",
   ].join("\n");
 }
@@ -814,7 +859,7 @@ export async function openAiCompatAct(params: {
   const deadlineAt = Date.now() + timeoutMs;
   // For heavy "thinking"/reasoning models we often see an initial hang/slow response. Reserve a slice of time
   // for at least one retry, rather than letting the first request consume the entire wall-clock budget.
-  const reserveRetryMs = looksLikeReasoningModelId(resolvedModel) ? Math.min(25_000, Math.floor(timeoutMs * 0.4)) : 0;
+  const reserveRetryMs = looksLikeReasoningModelId(resolvedModel) ? Math.min(15_000, Math.floor(timeoutMs * 0.25)) : 0;
   let callOnceCount = 0;
 
   async function sleep(ms: number) {
@@ -1179,7 +1224,8 @@ export async function openAiCompatAct(params: {
       msg.toLowerCase().includes("\"code\":\"empty_response\"") ||
       msg.toLowerCase().includes("code\":\"empty_response\"") ||
       msg.toLowerCase().includes("code=empty_response") ||
-      msg.toLowerCase().includes("empty_response");
+      msg.toLowerCase().includes("empty_response") ||
+      msg.toLowerCase().includes("empty_output");
     const gotLengthCutoff = msg.includes("finish_reason=length") || msg.includes("native_finish_reason=max_output_tokens");
     const likelyThinkingWithoutFinal = looksLikeReasoningTruncationWithoutAnswer(msg);
     const likelyBudgetEmpty = likelyThinkingWithoutFinal || isEmptyResponse;
@@ -1342,7 +1388,7 @@ export async function openAiCompatAct(params: {
           : undefined;
 
       const useToolsOverride = wantsToolsOff ? false : undefined;
-      const omitResponseFormatRetry = rejectsResponseFormat || (likelyBudgetEmpty && seemsGlmModel);
+      const omitResponseFormatRetry = rejectsResponseFormat || likelyBudgetEmpty || (seemsGlmModel && msg.toLowerCase().includes("empty_output"));
       const retryLine = likelyBudgetEmpty
         ? `Your previous output was empty/truncated. Output ONLY the JSON object now. No reasoning, no extra text. Start with '{' (no whitespace before it) and end with '}'. api_version must be "${request.api_version}".`
         : `Your previous output was invalid/empty or not parseable. Do NOT explain. Start your response with '{' and return ONLY a single valid JSON object matching the schema exactly. api_version must be "${request.api_version}".`;
@@ -1366,12 +1412,14 @@ export async function openAiCompatAct(params: {
           const stillBudgetEmpty =
             looksLikeReasoningTruncationWithoutAnswer(msgRetry) ||
             msgRetry.toLowerCase().includes("\"code\":\"empty_response\"") ||
-            msgRetry.toLowerCase().includes("empty_response");
+            msgRetry.toLowerCase().includes("empty_response") ||
+            msgRetry.toLowerCase().includes("empty_output");
           if (stillBudgetEmpty) {
+            const toolsModeOverride2: ToolsMode | undefined = toolsModeOverride === "off" ? "off" : "force";
             const retry2 = await callOnce(
               `Your previous output was still empty/truncated. Output ONLY the JSON object now. No reasoning, no extra text. Start with '{' and end with '}'. api_version must be "${request.api_version}".`,
               8000,
-              toolsModeOverride,
+              toolsModeOverride2,
               useToolsOverride,
               rejectsReasoningEffort ? true : undefined,
               omitResponseFormatRetry ? true : undefined,

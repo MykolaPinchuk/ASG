@@ -8,7 +8,7 @@ import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { MixBot } from "../controllers/mixBot.js";
 import { GreedyBot } from "../controllers/greedyBot.js";
-import { fetchOpenAiCompatModelIds } from "../llm/models.js";
+import { fetchOpenAiCompatModelIds, getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 
@@ -410,7 +410,7 @@ async function main() {
     args.get("--base-url") ??
     (providerName === "chutes" ? "https://llm.chutes.ai/v1" : undefined) ??
     (providerName === "openrouter" ? "https://openrouter.ai/api/v1" : undefined);
-  const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_models.json";
+  const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_baselines.json";
 
   const seedStart = Number.parseInt(args.get("--seed-start") ?? args.get("--seed") ?? "3", 10);
   const games = Number.parseInt(args.get("--games") ?? args.get("--trials") ?? "3", 10);
@@ -459,7 +459,24 @@ async function main() {
     models = models.length > 0 ? models : fromFile;
   }
 
-  if (models.length === 0) throw new Error("Provide --models a,b,c or --models-file path/to/models.txt");
+  if (models.length === 0) {
+    try {
+      const cfg = await loadOssModelsConfig(modelsConfig);
+      const { priority } = getProviderAllowlist(cfg, String(providerName));
+      const picked = priority.slice(0, 3);
+      if (picked.length > 0) {
+        models = picked;
+        console.log(`No --models provided; defaulting to baselines from ${modelsConfig}: ${models.join(",")}`);
+      }
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      console.log(`WARN failed to load baselines from ${modelsConfig}: ${err.split("\n")[0]}`);
+    }
+  }
+
+  if (models.length === 0) {
+    throw new Error("Provide --models a,b,c or --models-file path/to/models.txt (or set --models-config to a config with provider priority baselines)");
+  }
   if (!Number.isInteger(seedStart) || seedStart < 0) throw new Error("--seed-start/--seed must be an integer >= 0");
   if (!Number.isInteger(games) || games < 1 || games > 50) throw new Error("--games/--trials must be an integer in [1,50]");
   if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be >=1");
