@@ -39,6 +39,9 @@ function controllerFromName(params: {
 function normalizeReplay(replay: Replay): Replay {
   const cloned = JSON.parse(JSON.stringify(replay)) as Replay;
   cloned.createdAt = "1970-01-01T00:00:00.000Z";
+  for (const t of cloned.turns) {
+    t.latencyMs = 0;
+  }
   return cloned;
 }
 
@@ -76,4 +79,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-

@@ -25,7 +25,10 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
       P2: deriveObservation(state, "P2"),
     } as const;
 
+    const startedAt = Date.now();
     const decision = await controller.decide(observations[player]);
+    const measuredLatencyMs = Date.now() - startedAt;
+    const latencyMs = decision.latencyMs ?? measuredLatencyMs;
 
     const applied = applyTurn(ctx, state, decision.actions, rng);
     state = applied.state;
@@ -37,7 +40,7 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
       observations: { P1: observations.P1, P2: observations.P2 },
       actions: decision.actions,
       rationaleText: decision.rationaleText,
-      latencyMs: decision.latencyMs,
+      latencyMs,
       events: applied.events,
       stateAfter: state,
     });

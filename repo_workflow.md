@@ -55,3 +55,12 @@ Note: agents may also create additional safe checkpoint commits after coherent m
 
 4) Logging:
    - Append a short entry to `agent_logs/current.md` capturing understanding and intended next steps.
+
+## Logging (during work)
+Maintain a reasonably detailed log in `agent_logs/current.md`.
+Write an entry:
+- after onboarding
+- after each meaningful milestone (decision, change, run result)
+- after any failure worth remembering
+- after important new information was discovered/learnt
+- in general log anything which future agents may potentially find useful

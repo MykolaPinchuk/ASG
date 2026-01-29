@@ -328,8 +328,10 @@ async function evalOneModel(params: {
       const providerErrors = agentTurns.filter((t) => (t.rationaleText ?? "").includes("server: openai_compat error")).length;
       providerErrorTurnsTotal += providerErrors;
 
+      const telemetryAll = agentController.telemetry.map((t) => t.latencyMs);
+      const tStatsAll = summarizeAgentTelemetry(telemetryAll);
       const telemetryOk = agentController.telemetry.filter((t) => !t.error).map((t) => t.latencyMs);
-      const tStats = summarizeAgentTelemetry(telemetryOk);
+      const tStatsOk = summarizeAgentTelemetry(telemetryOk);
       const agentErrors = agentController.telemetry.filter((t) => !!t.error).length;
       const resultShort = replay.result.type === "draw" ? "draw" : replay.result.winner === "P1" ? "win" : "loss";
       const gameRow = {
@@ -346,11 +348,13 @@ async function evalOneModel(params: {
         stopAfterErrors: stopAfterErrors || undefined,
         errorTurns: stopAfterErrors ? errorTurns : undefined,
         earlyStop: stopAfterErrors ? earlyStopTriggered : undefined,
-        avgLatencyOkMs: tStats.avg,
-        p95LatencyOkMs: tStats.p95,
+        avgLatencyMs: tStatsAll.avg,
+        p95LatencyMs: tStatsAll.p95,
+        avgLatencyOkMs: tStatsOk.avg,
+        p95LatencyOkMs: tStatsOk.p95,
       };
       console.log(
-        `game: provider=${String(params.providerName)} model=${params.model} opponent=${params.opponent} seed=${seed} result=${resultShort} plies=${plies} agentTurns=${agentTurns.length} passTurns=${agentPassTurns} errors=${agentErrors} providerErrors=${providerErrors} avgLatencyOkMs=${tStats.avg ?? "—"} p95LatencyOkMs=${tStats.p95 ?? "—"}${
+        `game: provider=${String(params.providerName)} model=${params.model} opponent=${params.opponent} seed=${seed} result=${resultShort} plies=${plies} agentTurns=${agentTurns.length} passTurns=${agentPassTurns} errors=${agentErrors} providerErrors=${providerErrors} avgLatencyMs=${tStatsAll.avg ?? "—"} p95LatencyMs=${tStatsAll.p95 ?? "—"} avgLatencyOkMs=${tStatsOk.avg ?? "—"} p95LatencyOkMs=${tStatsOk.p95 ?? "—"}${
           stopAfterErrors ? ` errorTurns=${errorTurns}${earlyStopTriggered ? " earlyStop=true" : ""}` : ""
         }`,
       );
@@ -440,7 +444,11 @@ async function main() {
   const stopAfterErrors = Number.parseInt(stopAfterErrorsRaw, 10);
 
   const saveReplaysRaw = (args.get("--save-replays") ?? "true").toLowerCase();
-  const saveReplays = saveReplaysRaw !== "false";
+  let saveReplays = saveReplaysRaw !== "false";
+  if (!saveReplays) {
+    console.log("WARN --save-replays=false ignored (always saving replays).");
+    saveReplays = true;
+  }
   const replaysDirArg = args.get("--replays-dir");
   const agentLogDir = args.get("--agent-log-dir") ?? undefined;
   const serverLogDir = args.get("--server-log-dir") ?? undefined;
@@ -560,7 +568,7 @@ async function main() {
         reasoningEffort,
         promptMode,
         stopAfterErrors,
-        saveReplays,
+        saveReplays: true,
         replaysDir,
         liveOut,
         agentLogDir,

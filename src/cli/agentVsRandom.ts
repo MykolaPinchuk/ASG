@@ -139,7 +139,12 @@ async function main() {
   const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_baselines.json";
   // Keep a buffer over the agent server's upstream timeout (so we don't abort right as it responds).
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "95000", 10);
-  const saveReplays = args.get("--save-replays") === "true";
+  const saveReplaysRaw = (args.get("--save-replays") ?? "true").toLowerCase();
+  let saveReplays = saveReplaysRaw !== "false";
+  if (!saveReplays) {
+    console.log("WARN --save-replays=false ignored (always saving replays).");
+    saveReplays = true;
+  }
   const outDir = args.get("--out-dir") ?? "replays";
   const liveOut = args.get("--live-out") ?? undefined;
   const turnCapOverrideRaw = args.get("--turn-cap-plies");
@@ -328,8 +333,10 @@ async function main() {
       else if (replay.result.winner === agentSide) stats.results.agentWins += 1;
       else stats.results.opponentWins += 1;
 
+      const telemetryAll = agentController.telemetry.map((t) => t.latencyMs);
       const telemetryOk = agentController.telemetry.filter((t) => !t.error).map((t) => t.latencyMs);
-      const latency = summarizeLatencies(telemetryOk);
+      const latAll = summarizeLatencies(telemetryAll);
+      const latOk = summarizeLatencies(telemetryOk);
       const agentErrors = agentController.telemetry.filter((t) => !!t.error).length;
 
       const gameRow = {
@@ -342,12 +349,14 @@ async function main() {
         agentPassTurns: summary.agentPassTurns,
         providerErrorTurns: summary.providerErrorTurns,
         agentErrorTurns: agentErrors,
-        avgLatencyOkMs: latency.avg,
-        p95LatencyOkMs: latency.p95,
+        avgLatencyMs: latAll.avg,
+        p95LatencyMs: latAll.p95,
+        avgLatencyOkMs: latOk.avg,
+        p95LatencyOkMs: latOk.p95,
       };
 
       console.log(
-        `game: provider=${providerName} model=${model} opponent=${opponent} seed=${seed} result=${gameRow.result} plies=${summary.plies} passTurns=${summary.agentPassTurns} errors=${agentErrors} providerErrors=${summary.providerErrorTurns} avgLatencyOkMs=${latency.avg ?? "—"} p95LatencyOkMs=${latency.p95 ?? "—"}`,
+        `game: provider=${providerName} model=${model} opponent=${opponent} seed=${seed} result=${gameRow.result} plies=${summary.plies} passTurns=${summary.agentPassTurns} errors=${agentErrors} providerErrors=${summary.providerErrorTurns} avgLatencyMs=${latAll.avg ?? "—"} p95LatencyMs=${latAll.p95 ?? "—"} avgLatencyOkMs=${latOk.avg ?? "—"} p95LatencyOkMs=${latOk.p95 ?? "—"}`,
       );
 
       if (liveOut) {
