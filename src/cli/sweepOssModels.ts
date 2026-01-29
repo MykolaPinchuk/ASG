@@ -13,6 +13,7 @@ import { getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
 
 type ProviderName = "nanogpt" | "chutes" | "openrouter";
 type Opponent = "greedy" | "random" | "mix";
+type SweepMode = "smoke" | "full" | "both";
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -207,6 +208,7 @@ async function runAgentMatch(params: {
   seed: number;
   turnCapPlies: number;
   outReplayPath?: string;
+  stopAfterErrors: number;
 }): Promise<ModelRunSummary> {
   const scenario = structuredClone(params.baseScenario);
   scenario.settings.turnCapPlies = params.turnCapPlies;
@@ -234,6 +236,9 @@ async function runAgentMatch(params: {
         ? new MixBot({ seed: opponentSeed, adjacency, scenario, greedyProb: params.mixGreedyProb })
         : new GreedyBot({ adjacency, scenario });
 
+  let errorTurns = 0;
+  let earlyStopTriggered = false;
+
   const controllers: Record<PlayerId, Controller> = {
     P1: {
       id: "agent",
@@ -260,6 +265,12 @@ async function runAgentMatch(params: {
           return { actions: out.response.actions, rationaleText: out.response.rationale_text };
         } catch (e) {
           const err = e instanceof Error ? e.message : String(e);
+          errorTurns += 1;
+          if (!earlyStopTriggered && params.stopAfterErrors > 0 && errorTurns >= params.stopAfterErrors) {
+            const nextPly = observation.ply + 1;
+            scenario.settings.turnCapPlies = Math.min(scenario.settings.turnCapPlies ?? nextPly, nextPly);
+            earlyStopTriggered = true;
+          }
           return { actions: [{ type: "pass" }], rationaleText: `openai_compat failed: ${err}` };
         }
       },
@@ -302,11 +313,18 @@ async function main() {
 
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const outRoot = args.get("--out-dir") ?? path.join("runs", "model_sweeps", nowStampPacific());
+  const replaysDir = args.get("--replays-dir") ?? "replays";
   const baseScenario = await loadScenarioFromFile(scenarioPath);
   const adjacency = createAdjacency(baseScenario);
 
   const providersRaw = (args.get("--providers") ?? "nanogpt,chutes").split(",").map((s) => s.trim()).filter(Boolean);
   const providers = providersRaw.filter((p): p is ProviderName => ["nanogpt", "chutes", "openrouter"].includes(p));
+
+  const modeRaw = (args.get("--mode") ?? "both").toLowerCase();
+  if (!["both", "smoke", "full"].includes(modeRaw)) throw new Error("--mode must be both|smoke|full");
+  const mode = modeRaw as SweepMode;
+  const runSmoke = mode !== "full";
+  const runFull = mode !== "smoke";
 
   const opponentRaw = (args.get("--opponent") ?? "greedy").toLowerCase();
   if (!["greedy", "random", "mix"].includes(opponentRaw)) throw new Error("--opponent must be greedy|mix|random");
@@ -318,6 +336,7 @@ async function main() {
   const fullTurnCap = Number.parseInt(args.get("--full-turn-cap") ?? "30", 10);
   const fullSeed = Number.parseInt(args.get("--full-seed") ?? "3", 10);
   const smokeSeedStart = Number.parseInt(args.get("--smoke-seed-start") ?? "1000", 10);
+  const stopAfterErrors = Number.parseInt(args.get("--stop-after-errors") ?? "1", 10);
 
   const timeoutMsArg = args.get("--timeout-ms") ?? undefined;
   const maxTokensArg = args.get("--max-tokens") ?? undefined;
@@ -332,6 +351,7 @@ async function main() {
   if (!Number.isInteger(fullSeed) || fullSeed < 0) throw new Error("--full-seed must be >=0");
   if (!Number.isInteger(smokeSeedStart) || smokeSeedStart < 0) throw new Error("--smoke-seed-start must be >=0");
   if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
+  if (!Number.isInteger(stopAfterErrors) || stopAfterErrors < 0 || stopAfterErrors > 30) throw new Error("--stop-after-errors must be in [0,30]");
   if ((smokeTurnCap > 30 || fullTurnCap > 30) && !unsafeAllowLong) {
     throw new Error("Policy: --smoke-turn-cap/--full-turn-cap must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
   }
@@ -341,7 +361,10 @@ async function main() {
   const runSummary: any = {
     startedAt: new Date().toISOString(),
     scenarioPath,
+    mode,
+    replaysDir,
     opponent: opponent === "mix" ? { kind: "mix", greedyProb: mixGreedyProb } : { kind: opponent },
+    stopAfterErrors,
     smoke: { turnCapPlies: smokeTurnCap, seedStart: smokeSeedStart },
     full: { turnCapPlies: fullTurnCap, seed: fullSeed },
     providers: {},
@@ -391,54 +414,67 @@ async function main() {
       const timeoutMs = timeoutMsArg ?? (looksLikeReasoningModelId(model) ? "80000" : "60000");
       const maxTokens = maxTokensArg ?? (looksLikeReasoningModelId(model) ? "600" : "180");
 
-      const smokeReplayPath = path.join("replays", `${path.basename(scenarioPath, ".json")}_seed${smokeSeed}_${provider}_${encodeURIComponent(model)}_smoke.json`);
-      const smoke = await runAgentMatch({
-        provider,
-        baseUrl,
-        keysFilePath,
-        modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
-        model,
-        opponent,
-        mixGreedyProb,
-        useTools,
-        promptMode,
-        temperature,
-        maxTokens,
-        timeoutMs,
-        baseScenario,
-        adjacency,
-        seed: smokeSeed,
-        turnCapPlies: smokeTurnCap,
-        outReplayPath: smokeReplayPath,
-      });
+      let smoke: ModelRunSummary | undefined;
+      if (runSmoke) {
+        const smokeReplayPath = path.join(
+          replaysDir,
+          `${path.basename(scenarioPath, ".json")}_seed${smokeSeed}_${provider}_${encodeURIComponent(model)}_smoke.json`,
+        );
+        smoke = await runAgentMatch({
+          provider,
+          baseUrl,
+          keysFilePath,
+          modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
+          model,
+          opponent,
+          mixGreedyProb,
+          useTools,
+          promptMode,
+          temperature,
+          maxTokens,
+          timeoutMs,
+          baseScenario,
+          adjacency,
+          seed: smokeSeed,
+          turnCapPlies: smokeTurnCap,
+          outReplayPath: smokeReplayPath,
+          stopAfterErrors,
+        });
+      }
 
-      const smokeOk = smoke.providerErrorTurns === 0 && (smoke.agentMoveActions + smoke.agentReinforceActions > 0);
-      console.log(
-        `smoke ${provider} model=${model} ok=${smokeOk} providerErrors=${smoke.providerErrorTurns} passTurns=${smoke.agentPassTurns} moves=${smoke.agentMoveActions} caps=${smoke.agentCaptures}`,
-      );
+      const smokeOk = smoke ? smoke.providerErrorTurns === 0 && smoke.agentMoveActions + smoke.agentReinforceActions > 0 : true;
+      if (smoke) {
+        console.log(
+          `smoke ${provider} model=${model} ok=${smokeOk} providerErrors=${smoke.providerErrorTurns} passTurns=${smoke.agentPassTurns} moves=${smoke.agentMoveActions} caps=${smoke.agentCaptures}`,
+        );
+      }
 
       const entry: any = { model, smoke, smokeOk };
 
-      if (smokeOk) {
-        const fullReplayPath = path.join("replays", `${path.basename(scenarioPath, ".json")}_seed${fullSeed}_${provider}_${encodeURIComponent(model)}_full.json`);
-      const full = await runAgentMatch({
-        provider,
-        baseUrl,
-        keysFilePath,
-        modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
-        model,
-        opponent,
-        mixGreedyProb,
-        useTools,
-        promptMode,
-        temperature,
-        maxTokens,
-        timeoutMs,
-        baseScenario,
+      if (runFull && smokeOk) {
+        const fullReplayPath = path.join(
+          replaysDir,
+          `${path.basename(scenarioPath, ".json")}_seed${fullSeed}_${provider}_${encodeURIComponent(model)}_full.json`,
+        );
+        const full = await runAgentMatch({
+          provider,
+          baseUrl,
+          keysFilePath,
+          modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
+          model,
+          opponent,
+          mixGreedyProb,
+          useTools,
+          promptMode,
+          temperature,
+          maxTokens,
+          timeoutMs,
+          baseScenario,
           adjacency,
           seed: fullSeed,
           turnCapPlies: fullTurnCap,
           outReplayPath: fullReplayPath,
+          stopAfterErrors,
         });
         full.phase = "full";
         entry.full = full;
