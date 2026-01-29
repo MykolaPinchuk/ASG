@@ -4,12 +4,15 @@ import { createAdjacency } from "../game/scenario.js";
 import { runMatch } from "../game/match.js";
 import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import { RandomBot } from "../controllers/randomBot.js";
+import { GreedyBot } from "../controllers/greedyBot.js";
+import { MixBot } from "../controllers/mixBot.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 import { openAiCompatAct } from "../providers/openaiCompat.js";
 import { getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
 
 type ProviderName = "nanogpt" | "chutes" | "openrouter";
+type Opponent = "greedy" | "random" | "mix";
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -192,6 +195,8 @@ async function runAgentMatch(params: {
   keysFilePath: string;
   modelsConfigPath: string;
   model: string;
+  opponent: Opponent;
+  mixGreedyProb: number;
   useTools: boolean;
   promptMode?: string;
   temperature: string;
@@ -221,7 +226,13 @@ async function runAgentMatch(params: {
   if (params.promptMode) args.set("--prompt-mode", params.promptMode);
 
   const agentPlayer: PlayerId = "P1";
-  const random = new RandomBot({ seed: params.seed + 202, adjacency, scenario });
+  const opponentSeed = params.seed + 202;
+  const opponentController: Controller =
+    params.opponent === "random"
+      ? new RandomBot({ seed: opponentSeed, adjacency, scenario })
+      : params.opponent === "mix"
+        ? new MixBot({ seed: opponentSeed, adjacency, scenario, greedyProb: params.mixGreedyProb })
+        : new GreedyBot({ adjacency, scenario });
 
   const controllers: Record<PlayerId, Controller> = {
     P1: {
@@ -253,14 +264,14 @@ async function runAgentMatch(params: {
         }
       },
     },
-    P2: random,
+    P2: opponentController,
   };
 
   const replay = await runMatch({ ctx, controllers, seed: params.seed });
 
   replay.players = {
     P1: { kind: "agent", provider: params.provider, baseUrl: params.baseUrl, model: params.model, modelMode: "explicit" },
-    P2: { kind: "random" },
+    P2: params.opponent === "mix" ? { kind: "mix", greedyProb: params.mixGreedyProb } : { kind: params.opponent },
   };
 
   if (params.outReplayPath) {
@@ -285,6 +296,7 @@ async function runAgentMatch(params: {
 
 async function main() {
   const args = parseArgs(process.argv);
+  const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
   const keysFilePath = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const keys = parseKeysFile(await (await import("node:fs/promises")).readFile(keysFilePath, "utf8"));
 
@@ -296,9 +308,14 @@ async function main() {
   const providersRaw = (args.get("--providers") ?? "nanogpt,chutes").split(",").map((s) => s.trim()).filter(Boolean);
   const providers = providersRaw.filter((p): p is ProviderName => ["nanogpt", "chutes", "openrouter"].includes(p));
 
+  const opponentRaw = (args.get("--opponent") ?? "greedy").toLowerCase();
+  if (!["greedy", "random", "mix"].includes(opponentRaw)) throw new Error("--opponent must be greedy|mix|random");
+  const opponent = opponentRaw as Opponent;
+  const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
+
   const maxModels = Number.parseInt(args.get("--max-models") ?? "30", 10);
   const smokeTurnCap = Number.parseInt(args.get("--smoke-turn-cap") ?? "10", 10);
-  const fullTurnCap = Number.parseInt(args.get("--full-turn-cap") ?? "60", 10);
+  const fullTurnCap = Number.parseInt(args.get("--full-turn-cap") ?? "30", 10);
   const fullSeed = Number.parseInt(args.get("--full-seed") ?? "3", 10);
   const smokeSeedStart = Number.parseInt(args.get("--smoke-seed-start") ?? "1000", 10);
 
@@ -314,12 +331,17 @@ async function main() {
   if (!Number.isInteger(fullTurnCap) || fullTurnCap < 2) throw new Error("--full-turn-cap must be >=2");
   if (!Number.isInteger(fullSeed) || fullSeed < 0) throw new Error("--full-seed must be >=0");
   if (!Number.isInteger(smokeSeedStart) || smokeSeedStart < 0) throw new Error("--smoke-seed-start must be >=0");
+  if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
+  if ((smokeTurnCap > 30 || fullTurnCap > 30) && !unsafeAllowLong) {
+    throw new Error("Policy: --smoke-turn-cap/--full-turn-cap must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+  }
 
   await mkdir(outRoot, { recursive: true });
 
   const runSummary: any = {
     startedAt: new Date().toISOString(),
     scenarioPath,
+    opponent: opponent === "mix" ? { kind: "mix", greedyProb: mixGreedyProb } : { kind: opponent },
     smoke: { turnCapPlies: smokeTurnCap, seedStart: smokeSeedStart },
     full: { turnCapPlies: fullTurnCap, seed: fullSeed },
     providers: {},
@@ -376,6 +398,8 @@ async function main() {
         keysFilePath,
         modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
         model,
+        opponent,
+        mixGreedyProb,
         useTools,
         promptMode,
         temperature,
@@ -403,6 +427,8 @@ async function main() {
         keysFilePath,
         modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
         model,
+        opponent,
+        mixGreedyProb,
         useTools,
         promptMode,
         temperature,

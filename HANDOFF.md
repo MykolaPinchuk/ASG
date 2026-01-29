@@ -39,6 +39,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Deterministic replays: same seed + same actions ⇒ identical outcomes.
 - No secrets or bulky artifacts in git (see `.gitignore`).
 - `IA_HANDOFF/` is an immutable snapshot (do not edit).
+- v0 / `v05` eval guardrails: default to `turnCapPlies<=30` and `games/count<=5` unless explicitly overridden (see `extra_instructions_v0.md`).
 
 ## State of work
 
@@ -102,7 +103,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - View replay: open `viewer/index.html` (file picker) and select the replay JSON.
   - Agent vs Random (requires `secrets/provider_apis.txt`): `npm run agent:vs-random -- --provider-name nanogpt --model auto --count 3 --start 1 --save-replays true`
   - OSS baselines (Chutes) vs GreedyBot: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
-  - OSS sweep (can take a while; requires provider keys): `npm run agent:sweep-oss -- --providers nanogpt,chutes --max-models 30 --full-seed 3`
+  - OSS sweep (can take a while; requires provider keys): `npm run agent:sweep-oss -- --providers nanogpt,chutes --max-models 30 --full-seed 3 --full-turn-cap 30`
 
 ## Known issues / current breakage
 - Provider flakiness: capacity/rate-limit errors can cause many agent passes (esp. some Chutes models); these are surfaced as `openai_compat failed: ...` in rationale.

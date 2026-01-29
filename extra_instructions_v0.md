@@ -1,0 +1,5 @@
+- always save replays
+- always have latency calculated and returned properly
+- for v0 or v05, never use more than 30 plies and more than 5 games per model/bot type
+- unless specifically mentioned, do not use Random bot.
+- explicit overrides (when you really mean it): `--unsafe-allow-long true`, `--unsafe-allow-many true`

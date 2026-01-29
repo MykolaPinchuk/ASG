@@ -85,16 +85,18 @@ async function main() {
   const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "70000", 10);
   const agentApiVersion = args.get("--agent-api-version") ?? "0.1";
   const agentLogDir = args.get("--agent-log-dir") ?? undefined;
-  const turnCapOverrideRaw = args.get("--turn-cap-plies");
-  const turnCapPliesOverride = turnCapOverrideRaw ? Number.parseInt(turnCapOverrideRaw, 10) : undefined;
+  const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
+  const turnCapOverrideRaw = args.get("--turn-cap-plies") ?? "30";
+  const turnCapPliesOverride = Number.parseInt(turnCapOverrideRaw, 10);
 
   if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
 
   const scenario = await loadScenarioFromFile(scenarioPath);
-  if (turnCapPliesOverride !== undefined) {
-    if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
-    scenario.settings.turnCapPlies = turnCapPliesOverride;
+  if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
+  if (turnCapPliesOverride > 30 && !unsafeAllowLong) {
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
   }
+  scenario.settings.turnCapPlies = turnCapPliesOverride;
   const adjacency = createAdjacency(scenario);
   const ctx = { scenario, adjacency };
 

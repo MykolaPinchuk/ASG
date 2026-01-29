@@ -49,10 +49,17 @@ async function main() {
   const args = parseArgs(process.argv);
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const p1 = (args.get("--p1") ?? "greedy") as ControllerName;
-  const p2 = (args.get("--p2") ?? "random") as ControllerName;
+  const p2 = (args.get("--p2") ?? "greedy") as ControllerName;
   const seed = Number.parseInt(args.get("--seed") ?? "1", 10);
+  const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
+  const turnCapPlies = Number.parseInt(args.get("--turn-cap-plies") ?? "30", 10);
+  if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
+  if (turnCapPlies > 30 && !unsafeAllowLong) {
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+  }
 
   const scenario = await loadScenarioFromFile(path.resolve(scenarioPath));
+  scenario.settings.turnCapPlies = turnCapPlies;
   const adjacency = createAdjacency(scenario);
   const ctx = { scenario, adjacency };
 

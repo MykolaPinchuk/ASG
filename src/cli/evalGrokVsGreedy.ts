@@ -27,7 +27,8 @@ async function main() {
 
   const start = Number.parseInt(args.get("--start") ?? "3", 10);
   const count = Number.parseInt(args.get("--count") ?? "3", 10);
-  const turnCapPlies = Number.parseInt(args.get("--turn-cap-plies") ?? "60", 10);
+  const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
+  const turnCapPlies = Number.parseInt(args.get("--turn-cap-plies") ?? "30", 10);
   const agentSide = args.get("--agent-side") ?? "P1";
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const baseUrl = args.get("--base-url") ?? "https://openrouter.ai/api/v1";
@@ -37,6 +38,9 @@ async function main() {
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");
   if (!Number.isInteger(count) || count < 1 || count > 3) throw new Error("--count must be an integer in [1, 3] (cost cap)");
   if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
+  if (turnCapPlies > 30 && !unsafeAllowLong) {
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+  }
   if (agentSide !== "P1" && agentSide !== "P2") throw new Error("--agent-side must be P1 or P2");
 
   const tsxBin = path.resolve("node_modules/.bin/tsx");
@@ -60,6 +64,7 @@ async function main() {
     String(count),
     "--turn-cap-plies",
     String(turnCapPlies),
+    ...(unsafeAllowLong ? (["--unsafe-allow-long", "true"] as const) : ([] as const)),
     "--save-replays",
     "true",
     "--out-dir",
@@ -82,4 +87,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-

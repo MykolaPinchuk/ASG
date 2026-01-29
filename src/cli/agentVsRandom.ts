@@ -124,11 +124,14 @@ function summarizeLatencies(latencies: number[]) {
 async function main() {
   const args = parseArgs(process.argv);
 
+  const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
+  const unsafeAllowMany = (args.get("--unsafe-allow-many") ?? "false").toLowerCase() === "true";
+
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const start = Number.parseInt(args.get("--start") ?? "1", 10);
   const count = Number.parseInt(args.get("--count") ?? "5", 10);
   const agentSide = (args.get("--agent-side") ?? "P1") as PlayerId;
-  const opponent = (args.get("--opponent") ?? "random") as OpponentName;
+  const opponent = (args.get("--opponent") ?? "greedy") as OpponentName;
   const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const providerName = args.get("--provider-name") ?? "nanogpt";
@@ -147,12 +150,8 @@ async function main() {
   }
   const outDir = args.get("--out-dir") ?? "replays";
   const liveOut = args.get("--live-out") ?? undefined;
-  const turnCapOverrideRaw = args.get("--turn-cap-plies");
-  const turnCapPliesOverride = turnCapOverrideRaw
-    ? Number.parseInt(turnCapOverrideRaw, 10)
-    : opponent === "mix"
-      ? 30
-      : undefined;
+  const turnCapOverrideRaw = args.get("--turn-cap-plies") ?? "30";
+  const turnCapPliesOverride = Number.parseInt(turnCapOverrideRaw, 10);
   const tag = args.get("--tag") ?? `${providerName}_${model}`;
   const tagSlug = slugify(tag);
 
@@ -170,12 +169,16 @@ async function main() {
   if (providerKey === "openrouter" && model === "auto") {
     throw new Error("--model auto is not supported for OpenRouter; omit --model to default to x-ai/grok-4.1-fast, or pass --model <id>");
   }
-  if (turnCapPliesOverride !== undefined) {
-    if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
+  if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
+  if (turnCapPliesOverride > 30 && !unsafeAllowLong) {
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+  }
+  if (count > 5 && !unsafeAllowMany) {
+    throw new Error("Policy: --count must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
   }
 
   const scenario = await loadScenarioFromFile(scenarioPath);
-  if (turnCapPliesOverride !== undefined) scenario.settings.turnCapPlies = turnCapPliesOverride;
+  scenario.settings.turnCapPlies = turnCapPliesOverride;
   const adjacency = createAdjacency(scenario);
   const ctx = { scenario, adjacency };
 
