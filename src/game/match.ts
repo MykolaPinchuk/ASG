@@ -29,6 +29,7 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
     const decision = await controller.decide(observations[player]);
     const measuredLatencyMs = Date.now() - startedAt;
     const latencyMs = decision.latencyMs ?? measuredLatencyMs;
+    if (!Number.isFinite(latencyMs) || latencyMs < 0) throw new Error(`invalid latencyMs (${latencyMs}) from controller=${controller.id}`);
 
     const applied = applyTurn(ctx, state, decision.actions, rng);
     state = applied.state;
