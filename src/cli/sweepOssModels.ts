@@ -143,6 +143,14 @@ function pickOssCandidates(
   return ordered.slice(0, max);
 }
 
+function parseCsvList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 type ModelRunSummary = {
   provider: ProviderName;
   baseUrl: string;
@@ -337,6 +345,7 @@ async function main() {
   const fullSeed = Number.parseInt(args.get("--full-seed") ?? "3", 10);
   const smokeSeedStart = Number.parseInt(args.get("--smoke-seed-start") ?? "1000", 10);
   const stopAfterErrors = Number.parseInt(args.get("--stop-after-errors") ?? "1", 10);
+  const excludeModels = new Set(parseCsvList(args.get("--exclude-models")));
 
   const timeoutMsArg = args.get("--timeout-ms") ?? undefined;
   const maxTokensArg = args.get("--max-tokens") ?? undefined;
@@ -399,7 +408,7 @@ async function main() {
     }
 
     const { deny, denyPrefixes } = getProviderAllowlist(modelsConfig, provider);
-    const candidates = pickOssCandidates(provider, ids, maxModels, deny, denyPrefixes);
+    const candidates = pickOssCandidates(provider, ids, maxModels + excludeModels.size, deny, denyPrefixes).filter((m) => !excludeModels.has(m)).slice(0, maxModels);
     const providerOutDir = path.join(outRoot, provider);
     await mkdir(providerOutDir, { recursive: true });
     await writeFile(path.join(providerOutDir, "models.txt"), candidates.join("\n") + "\n", "utf8");

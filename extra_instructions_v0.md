@@ -2,4 +2,5 @@
 - always have latency calculated and returned properly
 - for v0 or v05, never use more than 30 plies and more than 5 games per model/bot type
 - unless specifically mentioned, do not use Random bot.
+- for OSS sweeps, prefer `--timeout-ms 40000` (40s) per agent decision unless you explicitly want longer
 - explicit overrides (when you really mean it): `--unsafe-allow-long true`, `--unsafe-allow-many true`

@@ -798,14 +798,13 @@ export async function openAiCompatAct(params: {
 
   const url = normalizeBaseUrl(baseUrl) + "/chat/completions";
 
-  const thinkSec = Math.max(1, Math.floor((timeoutMs - 5000) / 1000));
-  const system = shouldAddThinkingHint({ args })
-    ? [
-        buildSystemPrompt(),
-        "Think silently and choose legal actions.",
-        `You have up to ${thinkSec} seconds before timeout. Use the time to think if needed, but output the JSON object before timeout.`,
-      ].join("\n")
-    : buildSystemPrompt();
+  const hardSec = Math.max(1, Math.floor(timeoutMs / 1000));
+  const softSec = Math.max(1, hardSec - 2);
+  const system = [
+    buildSystemPrompt(),
+    `Time limit: you must output the JSON within ${hardSec} seconds (prefer within ${softSec} seconds).`,
+    ...(shouldAddThinkingHint({ args }) ? ["Think silently and choose legal actions."] : []),
+  ].join("\n");
   const promptMode = (args.get("--prompt-mode") ?? process.env.ASG_OPENAI_PROMPT_MODE ?? "compact").toLowerCase();
   if (promptMode !== "full" && promptMode !== "compact") {
     throw new Error(`invalid --prompt-mode '${promptMode}' (expected full|compact)`);
