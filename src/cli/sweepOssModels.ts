@@ -151,6 +151,14 @@ function parseCsvList(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+function parseBoolFlag(value: string | undefined, defaultValue: boolean): boolean {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return defaultValue;
+  if (raw === "true" || raw === "1" || raw === "yes" || raw === "on") return true;
+  if (raw === "false" || raw === "0" || raw === "no" || raw === "off") return false;
+  throw new Error(`invalid boolean flag value '${value}' (expected true|false)`);
+}
+
 type ModelRunSummary = {
   provider: ProviderName;
   baseUrl: string;
@@ -208,6 +216,7 @@ async function runAgentMatch(params: {
   mixGreedyProb: number;
   useTools: boolean;
   promptMode?: string;
+  reasoningEffort?: string;
   temperature: string;
   maxTokens: string;
   timeoutMs: string;
@@ -234,6 +243,7 @@ async function runAgentMatch(params: {
   args.set("--max-tokens", params.maxTokens);
   args.set("--use-tools", params.useTools ? "true" : "false");
   if (params.promptMode) args.set("--prompt-mode", params.promptMode);
+  if (params.reasoningEffort) args.set("--reasoning-effort", params.reasoningEffort);
 
   const agentPlayer: PlayerId = "P1";
   const opponentSeed = params.seed + 202;
@@ -346,6 +356,10 @@ async function main() {
   const smokeSeedStart = Number.parseInt(args.get("--smoke-seed-start") ?? "1000", 10);
   const stopAfterErrors = Number.parseInt(args.get("--stop-after-errors") ?? "1", 10);
   const excludeModels = new Set(parseCsvList(args.get("--exclude-models")));
+  const reasoningEffort = args.get("--reasoning-effort") ?? undefined;
+  const reasoningEffortLowModels = new Set(parseCsvList(args.get("--reasoning-effort-low-models")));
+  const onlyReasoning = parseBoolFlag(args.get("--only-reasoning"), false);
+  const preferReasoning = parseBoolFlag(args.get("--prefer-reasoning"), false);
 
   const timeoutMsArg = args.get("--timeout-ms") ?? undefined;
   const maxTokensArg = args.get("--max-tokens") ?? undefined;
@@ -408,7 +422,16 @@ async function main() {
     }
 
     const { deny, denyPrefixes } = getProviderAllowlist(modelsConfig, provider);
-    const candidates = pickOssCandidates(provider, ids, maxModels + excludeModels.size, deny, denyPrefixes).filter((m) => !excludeModels.has(m)).slice(0, maxModels);
+    let candidates = pickOssCandidates(provider, ids, maxModels + excludeModels.size + 50, deny, denyPrefixes).filter((m) => !excludeModels.has(m));
+    if (onlyReasoning) candidates = candidates.filter((m) => looksLikeReasoningModelId(m));
+    if (preferReasoning) {
+      candidates = candidates.slice().sort((a, b) => {
+        const ar = looksLikeReasoningModelId(a) ? 0 : 1;
+        const br = looksLikeReasoningModelId(b) ? 0 : 1;
+        return ar - br || a.localeCompare(b);
+      });
+    }
+    candidates = candidates.slice(0, maxModels);
     const providerOutDir = path.join(outRoot, provider);
     await mkdir(providerOutDir, { recursive: true });
     await writeFile(path.join(providerOutDir, "models.txt"), candidates.join("\n") + "\n", "utf8");
@@ -439,6 +462,7 @@ async function main() {
           mixGreedyProb,
           useTools,
           promptMode,
+          reasoningEffort: reasoningEffortLowModels.has(model) ? "low" : reasoningEffort,
           temperature,
           maxTokens,
           timeoutMs,
@@ -475,6 +499,7 @@ async function main() {
           mixGreedyProb,
           useTools,
           promptMode,
+          reasoningEffort: reasoningEffortLowModels.has(model) ? "low" : reasoningEffort,
           temperature,
           maxTokens,
           timeoutMs,
