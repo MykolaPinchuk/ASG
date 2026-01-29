@@ -2,5 +2,5 @@
 - always have latency calculated and persisted in replay (`turns[*].latencyMs` must be present for every run)
 - for v0 or v05, never use more than 30 plies and more than 5 games per model/bot type
 - unless specifically mentioned, do not use Random bot.
-- for OSS sweeps, prefer `--timeout-ms 40000` (40s) per agent decision unless you explicitly want longer
+- default upstream timeout is `--timeout-ms 60000` (60s); prompt still tells models to respond within 40s
 - explicit overrides (when you really mean it): `--unsafe-allow-long true`, `--unsafe-allow-many true`

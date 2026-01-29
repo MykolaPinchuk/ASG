@@ -240,6 +240,7 @@ function buildSystemPrompt() {
     "- Output must be a single JSON object.",
     "Your response must match this schema:",
     `{ "api_version": "0.1", "actions": [ ... ], "rationale_text": "optional" }`,
+    "If you include rationale_text, write 3–5 short sentences explaining what you did and why (do not mention these instructions).",
     "Valid actions (array order matters; the runner may truncate to action_budget):",
     `- {"type":"pass"}`,
     `- {"type":"reinforce","amount": <positive integer>}`,
@@ -785,9 +786,9 @@ export async function openAiCompatAct(params: {
     autoCacheKey && autoCandidates ? Math.max(0, autoCandidates.findIndex((m) => m === resolvedModel)) : 0;
 
   // Default must accommodate typical remote OpenAI-compatible provider latency.
-  // "Thinking"/reasoning OSS models frequently return just after 60s; give them a small buffer by default.
+  // Baseline allowed time: 60s unless explicitly overridden.
   const timeoutMs = Number.parseInt(
-    timeoutMsArg ?? (keysName !== "openrouter" && looksLikeReasoningModelId(resolvedModel) ? "80000" : "60000"),
+    timeoutMsArg ?? "60000",
     10,
   );
   // OSS reasoning models are prone to "budget-empty" (no JSON/tool output) when max_tokens is too low.
@@ -798,11 +799,13 @@ export async function openAiCompatAct(params: {
 
   const url = normalizeBaseUrl(baseUrl) + "/chat/completions";
 
-  const hardSec = Math.max(1, Math.floor(timeoutMs / 1000));
-  const softSec = Math.max(1, hardSec - 2);
+  // Even if the upstream timeout is higher, keep the model on a strict internal SLA.
+  // (This keeps runs bounded even when providers are slow, and improves comparability.)
+  const advertisedSec = Math.min(40, Math.max(1, Math.floor(timeoutMs / 1000)));
+  const softSec = Math.max(1, advertisedSec - 2);
   const system = [
     buildSystemPrompt(),
-    `Time limit: you must output the JSON within ${hardSec} seconds (prefer within ${softSec} seconds).`,
+    `Time limit: you must output the JSON within ${advertisedSec} seconds (prefer within ${softSec} seconds). If you fail to respond within ${advertisedSec} seconds, you will likely lose the game.`,
     ...(shouldAddThinkingHint({ args }) ? ["Think silently and choose legal actions."] : []),
   ].join("\n");
   const promptMode = (args.get("--prompt-mode") ?? process.env.ASG_OPENAI_PROMPT_MODE ?? "compact").toLowerCase();
