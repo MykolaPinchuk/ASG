@@ -1,0 +1,7 @@
+- always save replays
+- always have latency calculated and persisted in replay (`turns[*].latencyMs` must be present for every run)
+- for v0 or v05, never use more than 30 plies and more than 5 games per model/bot type
+- unless specifically mentioned, do not use Random bot.
+- default upstream timeout is `--timeout-ms 70000` (70s); prompt still tells models to respond within 40s
+- prompt requests `rationale_text` with 3–5 short sentences (still JSON-only; keep it mechanics-only)
+- explicit overrides (when you really mean it): `--unsafe-allow-long true`, `--unsafe-allow-many true`

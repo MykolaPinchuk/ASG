@@ -4,12 +4,16 @@ import { createAdjacency } from "../game/scenario.js";
 import { runMatch } from "../game/match.js";
 import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import { RandomBot } from "../controllers/randomBot.js";
+import { GreedyBot } from "../controllers/greedyBot.js";
+import { MixBot } from "../controllers/mixBot.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 import { openAiCompatAct } from "../providers/openaiCompat.js";
 import { getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
 
-type ProviderName = "nanogpt" | "chutes" | "openrouter";
+type ProviderName = "nanogpt" | "chutes" | "openrouter" | "cerebras";
+type Opponent = "greedy" | "random" | "mix";
+type SweepMode = "smoke" | "full" | "both";
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -51,6 +55,11 @@ function nowStampPacific(): string {
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
+}
+
+function looksLikeReasoningModelId(modelId: string): boolean {
+  const m = modelId.toLowerCase();
+  return m.includes(":thinking") || m.includes("thinking") || m.includes("reasoning") || m.includes("deepseek-r1") || m.includes("deepseek_r1");
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -134,6 +143,22 @@ function pickOssCandidates(
   return ordered.slice(0, max);
 }
 
+function parseCsvList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function parseBoolFlag(value: string | undefined, defaultValue: boolean): boolean {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return defaultValue;
+  if (raw === "true" || raw === "1" || raw === "yes" || raw === "on") return true;
+  if (raw === "false" || raw === "0" || raw === "no" || raw === "off") return false;
+  throw new Error(`invalid boolean flag value '${value}' (expected true|false)`);
+}
+
 type ModelRunSummary = {
   provider: ProviderName;
   baseUrl: string;
@@ -187,8 +212,11 @@ async function runAgentMatch(params: {
   keysFilePath: string;
   modelsConfigPath: string;
   model: string;
+  opponent: Opponent;
+  mixGreedyProb: number;
   useTools: boolean;
   promptMode?: string;
+  reasoningEffort?: string;
   temperature: string;
   maxTokens: string;
   timeoutMs: string;
@@ -197,6 +225,7 @@ async function runAgentMatch(params: {
   seed: number;
   turnCapPlies: number;
   outReplayPath?: string;
+  stopAfterErrors: number;
 }): Promise<ModelRunSummary> {
   const scenario = structuredClone(params.baseScenario);
   scenario.settings.turnCapPlies = params.turnCapPlies;
@@ -214,9 +243,19 @@ async function runAgentMatch(params: {
   args.set("--max-tokens", params.maxTokens);
   args.set("--use-tools", params.useTools ? "true" : "false");
   if (params.promptMode) args.set("--prompt-mode", params.promptMode);
+  if (params.reasoningEffort) args.set("--reasoning-effort", params.reasoningEffort);
 
   const agentPlayer: PlayerId = "P1";
-  const random = new RandomBot({ seed: params.seed + 202, adjacency, scenario });
+  const opponentSeed = params.seed + 202;
+  const opponentController: Controller =
+    params.opponent === "random"
+      ? new RandomBot({ seed: opponentSeed, adjacency, scenario })
+      : params.opponent === "mix"
+        ? new MixBot({ seed: opponentSeed, adjacency, scenario, greedyProb: params.mixGreedyProb })
+        : new GreedyBot({ adjacency, scenario });
+
+  let errorTurns = 0;
+  let earlyStopTriggered = false;
 
   const controllers: Record<PlayerId, Controller> = {
     P1: {
@@ -244,18 +283,24 @@ async function runAgentMatch(params: {
           return { actions: out.response.actions, rationaleText: out.response.rationale_text };
         } catch (e) {
           const err = e instanceof Error ? e.message : String(e);
+          errorTurns += 1;
+          if (!earlyStopTriggered && params.stopAfterErrors > 0 && errorTurns >= params.stopAfterErrors) {
+            const nextPly = observation.ply + 1;
+            scenario.settings.turnCapPlies = Math.min(scenario.settings.turnCapPlies ?? nextPly, nextPly);
+            earlyStopTriggered = true;
+          }
           return { actions: [{ type: "pass" }], rationaleText: `openai_compat failed: ${err}` };
         }
       },
     },
-    P2: random,
+    P2: opponentController,
   };
 
   const replay = await runMatch({ ctx, controllers, seed: params.seed });
 
   replay.players = {
     P1: { kind: "agent", provider: params.provider, baseUrl: params.baseUrl, model: params.model, modelMode: "explicit" },
-    P2: { kind: "random" },
+    P2: params.opponent === "mix" ? { kind: "mix", greedyProb: params.mixGreedyProb } : { kind: params.opponent },
   };
 
   if (params.outReplayPath) {
@@ -280,25 +325,44 @@ async function runAgentMatch(params: {
 
 async function main() {
   const args = parseArgs(process.argv);
+  const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
   const keysFilePath = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const keys = parseKeysFile(await (await import("node:fs/promises")).readFile(keysFilePath, "utf8"));
 
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const outRoot = args.get("--out-dir") ?? path.join("runs", "model_sweeps", nowStampPacific());
+  const replaysDir = args.get("--replays-dir") ?? "replays";
   const baseScenario = await loadScenarioFromFile(scenarioPath);
   const adjacency = createAdjacency(baseScenario);
 
   const providersRaw = (args.get("--providers") ?? "nanogpt,chutes").split(",").map((s) => s.trim()).filter(Boolean);
-  const providers = providersRaw.filter((p): p is ProviderName => ["nanogpt", "chutes", "openrouter"].includes(p));
+  const providers = providersRaw.filter((p): p is ProviderName => ["nanogpt", "chutes", "openrouter", "cerebras"].includes(p));
+
+  const modeRaw = (args.get("--mode") ?? "both").toLowerCase();
+  if (!["both", "smoke", "full"].includes(modeRaw)) throw new Error("--mode must be both|smoke|full");
+  const mode = modeRaw as SweepMode;
+  const runSmoke = mode !== "full";
+  const runFull = mode !== "smoke";
+
+  const opponentRaw = (args.get("--opponent") ?? "greedy").toLowerCase();
+  if (!["greedy", "random", "mix"].includes(opponentRaw)) throw new Error("--opponent must be greedy|mix|random");
+  const opponent = opponentRaw as Opponent;
+  const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
 
   const maxModels = Number.parseInt(args.get("--max-models") ?? "30", 10);
   const smokeTurnCap = Number.parseInt(args.get("--smoke-turn-cap") ?? "10", 10);
-  const fullTurnCap = Number.parseInt(args.get("--full-turn-cap") ?? "60", 10);
+  const fullTurnCap = Number.parseInt(args.get("--full-turn-cap") ?? "30", 10);
   const fullSeed = Number.parseInt(args.get("--full-seed") ?? "3", 10);
   const smokeSeedStart = Number.parseInt(args.get("--smoke-seed-start") ?? "1000", 10);
+  const stopAfterErrors = Number.parseInt(args.get("--stop-after-errors") ?? "1", 10);
+  const excludeModels = new Set(parseCsvList(args.get("--exclude-models")));
+  const reasoningEffort = args.get("--reasoning-effort") ?? undefined;
+  const reasoningEffortLowModels = new Set(parseCsvList(args.get("--reasoning-effort-low-models")));
+  const onlyReasoning = parseBoolFlag(args.get("--only-reasoning"), false);
+  const preferReasoning = parseBoolFlag(args.get("--prefer-reasoning"), false);
 
-  const timeoutMs = args.get("--timeout-ms") ?? "60000";
-  const maxTokens = args.get("--max-tokens") ?? "180";
+  const timeoutMsArg = args.get("--timeout-ms") ?? undefined;
+  const maxTokensArg = args.get("--max-tokens") ?? undefined;
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;
   const modelsConfigPath = args.get("--models-config") ?? "configs/oss_models.json";
@@ -309,12 +373,21 @@ async function main() {
   if (!Number.isInteger(fullTurnCap) || fullTurnCap < 2) throw new Error("--full-turn-cap must be >=2");
   if (!Number.isInteger(fullSeed) || fullSeed < 0) throw new Error("--full-seed must be >=0");
   if (!Number.isInteger(smokeSeedStart) || smokeSeedStart < 0) throw new Error("--smoke-seed-start must be >=0");
+  if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
+  if (!Number.isInteger(stopAfterErrors) || stopAfterErrors < 0 || stopAfterErrors > 30) throw new Error("--stop-after-errors must be in [0,30]");
+  if ((smokeTurnCap > 30 || fullTurnCap > 30) && !unsafeAllowLong) {
+    throw new Error("Policy: --smoke-turn-cap/--full-turn-cap must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+  }
 
   await mkdir(outRoot, { recursive: true });
 
   const runSummary: any = {
     startedAt: new Date().toISOString(),
     scenarioPath,
+    mode,
+    replaysDir,
+    opponent: opponent === "mix" ? { kind: "mix", greedyProb: mixGreedyProb } : { kind: opponent },
+    stopAfterErrors,
     smoke: { turnCapPlies: smokeTurnCap, seedStart: smokeSeedStart },
     full: { turnCapPlies: fullTurnCap, seed: fullSeed },
     providers: {},
@@ -331,7 +404,8 @@ async function main() {
     const baseUrl =
       (provider === "chutes" ? "https://llm.chutes.ai/v1" : "") ||
       keys.get(baseUrlKey) ||
-      (provider === "openrouter" ? "https://openrouter.ai/api/v1" : "");
+      (provider === "openrouter" ? "https://openrouter.ai/api/v1" : "") ||
+      (provider === "cerebras" ? "https://api.cerebras.ai/v1" : "");
     if (!baseUrl) {
       console.log(`SKIP provider=${provider} (no baseUrl; expected ${baseUrlKey} in ${keysFilePath} or default)`);
       continue;
@@ -349,7 +423,16 @@ async function main() {
     }
 
     const { deny, denyPrefixes } = getProviderAllowlist(modelsConfig, provider);
-    const candidates = pickOssCandidates(provider, ids, maxModels, deny, denyPrefixes);
+    let candidates = pickOssCandidates(provider, ids, maxModels + excludeModels.size + 50, deny, denyPrefixes).filter((m) => !excludeModels.has(m));
+    if (onlyReasoning) candidates = candidates.filter((m) => looksLikeReasoningModelId(m));
+    if (preferReasoning) {
+      candidates = candidates.slice().sort((a, b) => {
+        const ar = looksLikeReasoningModelId(a) ? 0 : 1;
+        const br = looksLikeReasoningModelId(b) ? 0 : 1;
+        return ar - br || a.localeCompare(b);
+      });
+    }
+    candidates = candidates.slice(0, maxModels);
     const providerOutDir = path.join(outRoot, provider);
     await mkdir(providerOutDir, { recursive: true });
     await writeFile(path.join(providerOutDir, "models.txt"), candidates.join("\n") + "\n", "utf8");
@@ -361,50 +444,72 @@ async function main() {
       const smokeSeed = smokeSeedStart + i;
       const useTools = provider !== "chutes"; // chutes appears less compatible with tools
 
-      const smokeReplayPath = path.join("replays", `${path.basename(scenarioPath, ".json")}_seed${smokeSeed}_${provider}_${encodeURIComponent(model)}_smoke.json`);
-      const smoke = await runAgentMatch({
-        provider,
-        baseUrl,
-        keysFilePath,
-        modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
-        model,
-        useTools,
-        promptMode,
-        temperature,
-        maxTokens,
-        timeoutMs,
-        baseScenario,
-        adjacency,
-        seed: smokeSeed,
-        turnCapPlies: smokeTurnCap,
-        outReplayPath: smokeReplayPath,
-      });
+      const timeoutMs = timeoutMsArg ?? "70000";
+      const maxTokens = maxTokensArg ?? (looksLikeReasoningModelId(model) ? "600" : "180");
 
-      const smokeOk = smoke.providerErrorTurns === 0 && (smoke.agentMoveActions + smoke.agentReinforceActions > 0);
-      console.log(
-        `smoke ${provider} model=${model} ok=${smokeOk} providerErrors=${smoke.providerErrorTurns} passTurns=${smoke.agentPassTurns} moves=${smoke.agentMoveActions} caps=${smoke.agentCaptures}`,
-      );
+      let smoke: ModelRunSummary | undefined;
+      if (runSmoke) {
+        const smokeReplayPath = path.join(
+          replaysDir,
+          `${path.basename(scenarioPath, ".json")}_seed${smokeSeed}_${provider}_${encodeURIComponent(model)}_smoke.json`,
+        );
+        smoke = await runAgentMatch({
+          provider,
+          baseUrl,
+          keysFilePath,
+          modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
+          model,
+          opponent,
+          mixGreedyProb,
+          useTools,
+          promptMode,
+          reasoningEffort: reasoningEffortLowModels.has(model) ? "low" : reasoningEffort,
+          temperature,
+          maxTokens,
+          timeoutMs,
+          baseScenario,
+          adjacency,
+          seed: smokeSeed,
+          turnCapPlies: smokeTurnCap,
+          outReplayPath: smokeReplayPath,
+          stopAfterErrors,
+        });
+      }
+
+      const smokeOk = smoke ? smoke.providerErrorTurns === 0 && smoke.agentMoveActions + smoke.agentReinforceActions > 0 : true;
+      if (smoke) {
+        console.log(
+          `smoke ${provider} model=${model} ok=${smokeOk} providerErrors=${smoke.providerErrorTurns} passTurns=${smoke.agentPassTurns} moves=${smoke.agentMoveActions} caps=${smoke.agentCaptures}`,
+        );
+      }
 
       const entry: any = { model, smoke, smokeOk };
 
-      if (smokeOk) {
-        const fullReplayPath = path.join("replays", `${path.basename(scenarioPath, ".json")}_seed${fullSeed}_${provider}_${encodeURIComponent(model)}_full.json`);
-      const full = await runAgentMatch({
-        provider,
-        baseUrl,
-        keysFilePath,
-        modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
-        model,
-        useTools,
-        promptMode,
-        temperature,
-        maxTokens,
-        timeoutMs,
-        baseScenario,
+      if (runFull && smokeOk) {
+        const fullReplayPath = path.join(
+          replaysDir,
+          `${path.basename(scenarioPath, ".json")}_seed${fullSeed}_${provider}_${encodeURIComponent(model)}_full.json`,
+        );
+        const full = await runAgentMatch({
+          provider,
+          baseUrl,
+          keysFilePath,
+          modelsConfigPath: args.get("--models-config") ?? "configs/oss_models.json",
+          model,
+          opponent,
+          mixGreedyProb,
+          useTools,
+          promptMode,
+          reasoningEffort: reasoningEffortLowModels.has(model) ? "low" : reasoningEffort,
+          temperature,
+          maxTokens,
+          timeoutMs,
+          baseScenario,
           adjacency,
           seed: fullSeed,
           turnCapPlies: fullTurnCap,
           outReplayPath: fullReplayPath,
+          stopAfterErrors,
         });
         full.phase = "full";
         entry.full = full;

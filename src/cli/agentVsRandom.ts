@@ -101,6 +101,11 @@ function slugify(value: string): string {
     .slice(0, 120);
 }
 
+function looksLikeReasoningModelId(modelId: string): boolean {
+  const m = modelId.toLowerCase();
+  return m.includes(":thinking") || m.includes("thinking") || m.includes("reasoning") || m.includes("deepseek-r1") || m.includes("deepseek_r1");
+}
+
 function percentile(sortedAsc: number[], p: number): number | null {
   if (sortedAsc.length === 0) return null;
   const clamped = Math.min(1, Math.max(0, p));
@@ -119,34 +124,44 @@ function summarizeLatencies(latencies: number[]) {
 async function main() {
   const args = parseArgs(process.argv);
 
+  const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
+  const unsafeAllowMany = (args.get("--unsafe-allow-many") ?? "false").toLowerCase() === "true";
+
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const start = Number.parseInt(args.get("--start") ?? "1", 10);
   const count = Number.parseInt(args.get("--count") ?? "5", 10);
   const agentSide = (args.get("--agent-side") ?? "P1") as PlayerId;
-  const opponent = (args.get("--opponent") ?? "random") as OpponentName;
+  const opponent = (args.get("--opponent") ?? "greedy") as OpponentName;
   const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const providerName = args.get("--provider-name") ?? "nanogpt";
-  const baseUrl = args.get("--base-url") ?? undefined; // optional; keys-file may contain it
+  const baseUrl =
+    args.get("--base-url") ??
+    (providerName === "chutes" ? "https://llm.chutes.ai/v1" : undefined) ??
+    (providerName === "openrouter" ? "https://openrouter.ai/api/v1" : undefined) ??
+    (providerName === "cerebras" ? "https://api.cerebras.ai/v1" : undefined) ??
+    undefined; // optional; keys-file may contain it
   const providerKey = providerName.toLowerCase();
   const modelArg = args.get("--model");
   const model = modelArg ?? (providerKey === "openrouter" ? "x-ai/grok-4.1-fast" : "auto");
-  const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_models.json";
-  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
-  const saveReplays = args.get("--save-replays") === "true";
+  const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_baselines.json";
+  // Keep a buffer over the agent server's upstream timeout (so we don't abort right as it responds).
+  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "95000", 10);
+  const saveReplaysRaw = (args.get("--save-replays") ?? "true").toLowerCase();
+  let saveReplays = saveReplaysRaw !== "false";
+  if (!saveReplays) {
+    console.log("WARN --save-replays=false ignored (always saving replays).");
+    saveReplays = true;
+  }
   const outDir = args.get("--out-dir") ?? "replays";
   const liveOut = args.get("--live-out") ?? undefined;
-  const turnCapOverrideRaw = args.get("--turn-cap-plies");
-  const turnCapPliesOverride = turnCapOverrideRaw
-    ? Number.parseInt(turnCapOverrideRaw, 10)
-    : opponent === "mix"
-      ? 30
-      : undefined;
+  const turnCapOverrideRaw = args.get("--turn-cap-plies") ?? "30";
+  const turnCapPliesOverride = Number.parseInt(turnCapOverrideRaw, 10);
   const tag = args.get("--tag") ?? `${providerName}_${model}`;
   const tagSlug = slugify(tag);
 
-  const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
-  const maxTokens = args.get("--max-tokens") ?? "200";
+  const openAiTimeoutMs = args.get("--timeout-ms") ?? "70000";
+  const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;
 
@@ -159,12 +174,16 @@ async function main() {
   if (providerKey === "openrouter" && model === "auto") {
     throw new Error("--model auto is not supported for OpenRouter; omit --model to default to x-ai/grok-4.1-fast, or pass --model <id>");
   }
-  if (turnCapPliesOverride !== undefined) {
-    if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
+  if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
+  if (turnCapPliesOverride > 30 && !unsafeAllowLong) {
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+  }
+  if (count > 5 && !unsafeAllowMany) {
+    throw new Error("Policy: --count must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
   }
 
   const scenario = await loadScenarioFromFile(scenarioPath);
-  if (turnCapPliesOverride !== undefined) scenario.settings.turnCapPlies = turnCapPliesOverride;
+  scenario.settings.turnCapPlies = turnCapPliesOverride;
   const adjacency = createAdjacency(scenario);
   const ctx = { scenario, adjacency };
 
@@ -322,8 +341,10 @@ async function main() {
       else if (replay.result.winner === agentSide) stats.results.agentWins += 1;
       else stats.results.opponentWins += 1;
 
+      const telemetryAll = agentController.telemetry.map((t) => t.latencyMs);
       const telemetryOk = agentController.telemetry.filter((t) => !t.error).map((t) => t.latencyMs);
-      const latency = summarizeLatencies(telemetryOk);
+      const latAll = summarizeLatencies(telemetryAll);
+      const latOk = summarizeLatencies(telemetryOk);
       const agentErrors = agentController.telemetry.filter((t) => !!t.error).length;
 
       const gameRow = {
@@ -336,12 +357,14 @@ async function main() {
         agentPassTurns: summary.agentPassTurns,
         providerErrorTurns: summary.providerErrorTurns,
         agentErrorTurns: agentErrors,
-        avgLatencyOkMs: latency.avg,
-        p95LatencyOkMs: latency.p95,
+        avgLatencyMs: latAll.avg,
+        p95LatencyMs: latAll.p95,
+        avgLatencyOkMs: latOk.avg,
+        p95LatencyOkMs: latOk.p95,
       };
 
       console.log(
-        `game: provider=${providerName} model=${model} opponent=${opponent} seed=${seed} result=${gameRow.result} plies=${summary.plies} passTurns=${summary.agentPassTurns} errors=${agentErrors} providerErrors=${summary.providerErrorTurns} avgLatencyOkMs=${latency.avg ?? "—"} p95LatencyOkMs=${latency.p95 ?? "—"}`,
+        `game: provider=${providerName} model=${model} opponent=${opponent} seed=${seed} result=${gameRow.result} plies=${summary.plies} passTurns=${summary.agentPassTurns} errors=${agentErrors} providerErrors=${summary.providerErrorTurns} avgLatencyMs=${latAll.avg ?? "—"} p95LatencyMs=${latAll.p95 ?? "—"} avgLatencyOkMs=${latOk.avg ?? "—"} p95LatencyOkMs=${latOk.p95 ?? "—"}`,
       );
 
       if (liveOut) {

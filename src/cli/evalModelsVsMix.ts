@@ -8,7 +8,7 @@ import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { MixBot } from "../controllers/mixBot.js";
 import { GreedyBot } from "../controllers/greedyBot.js";
-import { fetchOpenAiCompatModelIds } from "../llm/models.js";
+import { fetchOpenAiCompatModelIds, getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 
@@ -93,6 +93,11 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 160);
+}
+
+function looksLikeReasoningModelId(modelId: string): boolean {
+  const m = modelId.toLowerCase();
+  return m.includes(":thinking") || m.includes("thinking") || m.includes("reasoning") || m.includes("deepseek-r1") || m.includes("deepseek_r1");
 }
 
 function percentile(sortedAsc: number[], p: number): number | null {
@@ -323,8 +328,10 @@ async function evalOneModel(params: {
       const providerErrors = agentTurns.filter((t) => (t.rationaleText ?? "").includes("server: openai_compat error")).length;
       providerErrorTurnsTotal += providerErrors;
 
+      const telemetryAll = agentController.telemetry.map((t) => t.latencyMs);
+      const tStatsAll = summarizeAgentTelemetry(telemetryAll);
       const telemetryOk = agentController.telemetry.filter((t) => !t.error).map((t) => t.latencyMs);
-      const tStats = summarizeAgentTelemetry(telemetryOk);
+      const tStatsOk = summarizeAgentTelemetry(telemetryOk);
       const agentErrors = agentController.telemetry.filter((t) => !!t.error).length;
       const resultShort = replay.result.type === "draw" ? "draw" : replay.result.winner === "P1" ? "win" : "loss";
       const gameRow = {
@@ -341,11 +348,13 @@ async function evalOneModel(params: {
         stopAfterErrors: stopAfterErrors || undefined,
         errorTurns: stopAfterErrors ? errorTurns : undefined,
         earlyStop: stopAfterErrors ? earlyStopTriggered : undefined,
-        avgLatencyOkMs: tStats.avg,
-        p95LatencyOkMs: tStats.p95,
+        avgLatencyMs: tStatsAll.avg,
+        p95LatencyMs: tStatsAll.p95,
+        avgLatencyOkMs: tStatsOk.avg,
+        p95LatencyOkMs: tStatsOk.p95,
       };
       console.log(
-        `game: provider=${String(params.providerName)} model=${params.model} opponent=${params.opponent} seed=${seed} result=${resultShort} plies=${plies} agentTurns=${agentTurns.length} passTurns=${agentPassTurns} errors=${agentErrors} providerErrors=${providerErrors} avgLatencyOkMs=${tStats.avg ?? "—"} p95LatencyOkMs=${tStats.p95 ?? "—"}${
+        `game: provider=${String(params.providerName)} model=${params.model} opponent=${params.opponent} seed=${seed} result=${resultShort} plies=${plies} agentTurns=${agentTurns.length} passTurns=${agentPassTurns} errors=${agentErrors} providerErrors=${providerErrors} avgLatencyMs=${tStatsAll.avg ?? "—"} p95LatencyMs=${tStatsAll.p95 ?? "—"} avgLatencyOkMs=${tStatsOk.avg ?? "—"} p95LatencyOkMs=${tStatsOk.p95 ?? "—"}${
           stopAfterErrors ? ` errorTurns=${errorTurns}${earlyStopTriggered ? " earlyStop=true" : ""}` : ""
         }`,
       );
@@ -403,14 +412,18 @@ async function evalOneModel(params: {
 async function main() {
   const args = parseArgs(process.argv);
 
+  const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
+  const unsafeAllowMany = (args.get("--unsafe-allow-many") ?? "false").toLowerCase() === "true";
+
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const providerName: ProviderName = args.get("--provider-name") ?? "nanogpt";
   const baseUrl =
     args.get("--base-url") ??
     (providerName === "chutes" ? "https://llm.chutes.ai/v1" : undefined) ??
-    (providerName === "openrouter" ? "https://openrouter.ai/api/v1" : undefined);
-  const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_models.json";
+    (providerName === "openrouter" ? "https://openrouter.ai/api/v1" : undefined) ??
+    (providerName === "cerebras" ? "https://api.cerebras.ai/v1" : undefined);
+  const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_baselines.json";
 
   const seedStart = Number.parseInt(args.get("--seed-start") ?? args.get("--seed") ?? "3", 10);
   const games = Number.parseInt(args.get("--games") ?? args.get("--trials") ?? "3", 10);
@@ -421,10 +434,11 @@ async function main() {
   if (opponentRaw !== "mix" && opponentRaw !== "greedy") throw new Error("--opponent must be mix|greedy");
   const opponent = opponentRaw as Opponent;
   const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
-  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "60000", 10);
+  // Keep a small buffer over the agent server's typical upstream timeout (so we don't abort right as it responds).
+  const agentTimeoutMs = Number.parseInt(args.get("--agent-timeout-ms") ?? "95000", 10);
 
-  const openAiTimeoutMs = args.get("--timeout-ms") ?? "60000";
-  const maxTokens = args.get("--max-tokens") ?? "200";
+  const openAiTimeoutMsArg = args.get("--timeout-ms");
+  const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const useToolsDefault = providerName !== "chutes";
   const useToolsRaw = (args.get("--use-tools") ?? (useToolsDefault ? "true" : "false")).toLowerCase();
@@ -434,7 +448,11 @@ async function main() {
   const stopAfterErrors = Number.parseInt(stopAfterErrorsRaw, 10);
 
   const saveReplaysRaw = (args.get("--save-replays") ?? "true").toLowerCase();
-  const saveReplays = saveReplaysRaw !== "false";
+  let saveReplays = saveReplaysRaw !== "false";
+  if (!saveReplays) {
+    console.log("WARN --save-replays=false ignored (always saving replays).");
+    saveReplays = true;
+  }
   const replaysDirArg = args.get("--replays-dir");
   const agentLogDir = args.get("--agent-log-dir") ?? undefined;
   const serverLogDir = args.get("--server-log-dir") ?? undefined;
@@ -458,13 +476,36 @@ async function main() {
     models = models.length > 0 ? models : fromFile;
   }
 
-  if (models.length === 0) throw new Error("Provide --models a,b,c or --models-file path/to/models.txt");
+  if (models.length === 0) {
+    try {
+      const cfg = await loadOssModelsConfig(modelsConfig);
+      const { priority } = getProviderAllowlist(cfg, String(providerName));
+      const picked = priority.slice(0, 3);
+      if (picked.length > 0) {
+        models = picked;
+        console.log(`No --models provided; defaulting to baselines from ${modelsConfig}: ${models.join(",")}`);
+      }
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      console.log(`WARN failed to load baselines from ${modelsConfig}: ${err.split("\n")[0]}`);
+    }
+  }
+
+  if (models.length === 0) {
+    throw new Error("Provide --models a,b,c or --models-file path/to/models.txt (or set --models-config to a config with provider priority baselines)");
+  }
   if (!Number.isInteger(seedStart) || seedStart < 0) throw new Error("--seed-start/--seed must be an integer >= 0");
   if (!Number.isInteger(games) || games < 1 || games > 50) throw new Error("--games/--trials must be an integer in [1,50]");
   if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be >=1");
   if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
   if (!Number.isInteger(stopAfterErrors) || stopAfterErrors < 0 || stopAfterErrors > 100) {
     throw new Error("--stop-after-errors must be an integer in [0, 100]");
+  }
+  if (turnCapPlies > 30 && !unsafeAllowLong) {
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+  }
+  if (games > 5 && !unsafeAllowMany) {
+    throw new Error("Policy: --games/--trials must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
   }
 
   let seeds: number[] = [];
@@ -477,6 +518,9 @@ async function main() {
     if (seeds.some((s) => !Number.isInteger(s) || s < 0)) throw new Error("--seeds must be a comma-separated list of integers >=0");
   } else {
     seeds = Array.from({ length: games }, (_, i) => seedStart + i);
+  }
+  if (seeds.length > 5 && !unsafeAllowMany) {
+    throw new Error("Policy: number of seeds/games must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
   }
 
   const scenario = await loadScenarioFromFile(scenarioPath);
@@ -528,7 +572,7 @@ async function main() {
         opponent,
         mixGreedyProb,
         agentTimeoutMs,
-        openAiTimeoutMs,
+        openAiTimeoutMs: openAiTimeoutMsArg ?? "70000",
         maxTokens,
         temperature,
         useTools,
@@ -537,7 +581,7 @@ async function main() {
         reasoningEffort,
         promptMode,
         stopAfterErrors,
-        saveReplays,
+        saveReplays: true,
         replaysDir,
         liveOut,
         agentLogDir,

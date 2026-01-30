@@ -134,6 +134,8 @@ function sanitizeActionsAgainstObservation(params: {
   const budget = Math.max(0, params.budget);
   const obs: any = req.observation ?? {};
   const nodes: Record<string, any> = obs.nodes ?? {};
+  const nodeIdByLower = new Map<string, string>();
+  for (const id of Object.keys(nodes)) nodeIdByLower.set(id.toLowerCase(), id);
   const forcesRemaining: Record<string, number> = {};
   for (const [nodeId, node] of Object.entries(nodes)) {
     const f = node?.forces?.[req.player];
@@ -168,9 +170,13 @@ function sanitizeActionsAgainstObservation(params: {
     }
 
     if (a.type === "move") {
-      const from = (a as any).from;
-      const to = (a as any).to;
-      if (typeof from !== "string" || typeof to !== "string") continue;
+      const fromRaw = (a as any).from;
+      const toRaw = (a as any).to;
+      if (typeof fromRaw !== "string" || typeof toRaw !== "string") continue;
+      const fromTrimmed = fromRaw.trim();
+      const toTrimmed = toRaw.trim();
+      const from = nodeIdByLower.get(fromTrimmed.toLowerCase()) ?? fromTrimmed;
+      const to = nodeIdByLower.get(toTrimmed.toLowerCase()) ?? toTrimmed;
       if (!(adjacency[from] ?? []).includes(to)) continue;
       if (!nodes[from] || !nodes[to]) continue;
 

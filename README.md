@@ -21,12 +21,12 @@ Start here (in order):
 
 ## Quickstart (run + watch)
 - Install deps: `npm install`
-- Run a match (writes JSON under `replays/`): `npm run match -- --seed 1 --p1 greedy --p2 random`
-- Intermediate bot (mix of greedy + random): `npm run match -- --seed 1 --p1 mix --p2 random --mix-greedy-prob 0.5`
+- Run a match (writes JSON under `replays/`): `npm run match -- --seed 1 --p1 greedy --p2 greedy`
+- Intermediate bot (mix of greedy + random): `npm run match -- --seed 1 --p1 mix --p2 greedy --mix-greedy-prob 0.5`
 - Validate replay: `npm run validate:replay -- replays/<file>.json`
-- Check determinism (same seed/actions ⇒ same replay, ignoring `createdAt`): `npm run check:determinism -- --seed 1 --p1 greedy --p2 random`
-- Batch run (quick win/draw rate glance): `npm run batch -- --start 1 --count 20 --p1 greedy --p2 greedy`
-- Batch report (more metrics): `npm run report -- --start 1 --count 50 --p1 greedy --p2 greedy --format text`
+- Check determinism (same seed/actions ⇒ same replay, ignoring `createdAt`): `npm run check:determinism -- --seed 1 --p1 greedy --p2 greedy`
+- Batch run (quick win/draw rate glance): `npm run batch -- --start 1 --count 5 --p1 greedy --p2 greedy`
+- Batch report (more metrics): `npm run report -- --start 1 --count 5 --p1 greedy --p2 greedy --format text`
 - Open the viewer: `viewer/index.html` and load the replay file via file picker (or drag/drop).
 
 ## Agent integration (HTTP)
@@ -37,7 +37,7 @@ The match runner can call an external agent over HTTP (`POST /act`) per `docs/pl
 - Run a match vs the agent:
   - `npm run match -- --seed 1 --p1 greedy --p2 agent --agent-url http://127.0.0.1:8787`
   - Optional: log raw request/response per ply under `runs/`: add `--agent-log-dir runs/agent_io`
-  - If using a real LLM and you see timeouts, increase the client timeout: add `--agent-timeout-ms 60000` (default is 60000).
+  - If using a real LLM and you see timeouts, increase the client timeout: add `--agent-timeout-ms 70000` (default is 70000).
 
 The replay viewer shows controller/model metadata (when present) in the **Players** panel.
 
@@ -50,15 +50,17 @@ Example (OpenRouter):
 - `npm run agent:server -- --provider openai_compat --provider-name openrouter --base-url https://openrouter.ai/api/v1`
   - Defaults to `x-ai/grok-4.1-fast`; override with `--model <model_id>`
 
-### OSS-only model allowlist (priority from TML-bench)
-ASG includes an OSS allowlist at `configs/oss_models.json` (priority ordered; derived from TML-bench).
+### OSS model auto-pick (baselines + sweeps)
+ASG supports `--model auto` for OpenAI-compatible OSS providers. There are two configs:
+- `configs/oss_baselines.json` — small, stable baseline set (recommended default for day-to-day runs)
+- `configs/oss_models.json` — broader allowlist/priority list (derived from TML-bench; useful for sweeps)
 
-- Auto-pick the first available priority model (Chutes):
-  - `npm run agent:server -- --provider openai_compat --provider-name chutes --base-url https://llm.chutes.ai/v1 --keys-file /path/to/provider_apis.txt --model auto --models-config configs/oss_models.json`
-- Auto-pick the first available priority model (NanoGPT):
-  - `npm run agent:server -- --provider openai_compat --provider-name nanogpt --keys-file /path/to/provider_apis.txt --model auto --models-config configs/oss_models.json`
+- Auto-pick a baseline model (Chutes):
+  - `npm run agent:server -- --provider openai_compat --provider-name chutes --base-url https://llm.chutes.ai/v1 --keys-file /path/to/provider_apis.txt --model auto --models-config configs/oss_baselines.json`
+- Auto-pick a baseline model (NanoGPT):
+  - `npm run agent:server -- --provider openai_compat --provider-name nanogpt --keys-file /path/to/provider_apis.txt --model auto --models-config configs/oss_baselines.json`
 
-Tip: set `ASG_MODELS_CONFIG=configs/oss_models.json` to avoid passing `--models-config` each time.
+Tip: set `ASG_MODELS_CONFIG=configs/oss_baselines.json` to avoid passing `--models-config` each time.
 
 Quick smoke test (1 LLM decision only): add `--turn-cap-plies 2` to `npm run match ...`.
 
@@ -71,8 +73,12 @@ Runs Grok (`x-ai/grok-4.1-fast`) vs `greedy` and always saves replays (hard cap:
 - `npm run eval:grok-vs-greedy`
 
 ### Debug: summarize agent I/O logs (local)
-Summarizes `runs/agent_io/` into per-match counts: pass turns, timeouts, HTTP errors, parse errors, and latency percentiles:
+Summarizes `runs/agent_io/` into per-match counts: pass turns, provider-error turns (from rationale), timeouts, HTTP/parse errors, and latency percentiles:
 - `npm run analyze:agent-io -- --dir runs/agent_io --limit 20`
+
+### Debug: OSS leaderboard from JSONL
+Aggregates `runs/live/*.jsonl` into a per-provider/model table (sorted by win rate, then reliability):
+- `npm run oss:rank -- --dir runs/live --format text --limit 30`
 
 List models from a provider (requires provider access; some endpoints need an API key):
 - `npm run agent:list-models -- --provider openrouter --base-url https://openrouter.ai/api/v1 --format text --limit 50`

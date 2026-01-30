@@ -1,3 +1,4 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createAdjacency } from "../game/scenario.js";
 import { runMatch } from "../game/match.js";
@@ -35,18 +36,34 @@ function controllerFromName(params: {
   return new GreedyBot({ adjacency: params.adjacency, scenario: params.scenario });
 }
 
+function nowStamp(): string {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const scenarioPath = path.resolve(args.get("--scenario") ?? "scenarios/scenario_01.json");
   const p1 = (args.get("--p1") ?? "greedy") as ControllerName;
-  const p2 = (args.get("--p2") ?? "random") as ControllerName;
+  const p2 = (args.get("--p2") ?? "greedy") as ControllerName;
   const start = Number.parseInt(args.get("--start") ?? "1", 10);
-  const count = Number.parseInt(args.get("--count") ?? "20", 10);
+  const count = Number.parseInt(args.get("--count") ?? "5", 10);
+  const turnCapPlies = Number.parseInt(args.get("--turn-cap-plies") ?? "30", 10);
+  const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
+  const unsafeAllowMany = (args.get("--unsafe-allow-many") ?? "false").toLowerCase() === "true";
+  const outDir = args.get("--out-dir") ?? path.join("replays", "batch", nowStamp());
 
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");
   if (!Number.isInteger(count) || count < 1 || count > 500) throw new Error("--count must be an integer in [1, 500]");
+  if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
+  if (turnCapPlies > 30 && !unsafeAllowLong) {
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+  }
+  if (count > 5 && !unsafeAllowMany) {
+    throw new Error("Policy: --count must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
+  }
 
   const scenario = await loadScenarioFromFile(scenarioPath);
+  scenario.settings.turnCapPlies = turnCapPlies;
   const adjacency = createAdjacency(scenario);
   const ctx = { scenario, adjacency };
 
@@ -74,10 +91,14 @@ async function main() {
     else if (replay.result.winner === "P1") stats.results.p1Wins += 1;
     else stats.results.p2Wins += 1;
 
+    const outFile = path.join(outDir, `${replay.scenario.id}_seed${seed}_${p1}_vs_${p2}.json`);
+    await mkdir(path.dirname(outFile), { recursive: true });
+    await writeFile(outFile, JSON.stringify(replay, null, 2), "utf8");
+
     console.log(
       `seed=${seed} plies=${replay.turns.length} result=${
         replay.result.type === "draw" ? "DRAW" : `WIN_${replay.result.winner}`
-      }`,
+      } replay=${outFile}`,
     );
   }
 
@@ -91,4 +112,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-
