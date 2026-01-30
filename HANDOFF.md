@@ -20,6 +20,7 @@ These are the current recommended OSS baselines for ongoing testing (stable/low 
 Smoke (1 game each vs GreedyBot, seed=3):
 - Chutes: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
 - NanoGPT: `npm run agent:eval-vs-mix -- --provider-name nanogpt --opponent greedy --models-file configs/oss_baselines_nanogpt.txt --games 1 --seed 3`
+- Cerebras: `npm run agent:eval-vs-mix -- --provider-name cerebras --opponent greedy --models-file configs/cerebras_models.txt --base-url https://api.cerebras.ai/v1 --games 1 --seed 3`
 
 ## Known-good models (fallback shortlist)
 If provider/model availability changes, these OpenRouter models have recently worked well end-to-end in this repo:

@@ -11,7 +11,7 @@ import type { PlayerId, Replay } from "../game/types.js";
 import { openAiCompatAct } from "../providers/openaiCompat.js";
 import { getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
 
-type ProviderName = "nanogpt" | "chutes" | "openrouter";
+type ProviderName = "nanogpt" | "chutes" | "openrouter" | "cerebras";
 type Opponent = "greedy" | "random" | "mix";
 type SweepMode = "smoke" | "full" | "both";
 
@@ -336,7 +336,7 @@ async function main() {
   const adjacency = createAdjacency(baseScenario);
 
   const providersRaw = (args.get("--providers") ?? "nanogpt,chutes").split(",").map((s) => s.trim()).filter(Boolean);
-  const providers = providersRaw.filter((p): p is ProviderName => ["nanogpt", "chutes", "openrouter"].includes(p));
+  const providers = providersRaw.filter((p): p is ProviderName => ["nanogpt", "chutes", "openrouter", "cerebras"].includes(p));
 
   const modeRaw = (args.get("--mode") ?? "both").toLowerCase();
   if (!["both", "smoke", "full"].includes(modeRaw)) throw new Error("--mode must be both|smoke|full");
@@ -404,7 +404,8 @@ async function main() {
     const baseUrl =
       (provider === "chutes" ? "https://llm.chutes.ai/v1" : "") ||
       keys.get(baseUrlKey) ||
-      (provider === "openrouter" ? "https://openrouter.ai/api/v1" : "");
+      (provider === "openrouter" ? "https://openrouter.ai/api/v1" : "") ||
+      (provider === "cerebras" ? "https://api.cerebras.ai/v1" : "");
     if (!baseUrl) {
       console.log(`SKIP provider=${provider} (no baseUrl; expected ${baseUrlKey} in ${keysFilePath} or default)`);
       continue;

@@ -60,7 +60,13 @@ async function main() {
   const providerKeyName = (args.get("--keys-name") ?? providerName).toLowerCase();
   const providerBaseUrlName = (args.get("--base-url-name") ?? `${providerName}_base_url`).toLowerCase();
 
-  const baseUrl = args.get("--base-url") ?? getEnv(`ASG_${providerName.toUpperCase()}_BASE_URL`) ?? getEnv("ASG_OPENAI_BASE_URL") ?? "";
+  const cerebrasDefaultBaseUrl = providerName.toLowerCase() === "cerebras" ? "https://api.cerebras.ai/v1" : undefined;
+  const baseUrl =
+    args.get("--base-url") ??
+    getEnv(`ASG_${providerName.toUpperCase()}_BASE_URL`) ??
+    cerebrasDefaultBaseUrl ??
+    getEnv("ASG_OPENAI_BASE_URL") ??
+    "";
   const apiKey =
     args.get("--api-key") ??
     (args.get("--api-key-env") ? getEnv(args.get("--api-key-env")!) : undefined) ??

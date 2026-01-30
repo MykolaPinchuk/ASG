@@ -639,6 +639,8 @@ function parseIncludeReasoning(params: { args: ProviderArgs; provider: string })
   if (raw === "auto" || raw === "") {
     // Keep OpenRouter behavior stable unless explicitly configured.
     if (params.provider === "openrouter") return null;
+    // Cerebras rejects the include_reasoning field entirely (even when false).
+    if (params.provider === "cerebras") return null;
     // Default OFF elsewhere: reasoning output often consumes the whole output budget and prevents the final JSON/tool call.
     return false;
   }
@@ -1235,25 +1237,25 @@ export async function openAiCompatAct(params: {
       msg.toLowerCase().includes("timeout");
 
     const rejectsReasoningEffort =
-      msg.startsWith("HTTP 400") &&
+      (msg.startsWith("HTTP 400") || msg.startsWith("HTTP 422")) &&
       (msg.toLowerCase().includes("reasoning_effort") ||
         msg.toLowerCase().includes("unknown field") ||
         msg.toLowerCase().includes("unrecognized") ||
         msg.toLowerCase().includes("invalid") && msg.toLowerCase().includes("reasoning"));
 
     const rejectsResponseFormat =
-      msg.startsWith("HTTP 400") &&
+      (msg.startsWith("HTTP 400") || msg.startsWith("HTTP 422")) &&
       (msg.toLowerCase().includes("response_format") ||
         msg.toLowerCase().includes("response_mime_type") ||
         msg.toLowerCase().includes("json_object"));
 
     const rejectsIncludeReasoning =
-      msg.startsWith("HTTP 400") &&
+      (msg.startsWith("HTTP 400") || msg.startsWith("HTTP 422")) &&
       (msg.toLowerCase().includes("include_reasoning") ||
         msg.toLowerCase().includes("include-reasoning"));
 
     const wantsToolsOff =
-      msg.includes("HTTP 400") &&
+      (msg.includes("HTTP 400") || msg.includes("HTTP 422")) &&
       (msg.toLowerCase().includes("forced function calling") ||
         msg.toLowerCase().includes("function_calling_config") ||
         msg.toLowerCase().includes("tool_config") ||

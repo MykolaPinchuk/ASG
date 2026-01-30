@@ -135,7 +135,12 @@ async function main() {
   const mixGreedyProb = Number.parseFloat(args.get("--mix-greedy-prob") ?? "0.5");
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const providerName = args.get("--provider-name") ?? "nanogpt";
-  const baseUrl = args.get("--base-url") ?? undefined; // optional; keys-file may contain it
+  const baseUrl =
+    args.get("--base-url") ??
+    (providerName === "chutes" ? "https://llm.chutes.ai/v1" : undefined) ??
+    (providerName === "openrouter" ? "https://openrouter.ai/api/v1" : undefined) ??
+    (providerName === "cerebras" ? "https://api.cerebras.ai/v1" : undefined) ??
+    undefined; // optional; keys-file may contain it
   const providerKey = providerName.toLowerCase();
   const modelArg = args.get("--model");
   const model = modelArg ?? (providerKey === "openrouter" ? "x-ai/grok-4.1-fast" : "auto");

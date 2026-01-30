@@ -421,7 +421,8 @@ async function main() {
   const baseUrl =
     args.get("--base-url") ??
     (providerName === "chutes" ? "https://llm.chutes.ai/v1" : undefined) ??
-    (providerName === "openrouter" ? "https://openrouter.ai/api/v1" : undefined);
+    (providerName === "openrouter" ? "https://openrouter.ai/api/v1" : undefined) ??
+    (providerName === "cerebras" ? "https://api.cerebras.ai/v1" : undefined);
   const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_baselines.json";
 
   const seedStart = Number.parseInt(args.get("--seed-start") ?? args.get("--seed") ?? "3", 10);
