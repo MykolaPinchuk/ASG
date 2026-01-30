@@ -164,6 +164,15 @@ async function main() {
   const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;
+  const agentLogDir = args.get("--agent-log-dir") ?? "runs/agent_io";
+
+  const serverMemory = args.get("--memory") ?? undefined;
+  const serverMemoryMaxChars = args.get("--memory-max-chars") ?? undefined;
+  const serverWarmup = args.get("--warmup") ?? undefined;
+  const serverWarmupTimeoutMs = args.get("--warmup-timeout-ms") ?? undefined;
+  const serverWarmupMaxTokens = args.get("--warmup-max-tokens") ?? undefined;
+  const serverRepair = args.get("--repair") ?? undefined;
+  const serverRepairMaxRounds = args.get("--repair-max-rounds") ?? undefined;
 
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");
   if (!Number.isInteger(count) || count < 1 || count > 200) throw new Error("--count must be an integer in [1, 200]");
@@ -212,6 +221,13 @@ async function main() {
     "--temperature",
     temperature,
   ];
+  if (serverMemory) serverArgs.push("--memory", serverMemory);
+  if (serverMemoryMaxChars) serverArgs.push("--memory-max-chars", serverMemoryMaxChars);
+  if (serverWarmup) serverArgs.push("--warmup", serverWarmup);
+  if (serverWarmupTimeoutMs) serverArgs.push("--warmup-timeout-ms", serverWarmupTimeoutMs);
+  if (serverWarmupMaxTokens) serverArgs.push("--warmup-max-tokens", serverWarmupMaxTokens);
+  if (serverRepair) serverArgs.push("--repair", serverRepair);
+  if (serverRepairMaxRounds) serverArgs.push("--repair-max-rounds", serverRepairMaxRounds);
   if (promptMode) serverArgs.push("--prompt-mode", promptMode);
   if (baseUrl) serverArgs.push("--base-url", baseUrl);
 
@@ -285,7 +301,7 @@ async function main() {
         actionBudget: scenario.settings.actionBudget,
         timeoutMs: agentTimeoutMs,
         maxResponseBytes: 256_000,
-        logDir: "runs/agent_io",
+        logDir: agentLogDir,
       });
 
       const opponentSeed = seed + (agentSide === "P1" ? 202 : 101);
