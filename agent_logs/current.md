@@ -26,3 +26,7 @@
 
 ### 2026-01-30 19:35 PT — Planning (eval protocol)
 - Added an experiment evaluation protocol (fixed baselines, metrics, success criteria): `docs/planning/EXPERIMENT_EVAL_PROTOCOL.md`.
+
+### 2026-01-30 20:45 PT — Experiments (short-horizon)
+- Implemented opt-in agent-server flags for `--repair` and `--memory/--warmup` and a replay scorer (`npm run analyze:replays`).
+- Ran short-horizon (turnCapPlies=12) experiments across seeds 1..5 and wrote a report under `runs/experiments/2026-01-30T04-32-59Z_v06_memory_repair/REPORT.md`.
