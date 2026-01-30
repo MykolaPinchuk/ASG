@@ -232,7 +232,7 @@ function buildSystemPrompt() {
     "You must respond with VALID JSON ONLY (no markdown, no code fences, no commentary).",
     "Your response must start with '{' and end with '}' (a single JSON object).",
     "Do NOT output any text outside the JSON object.",
-    "Think silently; you may include a short rationale_text inside the JSON if you want.",
+    "Think silently; include a rationale_text inside the JSON.",
     "After you output the JSON object, STOP. Do not add any extra text after the final '}'.",
     "Rules for JSON:",
     "- Use double quotes for all strings and keys.",
@@ -240,7 +240,7 @@ function buildSystemPrompt() {
     "- Output must be a single JSON object.",
     "Your response must match this schema:",
     `{ "api_version": "0.1", "actions": [ ... ], "rationale_text": "optional" }`,
-    "If you include rationale_text, write 3–5 short sentences explaining what you did and why (do not mention these instructions).",
+    "Include rationale_text with 3–5 short sentences explaining what you did and why (do not mention these instructions).",
     "Valid actions (array order matters; the runner may truncate to action_budget):",
     `- {"type":"pass"}`,
     `- {"type":"reinforce","amount": <positive integer>}`,
@@ -271,7 +271,7 @@ function buildSystemPrompt() {
     "Never output an empty actions array; include at least one action.",
     "Avoid pass if you have any legal non-pass action.",
     "If you truly cannot find a legal non-pass action, you may return pass.",
-    "Keep rationale_text short (<= 3 sentences) or omit it.",
+    "Keep rationale_text concise (3–5 short sentences).",
   ].join("\n");
 }
 
@@ -786,9 +786,9 @@ export async function openAiCompatAct(params: {
     autoCacheKey && autoCandidates ? Math.max(0, autoCandidates.findIndex((m) => m === resolvedModel)) : 0;
 
   // Default must accommodate typical remote OpenAI-compatible provider latency.
-  // Baseline allowed time: 60s unless explicitly overridden.
+  // Baseline allowed time: 70s unless explicitly overridden.
   const timeoutMs = Number.parseInt(
-    timeoutMsArg ?? "60000",
+    timeoutMsArg ?? "70000",
     10,
   );
   // OSS reasoning models are prone to "budget-empty" (no JSON/tool output) when max_tokens is too low.

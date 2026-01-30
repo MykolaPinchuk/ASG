@@ -51,8 +51,8 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Viewer that can load replay JSONs and shows timeline + events + agent rationale, with a Players panel showing agent provider/model when present:
   - `viewer/index.html`
   - Evidence: `96a05b8` (`agent01: checkpoint(viewer): show agent model`), `f1cf8fa` (`agent01: checkpoint(viewer): add in-app explanations + event highlighting`)
-- Viewer now shows per-ply agent latency when present:
-  - `viewer/index.html` reads `turn.latencyMs` (optional)
+- Viewer now shows per-ply agent latency (required for eval runs; do not regress it):
+  - `viewer/index.html` reads `turn.latencyMs`
 - HTTP agent controller + agent server:
   - Controller: `src/controllers/httpAgentController.ts`
   - Server: `src/cli/agentServer.ts` (providers: `stub`, `openai_compat`)

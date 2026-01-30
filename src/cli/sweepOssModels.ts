@@ -443,7 +443,7 @@ async function main() {
       const smokeSeed = smokeSeedStart + i;
       const useTools = provider !== "chutes"; // chutes appears less compatible with tools
 
-      const timeoutMs = timeoutMsArg ?? (looksLikeReasoningModelId(model) ? "80000" : "60000");
+      const timeoutMs = timeoutMsArg ?? "70000";
       const maxTokens = maxTokensArg ?? (looksLikeReasoningModelId(model) ? "600" : "180");
 
       let smoke: ModelRunSummary | undefined;

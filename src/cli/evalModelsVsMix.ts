@@ -571,7 +571,7 @@ async function main() {
         opponent,
         mixGreedyProb,
         agentTimeoutMs,
-        openAiTimeoutMs: openAiTimeoutMsArg ?? (looksLikeReasoningModelId(model) ? "80000" : "60000"),
+        openAiTimeoutMs: openAiTimeoutMsArg ?? "70000",
         maxTokens,
         temperature,
         useTools,

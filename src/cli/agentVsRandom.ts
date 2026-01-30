@@ -155,7 +155,7 @@ async function main() {
   const tag = args.get("--tag") ?? `${providerName}_${model}`;
   const tagSlug = slugify(tag);
 
-  const openAiTimeoutMs = args.get("--timeout-ms") ?? (looksLikeReasoningModelId(model) ? "80000" : "60000");
+  const openAiTimeoutMs = args.get("--timeout-ms") ?? "70000";
   const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;
