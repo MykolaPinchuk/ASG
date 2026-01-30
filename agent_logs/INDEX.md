@@ -11,3 +11,4 @@ Format:
 - 2026-01-27_agent03.md — OSS `openai_compat` reliability improvements + fairness (mechanics-only) reruns; diagnostics writeup
 - 2026-01-28_agent04.md — short-horizon OSS evals + replay/latency instrumentation hardening
 - 2026-01-30_agent05.md — Cerebras provider setup + focus-20 shortlist + timeout/prompt policy updates
+- 2026-01-30_agent06.md — v06: eval protocol + repair/warmup/memory experiments + diagnostics writeup

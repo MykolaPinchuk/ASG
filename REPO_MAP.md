@@ -17,6 +17,7 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.
 - `docs/planning/ROADMAP.md` — post-MVP direction.
 - `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md` — OSS provider debugging notes (failure modes + tests).
+- `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md` — results writeup for repair loop + warmup/memory experiments.
 - `docs/focus20_models.md` — focus shortlist of 20 models vs MixBot (configs + stats snapshot).
 - `viewer/index.html` — replay viewer (load `replays/*.json`).
 - `scenarios/scenario_01.json` — initial scenario data.
@@ -50,6 +51,7 @@ Keep this file short. Update it only when something important changes.
 
 ## Utility scripts
 - `src/cli/reportBatch.ts` — batch metrics report (`npm run report`).
+- `src/cli/analyzeReplays.ts` — summarize replay folders + paired A/B deltas (`npm run analyze:replays`).
 
 ## Local-only directories (ignored)
 - `secrets/` — local credentials (see `secrets/README.md`).

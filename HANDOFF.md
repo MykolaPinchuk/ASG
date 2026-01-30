@@ -11,6 +11,7 @@ Latest focus:
 - Snapshot OSS and paid model performance vs MixBot (30 plies), with strict replay + latency persistence.
 - Add Cerebras as an OpenAI-compatible provider and begin evaluating `gpt-oss-120b` variants.
 - Maintain a focus shortlist of 20 models: `docs/focus20_models.md`.
+- v06: experiment scaffolding + evaluation protocol for agent behavior interventions (repair loop, warmup/memory), with results recorded in diagnostics (see below).
 
 ## OSS baselines (default for testing)
 These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):
@@ -63,6 +64,8 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - Evidence: `96a05b8` (`agent01: checkpoint(viewer): show agent model`), `f1cf8fa` (`agent01: checkpoint(viewer): add in-app explanations + event highlighting`)
 - Viewer now shows per-ply agent latency (required for eval runs; do not regress it):
   - `viewer/index.html` reads `turn.latencyMs`
+- Viewer now shows per-ply quick badges derived from replay diagnostics (PASS / INVALID_ACTION / ERROR / FALLBACK):
+  - Evidence: `592ccad` (`agent06: checkpoint(runner): replay diagnostics + v06 guardrails`)
 - HTTP agent controller + agent server:
   - Controller: `src/controllers/httpAgentController.ts`
   - Server: `src/cli/agentServer.ts` (providers: `stub`, `openai_compat`)
@@ -73,6 +76,13 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Mechanics-only prompt policy for fairness (remove strategy-like hints):
   - `src/providers/openaiCompat.ts`
   - Evidence: `cd39e17` (`agent03: checkpoint(runner): remove strategic guidance from prompts`), `e35fd22` (`agent03: checkpoint(runner): clarify sequential mechanics wording`)
+- v06 experiment tooling + analysis helpers (all opt-in; baseline unchanged unless flags are passed):
+  - `src/cli/agentServer.ts` flags: `--repair`, `--memory`, `--warmup` (plus related caps)
+  - `src/cli/analyzeReplays.ts` (`npm run analyze:replays`)
+  - Evidence: `46c6b72` (`agent06: checkpoint(runner): warmup/memory + repair loop flags`)
+- Results writeup for those experiments:
+  - `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`
+  - Evidence: `b4fe8e7` (`agent06: checkpoint(docs): document warmup/memory + repair results`)
 - OSS model allowlist/priority list (derived from TML-bench) + model listing:
   - `configs/oss_models.json`, `src/llm/models.ts`, `npm run agent:list-models`
   - Evidence: `f6daf7a` (`agent01: checkpoint(misc): OSS allowlist + model auto`)
@@ -105,9 +115,9 @@ When making harness changes, keep the paid regression check stable and cost-capp
    - Add a small tuning sweep tool and promote tuned defaults into scenario settings.
 2) Improve viewer “debug speed”:
    - Add a match summary panel (captures, pass/error counts, latency stats).
-   - Add per-turn badges for `pass` / `invalid_action` / provider errors.
+   - Add per-turn badges for `pass` / `invalid_action` / provider errors. (Done; see `592ccad`.)
 3) Improve agent observability in replays:
-   - Persist additional per-turn diagnostics (e.g., http status / error string) so failures are visible in the viewer without opening logs.
+   - Persist additional per-turn diagnostics (e.g., http status / error string) so failures are visible in the viewer without opening logs. (Done; see `592ccad`.)
 4) Continue `openai_compat` robustness work (no strategic fallback):
    - Focus on “thinking-only / no final JSON” behavior for some providers/models.
 
@@ -132,6 +142,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - Validate replay JSON: `npm run validate:replay -- replays/<replay>.json`
   - View replay: open `viewer/index.html` (file picker) and select the replay JSON.
   - Agent vs Random (requires `secrets/provider_apis.txt`): `npm run agent:vs-random -- --provider-name nanogpt --model auto --count 3 --start 1 --save-replays true`
+  - Summarize a replay folder (paired A/B supported): `npm run analyze:replays -- --dir runs/<some_run>/replays`
   - OSS baselines (Chutes) vs GreedyBot: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
   - OSS sweep (can take a while; requires provider keys): `npm run agent:sweep-oss -- --providers nanogpt,chutes --max-models 30 --full-seed 3 --full-turn-cap 30`
 
@@ -140,6 +151,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Some models produce malformed JSON/tool output; `openai_compat` retries once but can still fail and fall back to `pass`.
 - Important: earlier “big win-rate” OSS results were shown to be driven by prompt strategy hints; after removing hints, re-runs produced 0 wins in the same one-ply micro-sweep setup (see `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`).
 - Some providers/models emit the primary text in `message.reasoning` and may omit `message.content`; `openai_compat` has best-effort parsing for this but is not universally reliable (notably for `zai-glm-4.7` on Cerebras).
+- v06 experiments (repair loop / warmup + memory) are currently not recommended as defaults; keep them opt-in. See `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`.
 
 ## Git notes (handoff)
 - Intentionally uncommitted local-only data:
