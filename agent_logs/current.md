@@ -20,3 +20,9 @@
 
 ### 2026-01-30 19:10 PT — Branching
 - Confirmed `v05` was merged to `origin/master` (merge commit `6a2c3fc`); created local `v06` from `origin/master` for continued development.
+
+### 2026-01-30 19:25 PT — Planning (v06)
+- Wrote an experiments backlog focused on improving agent rule-following/strategy without hardcoded prompt “reminders”: `docs/planning/V06_EXPERIMENTS.md`.
+
+### 2026-01-30 19:35 PT — Planning (eval protocol)
+- Added an experiment evaluation protocol (fixed baselines, metrics, success criteria): `docs/planning/EXPERIMENT_EVAL_PROTOCOL.md`.

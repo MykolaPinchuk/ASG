@@ -111,6 +111,9 @@ When making harness changes, keep the paid regression check stable and cost-capp
 4) Continue `openai_compat` robustness work (no strategic fallback):
    - Focus on “thinking-only / no final JSON” behavior for some providers/models.
 
+### v0.6 Experiments backlog
+- See `docs/planning/V06_EXPERIMENTS.md` (warmup step + memory, validator-guided repair loop, and other optional experiments).
+
 ### Agent05 suggestions (next experiments)
 1) Confirm whether Cerebras `gpt-oss-120b` strength is repeatable (not a one-off):
    - Run 3+ seeds with the known-good “safe” config and compare `--reasoning-effort low|medium|high`.

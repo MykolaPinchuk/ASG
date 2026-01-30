@@ -12,6 +12,8 @@ Keep this file short. Update it only when something important changes.
 - `README.md` — repo overview and agent start points.
 - `agent_logs/current.md` — live execution log for this cycle.
 - `docs/planning/MVP_SPEC.md` — normative MVP rules/spec (source of truth).
+- `docs/planning/EXPERIMENT_EVAL_PROTOCOL.md` — how to run comparable experiment A/Bs (baselines, metrics, success criteria).
+- `docs/planning/V06_EXPERIMENTS.md` — v06 backlog of agent-improvement experiments (warmup/memory/repair loops).
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.
 - `docs/planning/ROADMAP.md` — post-MVP direction.
 - `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md` — OSS provider debugging notes (failure modes + tests).
