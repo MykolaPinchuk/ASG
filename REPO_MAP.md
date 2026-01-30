@@ -15,6 +15,7 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.
 - `docs/planning/ROADMAP.md` — post-MVP direction.
 - `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md` — OSS provider debugging notes (failure modes + tests).
+- `docs/focus20_models.md` — focus shortlist of 20 models vs MixBot (configs + stats snapshot).
 - `viewer/index.html` — replay viewer (load `replays/*.json`).
 - `scenarios/scenario_01.json` — initial scenario data.
 - `schemas/replay.schema.json` — replay JSON schema.
@@ -39,6 +40,7 @@ Keep this file short. Update it only when something important changes.
 
 ## Model tooling
 - `configs/oss_models.json` — OSS model allowlist / priority list (derived from TML-bench).
+- `configs/cerebras_models.txt` — Cerebras `/models` snapshot (for `npm run agent:eval-vs-mix` / `agent:list-models`).
 - `src/llm/models.ts` — shared OSS allowlist + OpenAI-compatible `/models` helpers.
 - `src/cli/listModels.ts` — `npm run agent:list-models`.
 - `src/cli/agentVsRandom.ts` — `npm run agent:vs-random` (eval harness; spawns `agent:server`).

@@ -7,6 +7,11 @@ Branching:
 - `master` is now the default branch.
 - Ongoing work should land on `v05` (pre-v1 hardening).
 
+Latest focus:
+- Snapshot OSS and paid model performance vs MixBot (30 plies), with strict replay + latency persistence.
+- Add Cerebras as an OpenAI-compatible provider and begin evaluating `gpt-oss-120b` variants.
+- Maintain a focus shortlist of 20 models: `docs/focus20_models.md`.
+
 ## OSS baselines (default for testing)
 These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):
 - Chutes:
@@ -16,6 +21,8 @@ These are the current recommended OSS baselines for ongoing testing (stable/low 
 - NanoGPT:
   - `deepseek/deepseek-v3.2`
   - `mistralai/devstral-2-123b-instruct-2512`
+- Cerebras (requires provider key):
+  - `gpt-oss-120b` (see `configs/cerebras_models.txt`)
 
 Smoke (1 game each vs GreedyBot, seed=3):
 - Chutes: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
@@ -30,6 +37,8 @@ Notes:
 - `openai/gpt-5-mini` is currently unreliable in this harness (frequent empty/partial outputs leading to passes).
 - OpenRouter now defaults to `x-ai/grok-4.1-fast` when `--model` is omitted.
 - Recent OpenRouter runs showed `google/gemini-2.5-flash` and `google/gemini-3-flash-preview` producing mostly `pass` actions vs `GreedyBot` (losses), so they are not currently a recommended fallback.
+- Cerebras rejects `include_reasoning` (even when `false`), so `openai_compat` omits it for provider `cerebras`.
+- Cerebras `gpt-oss-120b` can be extremely strong, but is sensitive to request shape; a known-good config is: `--reasoning-effort high --max-tokens 8000 --stream off --tools-mode off --use-tools false`.
 
 ## Regression spec (paid)
 When making harness changes, keep the paid regression check stable and cost-capped:
@@ -75,6 +84,14 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - Model eval vs MixBot/GreedyBot (prints per-game metrics + optional JSONL live log): `npm run agent:eval-vs-mix` (`src/cli/evalModelsVsMix.ts`)
   - OSS sweep (smoke + full seed run): `npm run agent:sweep-oss` (`src/cli/sweepOssModels.ts`)
   - Evidence: `479cae7` (`agent01: checkpoint(runner): add OSS model sweep`), `2089ade` (`agent01: checkpoint(runner): unique replays per model`)
+- Focus shortlist (20 models) with stats snapshot:
+  - `docs/focus20_models.md`
+  - Evidence: `5defea9` (`agent05: checkpoint(runner): cerebras provider + focus20`)
+- Cerebras provider support + model list:
+  - `configs/cerebras_models.txt`
+  - Evidence: `5defea9` (`agent05: checkpoint(runner): cerebras provider + focus20`)
+- Default upstream timeout now 70s while still advertising a 40s agent SLA in the prompt:
+  - Evidence: `d4f9bbe` (`agent05: checkpoint(runner): default timeout 70s (advertise 40s)`)
 - Local run outputs (gitignored) contain sweep + retest results:
   - `runs/model_sweeps/2026-01-26T04-05-58-850Z/summary.md`
   - `runs/model_retests/2026-01-26T05-13-32_seed5_rerun/seed5_results.json`
@@ -94,6 +111,15 @@ When making harness changes, keep the paid regression check stable and cost-capp
 4) Continue `openai_compat` robustness work (no strategic fallback):
    - Focus on “thinking-only / no final JSON” behavior for some providers/models.
 
+### Agent05 suggestions (next experiments)
+1) Confirm whether Cerebras `gpt-oss-120b` strength is repeatable (not a one-off):
+   - Run 3+ seeds with the known-good “safe” config and compare `--reasoning-effort low|medium|high`.
+   - Example: `npm run -s agent:eval-vs-mix -- --provider-name cerebras --models gpt-oss-120b --games 3 --seed 3 --turn-cap-plies 30 --stop-after-errors 1 --max-tokens 8000 --stream off --tools-mode off --use-tools false --reasoning-effort high`
+2) Promote “decision-grade” numbers for the top contenders:
+   - Pick ~5 best performers from `docs/focus20_models.md` and run 5 games each (still 30 plies) to estimate variance (win-rate, ok-turn-rate, latency).
+3) Make future analysis easier:
+   - Persist run config into replay metadata (e.g. `reasoning_effort`, `tools_mode`, `use_tools`, `stream`, `max_tokens`, `timeout_ms`) so we don’t have to infer configs from folder names (esp. important for Cerebras).
+
 ### Open questions
 - What “OSS-only” means per provider in practice (some providers mix OSS + closed models in `/models` lists; current allowlist approach is prefix-based + explicit config in `configs/oss_models.json`).
 
@@ -110,6 +136,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Provider flakiness: capacity/rate-limit errors can cause many agent passes (esp. some Chutes models); these are surfaced as `openai_compat failed: ...` in rationale.
 - Some models produce malformed JSON/tool output; `openai_compat` retries once but can still fail and fall back to `pass`.
 - Important: earlier “big win-rate” OSS results were shown to be driven by prompt strategy hints; after removing hints, re-runs produced 0 wins in the same one-ply micro-sweep setup (see `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`).
+- Some providers/models emit the primary text in `message.reasoning` and may omit `message.content`; `openai_compat` has best-effort parsing for this but is not universally reliable (notably for `zai-glm-4.7` on Cerebras).
 
 ## Git notes (handoff)
 - Intentionally uncommitted local-only data:
