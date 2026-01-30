@@ -30,3 +30,7 @@
 ### 2026-01-30 20:45 PT — Experiments (short-horizon)
 - Implemented opt-in agent-server flags for `--repair` and `--memory/--warmup` and a replay scorer (`npm run analyze:replays`).
 - Ran short-horizon (turnCapPlies=12) experiments across seeds 1..5 and wrote a report under `runs/experiments/2026-01-30T04-32-59Z_v06_memory_repair/REPORT.md`.
+
+### 2026-01-30 21:25 PT — Experiments (cohort search + cohorts 2/3)
+- Cohort2 (openrouter `meta-llama/llama-3-8b-instruct`, turnCapPlies=30, seeds 1..5): report `runs/experiments/2026-01-30T13-19-52Z_v06_memory_repair_cohort2/REPORT.md`.
+- Cohort3 (openrouter `qwen/qwen-2.5-7b-instruct`, turnCapPlies=30, seeds 1..5): report `runs/experiments/2026-01-30T13-42-17Z_v06_memory_repair_cohort3/REPORT.md`. This cohort had meaningful baseline invalid-action rate, so it is more diagnostic for repair/warmup experiments.
