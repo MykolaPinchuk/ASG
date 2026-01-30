@@ -5,7 +5,7 @@ MVP v0 is implemented end-to-end (engine → replays → viewer → agent server
 
 Branching:
 - `master` is now the default branch.
-- Ongoing work should land on `v05` (pre-v1 hardening).
+- Ongoing work should land on `v06` (pre-v1 hardening).
 
 Latest focus:
 - Snapshot OSS and paid model performance vs MixBot (30 plies), with strict replay + latency persistence.
@@ -49,7 +49,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Deterministic replays: same seed + same actions ⇒ identical outcomes.
 - No secrets or bulky artifacts in git (see `.gitignore`).
 - `IA_HANDOFF/` is an immutable snapshot (do not edit).
-- v0 / `v05` eval guardrails: default to `turnCapPlies<=30` and `games/count<=5` unless explicitly overridden (see `extra_instructions_v0.md`).
+- v0 / v0.x eval guardrails: default to `turnCapPlies<=30` and `games/count<=5` unless explicitly overridden (see `extra_instructions_v0.md`).
 
 ## State of work
 

@@ -502,10 +502,10 @@ async function main() {
     throw new Error("--stop-after-errors must be an integer in [0, 100]");
   }
   if (turnCapPlies > 30 && !unsafeAllowLong) {
-    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v0.x (pass --unsafe-allow-long true to override).");
   }
   if (games > 5 && !unsafeAllowMany) {
-    throw new Error("Policy: --games/--trials must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
+    throw new Error("Policy: --games/--trials must be <= 5 on v0/v0.x (pass --unsafe-allow-many true to override).");
   }
 
   let seeds: number[] = [];
@@ -520,7 +520,7 @@ async function main() {
     seeds = Array.from({ length: games }, (_, i) => seedStart + i);
   }
   if (seeds.length > 5 && !unsafeAllowMany) {
-    throw new Error("Policy: number of seeds/games must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
+    throw new Error("Policy: number of seeds/games must be <= 5 on v0/v0.x (pass --unsafe-allow-many true to override).");
   }
 
   const scenario = await loadScenarioFromFile(scenarioPath);

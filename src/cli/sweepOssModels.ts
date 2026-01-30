@@ -376,7 +376,7 @@ async function main() {
   if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
   if (!Number.isInteger(stopAfterErrors) || stopAfterErrors < 0 || stopAfterErrors > 30) throw new Error("--stop-after-errors must be in [0,30]");
   if ((smokeTurnCap > 30 || fullTurnCap > 30) && !unsafeAllowLong) {
-    throw new Error("Policy: --smoke-turn-cap/--full-turn-cap must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+    throw new Error("Policy: --smoke-turn-cap/--full-turn-cap must be <= 30 on v0/v0.x (pass --unsafe-allow-long true to override).");
   }
 
   await mkdir(outRoot, { recursive: true });

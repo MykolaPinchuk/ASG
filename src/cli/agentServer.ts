@@ -30,6 +30,12 @@ type AgentResponse = {
     model?: string;
     modelMode?: "auto" | "explicit";
   };
+  server_diagnostics?: {
+    provider: Provider;
+    upstreamStatus?: number;
+    upstreamError?: string;
+    usedFallback?: boolean;
+  };
 };
 
 type Scenario = {
@@ -484,6 +490,12 @@ async function main() {
       const prev = response.rationale_text ? `${response.rationale_text}; ` : "";
       response.rationale_text = `${prev}fallback=stub`;
     }
+    response.server_diagnostics = {
+      provider,
+      upstreamStatus,
+      upstreamError: error,
+      usedFallback: sanitized.usedFallback,
+    };
     if (response.api_version !== request.api_version) {
       response = { api_version: request.api_version, actions: [{ type: "pass" }], rationale_text: "server: api_version mismatch" };
     }

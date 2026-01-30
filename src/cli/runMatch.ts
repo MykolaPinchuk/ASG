@@ -94,7 +94,7 @@ async function main() {
   const scenario = await loadScenarioFromFile(scenarioPath);
   if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
   if (turnCapPliesOverride > 30 && !unsafeAllowLong) {
-    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v0.x (pass --unsafe-allow-long true to override).");
   }
   scenario.settings.turnCapPlies = turnCapPliesOverride;
   const adjacency = createAdjacency(scenario);
