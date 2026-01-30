@@ -30,6 +30,8 @@
     "oss:rank": "tsx src/cli/rankOssModels.ts"
     ,
     "analyze:replays": "tsx src/cli/analyzeReplays.ts"
+    ,
+    "perf:top20": "tsx src/cli/updatePerformanceTop20.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

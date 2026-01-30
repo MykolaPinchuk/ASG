@@ -159,6 +159,7 @@ async function evalOneModel(params: {
   temperature: string;
   useTools: boolean;
   toolsMode?: string;
+  stream?: string;
   thinkHint?: string;
   reasoningEffort?: string;
   promptMode?: string;
@@ -205,6 +206,7 @@ async function evalOneModel(params: {
   ];
   if (params.promptMode) serverArgs.push("--prompt-mode", params.promptMode);
   if (params.toolsMode) serverArgs.push("--tools-mode", params.toolsMode);
+  if (params.stream) serverArgs.push("--stream", params.stream);
   if (params.thinkHint) serverArgs.push("--think-hint", params.thinkHint);
   if (params.reasoningEffort) serverArgs.push("--reasoning-effort", params.reasoningEffort);
   if (params.baseUrl) serverArgs.push("--base-url", params.baseUrl);
@@ -458,6 +460,7 @@ async function main() {
   const serverLogDir = args.get("--server-log-dir") ?? undefined;
   const liveOut = args.get("--live-out") ?? undefined;
   const toolsMode = args.get("--tools-mode") ?? undefined;
+  const stream = args.get("--stream") ?? undefined;
   const thinkHint = args.get("--think-hint") ?? undefined;
   const reasoningEffort = args.get("--reasoning-effort") ?? undefined;
 
@@ -577,6 +580,7 @@ async function main() {
         temperature,
         useTools,
         toolsMode,
+        stream,
         thinkHint,
         reasoningEffort,
         promptMode,
@@ -647,6 +651,9 @@ async function main() {
           opponent,
           mixGreedyProb: opponent === "mix" ? mixGreedyProb : undefined,
           useTools,
+          toolsMode,
+          stream,
+          reasoningEffort,
           saveReplays,
           replaysDir,
           rows,

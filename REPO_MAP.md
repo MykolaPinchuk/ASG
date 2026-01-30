@@ -19,6 +19,7 @@ Keep this file short. Update it only when something important changes.
 - `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md` — OSS provider debugging notes (failure modes + tests).
 - `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md` — results writeup for repair loop + warmup/memory experiments.
 - `docs/focus20_models.md` — focus shortlist of 20 models vs MixBot (configs + stats snapshot).
+- `performance.md` — generated, up-to-date metrics for Focus-20 models (run `npm run -s perf:top20`).
 - `viewer/index.html` — replay viewer (load `replays/*.json`).
 - `scenarios/scenario_01.json` — initial scenario data.
 - `schemas/replay.schema.json` — replay JSON schema.
