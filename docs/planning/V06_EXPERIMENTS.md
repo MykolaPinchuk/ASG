@@ -107,3 +107,7 @@ Always record:
 Suggested test cohort:
 - Include at least one “error-prone but responsive” model/provider (not just the top performers), so improvements are measurable.
 - Keep horizons short by default (plies <= 30; games <= 5) unless explicitly overridden.
+
+## Results (2026-01-30)
+
+- Early results for repair loop + warmup/memory experiments are documented in `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`.
