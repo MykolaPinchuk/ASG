@@ -120,6 +120,7 @@ function inferOpponentKind(replay: Replay, agent: PlayerId): string | null {
 type GameMetrics = {
   seed: number;
   outcome: "WIN" | "LOSS" | "DRAW";
+  pliesTotal: number;
   agentTurns: number;
   passTurns: number;
   invalidTurns: number;
@@ -184,6 +185,7 @@ function metricsForReplay(replay: Replay, agentOverride?: PlayerId): { agent: Pl
     metrics: {
       seed: replay.seed,
       outcome,
+      pliesTotal: Array.isArray(replay.turns) ? replay.turns.length : 0,
       agentTurns: agentTurns.length,
       passTurns,
       invalidTurns,
@@ -214,9 +216,11 @@ type Summary = {
     timeToFirstCapturePlyAvg: number | null;
     supplyYieldEndAvg: number | null;
     supplyYieldAtPly10Avg: number | null;
+    winPliesAvg: number | null;
   };
   latency: {
     ply0AvgMs: number | null;
+    okAvgMs: number | null;
     okP50Ms: number | null;
     okP95Ms: number | null;
   };
@@ -255,11 +259,18 @@ function summarize(games: GameMetrics[]): Summary {
   const supply10 = games.map((g) => g.supplyYieldAtPly10).filter((x): x is number => typeof x === "number");
   const supplyYieldAtPly10Avg = supply10.length ? supply10.reduce((s, x) => s + x, 0) / supply10.length : null;
 
+  const winPlies = games
+    .filter((g) => g.outcome === "WIN")
+    .map((g) => g.pliesTotal)
+    .filter((x) => Number.isFinite(x) && x > 0);
+  const winPliesAvg = winPlies.length ? winPlies.reduce((s, x) => s + x, 0) / winPlies.length : null;
+
   const ply0 = games.map((g) => g.ply0LatencyMs).filter((x): x is number => typeof x === "number");
   const ply0AvgMs = ply0.length ? ply0.reduce((s, x) => s + x, 0) / ply0.length : null;
 
   const okLatAll = games.flatMap((g) => g.okLatenciesMs);
   okLatAll.sort((a, b) => a - b);
+  const okAvgMs = okLatAll.length ? okLatAll.reduce((s, x) => s + x, 0) / okLatAll.length : null;
   const okP50Ms = percentile(okLatAll, 0.5);
   const okP95Ms = percentile(okLatAll, 0.95);
 
@@ -272,8 +283,8 @@ function summarize(games: GameMetrics[]): Summary {
     games: games.length,
     outcomes,
     rates: { passTurnRate, invalidTurnRate, errorTurnRate, fallbackTurnRate, okTurnRate },
-    perGame: { capturesAvg, timeToFirstCapturePlyAvg, supplyYieldEndAvg, supplyYieldAtPly10Avg },
-    latency: { ply0AvgMs, okP50Ms, okP95Ms },
+    perGame: { capturesAvg, timeToFirstCapturePlyAvg, supplyYieldEndAvg, supplyYieldAtPly10Avg, winPliesAvg },
+    latency: { ply0AvgMs, okAvgMs, okP50Ms, okP95Ms },
     seeds,
   };
 }
@@ -369,6 +380,11 @@ function fmtWdl(o: Summary["outcomes"]): string {
   return `${o.win}-${o.draw}-${o.loss}`;
 }
 
+function winRate(summary: Summary): number | null {
+  if (summary.games === 0) return null;
+  return summary.outcomes.win / summary.games;
+}
+
 function fmtSeeds(seeds: Summary["seeds"]): string {
   if (seeds.length === 0) return "—";
   const parts = seeds.slice(0, 20).map((s) => `${s.seed}:${s.outcome[0]}`);
@@ -391,11 +407,32 @@ function nowPacificStamp(): string {
   return stamp.replace(",", "");
 }
 
+async function loadPinnedLeaderboard(filePath: string): Promise<Array<{ provider: string; model: string }> | null> {
+  try {
+    const text = await readFile(filePath, "utf8");
+    const rows: Array<{ provider: string; model: string }> = [];
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const parts = line.split("|").map((s) => s.trim());
+      if (parts.length < 2) continue;
+      const provider = parts[0] ?? "";
+      const model = parts[1] ?? "";
+      if (!provider || !model) continue;
+      rows.push({ provider, model });
+    }
+    return rows.length ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv);
 
   const focusFile = args.get("--focus-file") ?? "docs/focus20_models.md";
   const outFile = args.get("--out") ?? "performance.md";
+  const leaderboardFile = args.get("--leaderboard-file") ?? "configs/leaderboard_top6_models.txt";
   const roots = (args.get("--roots") ?? "replays,runs").split(",").map((s) => s.trim()).filter(Boolean);
   const maxPlies = Number.parseInt(args.get("--max-plies") ?? "30", 10);
   const maxFiles = Number.parseInt(args.get("--max-files") ?? "20000", 10);
@@ -495,14 +532,81 @@ async function main() {
 
   lines.push("## Summary (vs MixBot, plies <= 30)");
   lines.push("");
-  lines.push("| provider | model | games | W-D-L | win | ok turns | p95 ok latency (ms) | pass | invalid | error | fallback | captures/game |");
-  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+  lines.push("| provider | model | games | W-D-L | win | avg ok latency (ms) | avg plies to win | ok turns | pass | invalid | error | fallback | captures/game |");
+  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
 
   for (const { entry, mix } of byKey.values()) {
     const s = summarize(mix.games);
-    const win = s.games ? s.outcomes.win / s.games : null;
+    const win = winRate(s);
     lines.push(
-      `| ${entry.provider} | ${entry.model} | ${s.games} | ${fmtWdl(s.outcomes)} | ${fmtPct(win)} | ${fmtPct(s.rates.okTurnRate)} | ${fmtNum(s.latency.okP95Ms)} | ${fmtPct(s.rates.passTurnRate)} | ${fmtPct(s.rates.invalidTurnRate)} | ${fmtPct(s.rates.errorTurnRate)} | ${fmtPct(s.rates.fallbackTurnRate)} | ${fmtNum(s.perGame.capturesAvg)} |`,
+      `| ${entry.provider} | ${entry.model} | ${s.games} | ${fmtWdl(s.outcomes)} | ${fmtPct(win)} | ${fmtNum(s.latency.okAvgMs)} | ${fmtNum(s.perGame.winPliesAvg)} | ${fmtPct(s.rates.okTurnRate)} | ${fmtPct(s.rates.passTurnRate)} | ${fmtPct(s.rates.invalidTurnRate)} | ${fmtPct(s.rates.errorTurnRate)} | ${fmtPct(s.rates.fallbackTurnRate)} | ${fmtNum(s.perGame.capturesAvg)} |`,
+    );
+  }
+  lines.push("");
+
+  type LeaderRow = {
+    entry: FocusEntry;
+    summary: Summary;
+  };
+  const leaderRows: LeaderRow[] = [];
+  for (const { entry, mix } of byKey.values()) leaderRows.push({ entry, summary: summarize(mix.games) });
+
+  const pinned = await loadPinnedLeaderboard(leaderboardFile);
+  let top6: LeaderRow[] = [];
+  if (pinned) {
+    for (const p of pinned) {
+      const found =
+        leaderRows.find((r) => r.entry.provider === p.provider && r.entry.model === p.model) ??
+        leaderRows.find((r) => r.entry.provider.toLowerCase() === p.provider.toLowerCase() && r.entry.model.toLowerCase() === p.model.toLowerCase()) ??
+        null;
+      if (found) top6.push(found);
+    }
+    // If pinned list is shorter than 6 (or some rows missing), backfill with best remaining.
+    if (top6.length < 6) {
+      const already = new Set(top6.map((r) => `${r.entry.provider}||${r.entry.model}`.toLowerCase()));
+      const sorted = leaderRows
+        .filter((r) => !already.has(`${r.entry.provider}||${r.entry.model}`.toLowerCase()))
+        .slice()
+        .sort((a, b) => {
+          const aw = winRate(a.summary) ?? -1;
+          const bw = winRate(b.summary) ?? -1;
+          return (
+            bw - aw ||
+            b.summary.games - a.summary.games ||
+            (a.summary.latency.okAvgMs ?? 1e12) - (b.summary.latency.okAvgMs ?? 1e12) ||
+            a.entry.model.localeCompare(b.entry.model)
+          );
+        });
+      top6 = [...top6, ...sorted.slice(0, 6 - top6.length)];
+    }
+    top6 = top6.slice(0, 6);
+  } else {
+    const sorted = leaderRows
+      .slice()
+      .sort((a, b) => {
+        const aw = winRate(a.summary) ?? -1;
+        const bw = winRate(b.summary) ?? -1;
+        return (
+          bw - aw ||
+          b.summary.games - a.summary.games ||
+          (a.summary.latency.okAvgMs ?? 1e12) - (b.summary.latency.okAvgMs ?? 1e12) ||
+          a.entry.model.localeCompare(b.entry.model)
+        );
+      });
+    top6 = sorted.slice(0, 6);
+  }
+
+  lines.push(`## Leaderboard (Top 6, vs MixBot)`);
+  lines.push("");
+  lines.push("| rank | provider | model | config | games | W-D-L | win | avg ok latency (ms) | avg plies to win | ok turns |");
+  lines.push("|---:|---|---|---|---:|---:|---:|---:|---:|---:|");
+  for (let i = 0; i < top6.length; i++) {
+    const r = top6[i]!;
+    const s = r.summary;
+    lines.push(
+      `| ${i + 1} | ${r.entry.provider} | ${r.entry.model} | ${r.entry.config || ""} | ${s.games} | ${fmtWdl(s.outcomes)} | ${fmtPct(
+        winRate(s),
+      )} | ${fmtNum(s.latency.okAvgMs)} | ${fmtNum(s.perGame.winPliesAvg)} | ${fmtPct(s.rates.okTurnRate)} |`,
     );
   }
   lines.push("");
@@ -516,18 +620,26 @@ async function main() {
     if (!bucket) continue;
     const mixS = summarize(bucket.mix.games);
     const greedyS = summarize(bucket.greedy.games);
-    const mixWin = mixS.games ? mixS.outcomes.win / mixS.games : null;
-    const greedyWin = greedyS.games ? greedyS.outcomes.win / greedyS.games : null;
+    const mixWin = winRate(mixS);
+    const greedyWin = winRate(greedyS);
 
     lines.push(`### ${e.provider} / ${e.model}${e.config ? ` (${e.config})` : ""}`);
     lines.push("");
     if (e.why) lines.push(`- Focus: ${e.why}`);
-    lines.push(`- MixBot: games=${mixS.games} W-D-L=${fmtWdl(mixS.outcomes)} win=${fmtPct(mixWin)} okTurns=${fmtPct(mixS.rates.okTurnRate)} p50/p95OkLatencyMs=${fmtNum(mixS.latency.okP50Ms)}/${fmtNum(mixS.latency.okP95Ms)}`);
+    lines.push(
+      `- MixBot: games=${mixS.games} W-D-L=${fmtWdl(mixS.outcomes)} win=${fmtPct(mixWin)} avgOkLatencyMs=${fmtNum(mixS.latency.okAvgMs)} avgPliesToWin=${fmtNum(
+        mixS.perGame.winPliesAvg,
+      )} okTurns=${fmtPct(mixS.rates.okTurnRate)} p50/p95OkLatencyMs=${fmtNum(mixS.latency.okP50Ms)}/${fmtNum(mixS.latency.okP95Ms)}`,
+    );
     lines.push(`  - pass=${fmtPct(mixS.rates.passTurnRate)} invalid=${fmtPct(mixS.rates.invalidTurnRate)} error=${fmtPct(mixS.rates.errorTurnRate)} fallback=${fmtPct(mixS.rates.fallbackTurnRate)}`);
     lines.push(`  - captures/game=${fmtNum(mixS.perGame.capturesAvg)} ttfCaptureAvgPly=${fmtNum(mixS.perGame.timeToFirstCapturePlyAvg)} supplyYield@10=${fmtNum(mixS.perGame.supplyYieldAtPly10Avg)} supplyYieldEnd=${fmtNum(mixS.perGame.supplyYieldEndAvg)}`);
     lines.push(`  - seeds(outcome): ${fmtSeeds(mixS.seeds)}`);
     if (bucket.mix.sources.size > 0) lines.push(`  - sources: ${Array.from(bucket.mix.sources).slice(0, 6).map((s) => `\`${path.relative(process.cwd(), s)}\``).join(", ")}${bucket.mix.sources.size > 6 ? ", …" : ""}`);
-    lines.push(`- GreedyBot: games=${greedyS.games} W-D-L=${fmtWdl(greedyS.outcomes)} win=${fmtPct(greedyWin)} okTurns=${fmtPct(greedyS.rates.okTurnRate)} p50/p95OkLatencyMs=${fmtNum(greedyS.latency.okP50Ms)}/${fmtNum(greedyS.latency.okP95Ms)}`);
+    lines.push(
+      `- GreedyBot: games=${greedyS.games} W-D-L=${fmtWdl(greedyS.outcomes)} win=${fmtPct(greedyWin)} avgOkLatencyMs=${fmtNum(greedyS.latency.okAvgMs)} avgPliesToWin=${fmtNum(
+        greedyS.perGame.winPliesAvg,
+      )} okTurns=${fmtPct(greedyS.rates.okTurnRate)} p50/p95OkLatencyMs=${fmtNum(greedyS.latency.okP50Ms)}/${fmtNum(greedyS.latency.okP95Ms)}`,
+    );
     lines.push(`  - pass=${fmtPct(greedyS.rates.passTurnRate)} invalid=${fmtPct(greedyS.rates.invalidTurnRate)} error=${fmtPct(greedyS.rates.errorTurnRate)} fallback=${fmtPct(greedyS.rates.fallbackTurnRate)}`);
     lines.push(`  - captures/game=${fmtNum(greedyS.perGame.capturesAvg)} ttfCaptureAvgPly=${fmtNum(greedyS.perGame.timeToFirstCapturePlyAvg)} supplyYield@10=${fmtNum(greedyS.perGame.supplyYieldAtPly10Avg)} supplyYieldEnd=${fmtNum(greedyS.perGame.supplyYieldEndAvg)}`);
     lines.push(`  - seeds(outcome): ${fmtSeeds(greedyS.seeds)}`);

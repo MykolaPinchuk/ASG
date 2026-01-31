@@ -39,3 +39,11 @@
 - A/B vs MixBot on Chutes `Qwen/Qwen3-Next-80B-A3B-Instruct` (seeds 3..7, 30 plies):
   - Win rate unchanged (all draws); captures/game decreased; latency increased substantially.
   - Details: `docs/diagnostics/2026-01-30_self_consistency_engine_scoring.md`.
+
+### 2026-01-30 (PT) — Pinned Top-6 + 2-game refresh
+- Pinned Top-6 leaderboard list: `configs/leaderboard_top6_models.txt` (rendered in `performance.md`).
+- Ran 2 games (seeds 3,4; 30 plies) vs MixBot for each pinned model; replays under:
+  - `replays/model_evals/top6_2games_2026-01-31T00-41-39-071Z/`
+- Refreshed `performance.md` to include:
+  - `avg ok latency (ms)` (mean over ok agent turns)
+  - `avg plies to win` (mean match plies over wins only)

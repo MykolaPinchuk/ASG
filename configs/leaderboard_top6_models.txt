@@ -1,0 +1,9 @@
+# Pinned Top-6 leaderboard (provider|model)
+# Keep this short; these are the “current best” models we want at the top of performance.md.
+openrouter|x-ai/grok-4.1-fast
+chutes|tngtech/DeepSeek-R1T-Chimera
+chutes|deepseek-ai/DeepSeek-V3-0324-TEE
+chutes|openai/gpt-oss-120b-TEE
+nanogpt|deepseek-ai/DeepSeek-V3.1-Terminus
+cerebras|gpt-oss-120b
+
