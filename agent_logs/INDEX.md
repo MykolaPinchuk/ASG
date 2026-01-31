@@ -13,3 +13,4 @@ Format:
 - 2026-01-30_agent05.md — Cerebras provider setup + focus-20 shortlist + timeout/prompt policy updates
 - 2026-01-30_agent06.md — v06: eval protocol + repair/warmup/memory experiments + diagnostics writeup
 - 2026-01-31_agent07.md — v06: perf leaderboard + gpt-oss-120b provider sweep + baseline shortlist (commit e86bbc5)
+- 2026-01-31_agent08.md — v07 setup: complexity experiment plan + next-agent pointers
