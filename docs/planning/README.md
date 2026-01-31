@@ -15,6 +15,8 @@ This folder contains an early MVP skeleton for a graph-based strategy game desig
 - `schemas/README.md` — JSON schemas
 - `ROADMAP.md` — post-MVP direction
 - `HANDOFF.md` — checklist for next implementation agent
+- `V06_EXPERIMENTS.md` — backlog of experiments to improve agent behavior (warmup/memory/repair loops)
+- `EXPERIMENT_EVAL_PROTOCOL.md` — baselines/metrics/success criteria for A/B experiments
 
 ## Run a match (scripted bots)
 

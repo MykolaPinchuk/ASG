@@ -37,6 +37,7 @@ runs/**
 artifacts/
 outputs/
 tmp/
+.trash/
 
 # Game outputs (default: keep out of git)
 replays/

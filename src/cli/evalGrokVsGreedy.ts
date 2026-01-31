@@ -39,7 +39,7 @@ async function main() {
   if (!Number.isInteger(count) || count < 1 || count > 3) throw new Error("--count must be an integer in [1, 3] (cost cap)");
   if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
   if (turnCapPlies > 30 && !unsafeAllowLong) {
-    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v0.x (pass --unsafe-allow-long true to override).");
   }
   if (agentSide !== "P1" && agentSide !== "P2") throw new Error("--agent-side must be P1 or P2");
 

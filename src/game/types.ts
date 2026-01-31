@@ -78,6 +78,29 @@ export interface Observation {
   nodes: Record<LocationId, Omit<NodeState, "forces"> & { forces: Record<PlayerId, number> }>;
 }
 
+export interface DecisionDiagnostics {
+  /**
+   * HTTP status from the controller endpoint (if applicable).
+   */
+  httpStatus?: number;
+  /**
+   * Any controller-level error (timeout, parse error, etc.).
+   */
+  error?: string;
+  /**
+   * Optional upstream/provider status (best-effort).
+   */
+  upstreamStatus?: number;
+  /**
+   * Optional upstream/provider error string (best-effort, sanitized).
+   */
+  upstreamError?: string;
+  /**
+   * Whether the controller (or agent server) used a configured fallback.
+   */
+  usedFallback?: boolean;
+}
+
 export interface TurnRecord {
   ply: number;
   player: PlayerId;
@@ -85,6 +108,8 @@ export interface TurnRecord {
   actions: Action[];
   rationaleText?: string;
   latencyMs: number;
+  controllerId?: string;
+  diagnostics?: DecisionDiagnostics;
   events: Event[];
   stateAfter: GameState;
 }

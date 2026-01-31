@@ -414,8 +414,22 @@
         "actions": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
         "rationaleText": { "type": "string" },
         "latencyMs": { "type": "integer", "minimum": 0 },
+        "controllerId": { "type": "string", "minLength": 1 },
+        "diagnostics": { "$ref": "#/$defs/DecisionDiagnostics" },
         "events": { "type": "array", "items": { "$ref": "#/$defs/Event" } },
         "stateAfter": { "$ref": "#/$defs/GameState" }
+      }
+    },
+
+    "DecisionDiagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "httpStatus": { "type": "integer", "minimum": 0 },
+        "error": { "type": "string" },
+        "upstreamStatus": { "type": "integer", "minimum": 0 },
+        "upstreamError": { "type": "string" },
+        "usedFallback": { "type": "boolean" }
       }
     }
   }

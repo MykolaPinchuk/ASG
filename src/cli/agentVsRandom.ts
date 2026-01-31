@@ -164,6 +164,19 @@ async function main() {
   const maxTokens = args.get("--max-tokens") ?? "600";
   const temperature = args.get("--temperature") ?? "0";
   const promptMode = args.get("--prompt-mode") ?? undefined;
+  const agentLogDir = args.get("--agent-log-dir") ?? "runs/agent_io";
+
+  const serverMemory = args.get("--memory") ?? undefined;
+  const serverMemoryMaxChars = args.get("--memory-max-chars") ?? undefined;
+  const serverWarmup = args.get("--warmup") ?? undefined;
+  const serverWarmupTimeoutMs = args.get("--warmup-timeout-ms") ?? undefined;
+  const serverWarmupMaxTokens = args.get("--warmup-max-tokens") ?? undefined;
+  const serverRepair = args.get("--repair") ?? undefined;
+  const serverRepairMaxRounds = args.get("--repair-max-rounds") ?? undefined;
+  const serverSelectMode = args.get("--select-mode") ?? undefined;
+  const serverSelectK = args.get("--select-k") ?? undefined;
+  const serverSelectCandidateTemperature = args.get("--select-candidate-temperature") ?? undefined;
+  const serverSelectUntilPly = args.get("--select-until-ply") ?? undefined;
 
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");
   if (!Number.isInteger(count) || count < 1 || count > 200) throw new Error("--count must be an integer in [1, 200]");
@@ -176,10 +189,10 @@ async function main() {
   }
   if (!Number.isInteger(turnCapPliesOverride) || turnCapPliesOverride < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
   if (turnCapPliesOverride > 30 && !unsafeAllowLong) {
-    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v0.x (pass --unsafe-allow-long true to override).");
   }
   if (count > 5 && !unsafeAllowMany) {
-    throw new Error("Policy: --count must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
+    throw new Error("Policy: --count must be <= 5 on v0/v0.x (pass --unsafe-allow-many true to override).");
   }
 
   const scenario = await loadScenarioFromFile(scenarioPath);
@@ -212,6 +225,17 @@ async function main() {
     "--temperature",
     temperature,
   ];
+  if (serverMemory) serverArgs.push("--memory", serverMemory);
+  if (serverMemoryMaxChars) serverArgs.push("--memory-max-chars", serverMemoryMaxChars);
+  if (serverWarmup) serverArgs.push("--warmup", serverWarmup);
+  if (serverWarmupTimeoutMs) serverArgs.push("--warmup-timeout-ms", serverWarmupTimeoutMs);
+  if (serverWarmupMaxTokens) serverArgs.push("--warmup-max-tokens", serverWarmupMaxTokens);
+  if (serverRepair) serverArgs.push("--repair", serverRepair);
+  if (serverRepairMaxRounds) serverArgs.push("--repair-max-rounds", serverRepairMaxRounds);
+  if (serverSelectMode) serverArgs.push("--select-mode", serverSelectMode);
+  if (serverSelectK) serverArgs.push("--select-k", serverSelectK);
+  if (serverSelectCandidateTemperature) serverArgs.push("--select-candidate-temperature", serverSelectCandidateTemperature);
+  if (serverSelectUntilPly) serverArgs.push("--select-until-ply", serverSelectUntilPly);
   if (promptMode) serverArgs.push("--prompt-mode", promptMode);
   if (baseUrl) serverArgs.push("--base-url", baseUrl);
 
@@ -285,7 +309,7 @@ async function main() {
         actionBudget: scenario.settings.actionBudget,
         timeoutMs: agentTimeoutMs,
         maxResponseBytes: 256_000,
-        logDir: "runs/agent_io",
+        logDir: agentLogDir,
       });
 
       const opponentSeed = seed + (agentSide === "P1" ? 202 : 101);

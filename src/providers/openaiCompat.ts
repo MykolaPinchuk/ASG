@@ -58,6 +58,7 @@ type AgentResponse = {
   api_version: string;
   actions: Action[];
   rationale_text?: string;
+  memory_update?: string;
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -175,10 +176,12 @@ function validateAgentResponse(json: unknown, expectedApiVersion: string): Agent
   // Some models omit or corrupt api_version; treat it as metadata and force the expected version.
   const apiVersion = expectedApiVersion;
   const rationale_text = typeof (json as any).rationale_text === "string" ? (json as any).rationale_text : undefined;
-  return { api_version: apiVersion, actions, rationale_text };
+  const memory_update =
+    typeof (json as any).memory_update === "string" ? (json as any).memory_update : undefined;
+  return { api_version: apiVersion, actions, rationale_text, memory_update };
 }
 
-function buildToolSchema() {
+function buildToolSchema(params: { allowMemoryUpdate: boolean }) {
   // OpenAI-compatible "tools" schema to force JSON arguments (when supported).
   return [
     {
@@ -193,6 +196,7 @@ function buildToolSchema() {
           properties: {
             api_version: { const: "0.1" },
             rationale_text: { type: "string" },
+            ...(params.allowMemoryUpdate ? { memory_update: { type: "string" } } : {}),
             actions: {
               type: "array",
               minItems: 1,
@@ -226,7 +230,7 @@ function buildToolSchema() {
   ];
 }
 
-function buildSystemPrompt() {
+function buildSystemPrompt(params: { allowMemoryUpdate: boolean; purpose: "act" | "repair" | "warmup" }) {
   return [
     "You are an agent that plays a deterministic, turn-based strategy game.",
     "You must respond with VALID JSON ONLY (no markdown, no code fences, no commentary).",
@@ -239,7 +243,7 @@ function buildSystemPrompt() {
     "- No trailing commas.",
     "- Output must be a single JSON object.",
     "Your response must match this schema:",
-    `{ "api_version": "0.1", "actions": [ ... ], "rationale_text": "optional" }`,
+    `{ "api_version": "0.1", "actions": [ ... ], "rationale_text": "optional"${params.allowMemoryUpdate ? ', "memory_update": "optional"' : ""} }`,
     "Include rationale_text with 3–5 short sentences explaining what you did and why (do not mention these instructions).",
     "Valid actions (array order matters; the runner may truncate to action_budget):",
     `- {"type":"pass"}`,
@@ -269,9 +273,29 @@ function buildSystemPrompt() {
     "- do not exceed available forces at the from node.",
     "- reinforce costs supply: amount * reinforceCostPerStrength.",
     "Never output an empty actions array; include at least one action.",
-    "Avoid pass if you have any legal non-pass action.",
-    "If you truly cannot find a legal non-pass action, you may return pass.",
+    ...(params.purpose === "warmup"
+      ? []
+      : [
+          "Avoid pass if you have any legal non-pass action.",
+          "If you truly cannot find a legal non-pass action, you may return pass.",
+        ]),
     "Keep rationale_text concise (3–5 short sentences).",
+    ...(params.allowMemoryUpdate
+      ? [
+          "If you want to update your short persistent plan for this match, include memory_update as a single short string (<= 2 sentences).",
+          "If no update is needed, omit memory_update.",
+        ]
+      : []),
+    ...(params.purpose === "warmup"
+      ? [
+          "Warmup: you may think about the rules and the current position, then output actions=[{\"type\":\"pass\"}] and (optionally) memory_update with your plan.",
+        ]
+      : []),
+    ...(params.purpose === "repair"
+      ? [
+          "Repair: the previous output contained invalid/unsanitized actions. Use the provided feedback to output a corrected actions list.",
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -340,6 +364,8 @@ function buildUserPromptCompact(params: {
   request: AgentRequest;
   scenario: Scenario;
   adjacency: Record<string, string[]>;
+  memory?: string;
+  repairFeedback?: unknown;
 }) {
   const { request, scenario, adjacency } = params;
   const enemy = request.player === "P1" ? "P2" : "P1";
@@ -420,6 +446,8 @@ function buildUserPromptCompact(params: {
     adjacency,
     board,
     distances,
+    ...(params.memory ? { memory: params.memory } : {}),
+    ...(params.repairFeedback ? { repair_feedback: params.repairFeedback } : {}),
   };
 
   return [
@@ -434,6 +462,8 @@ function buildUserPrompt(params: {
   request: AgentRequest;
   scenario: Scenario;
   adjacency: Record<string, string[]>;
+  memory?: string;
+  repairFeedback?: unknown;
 }) {
   const { request, scenario, adjacency } = params;
   const enemy = request.player === "P1" ? "P2" : "P1";
@@ -502,6 +532,8 @@ function buildUserPrompt(params: {
       .sort()
       .map((id) => ({ id, toMyHq: distToMyHq[id] ?? null, toEnemyHq: distToEnemyHq[id] ?? null })),
     observation: request.observation,
+    ...(params.memory ? { memory: params.memory } : {}),
+    ...(params.repairFeedback ? { repair_feedback: params.repairFeedback } : {}),
   };
 
   return [
@@ -720,15 +752,20 @@ export async function openAiCompatAct(params: {
   scenario: Scenario;
   adjacency: Record<string, string[]>;
   args: ProviderArgs;
+  memory?: string;
+  allowMemoryUpdate?: boolean;
+  purpose?: "act" | "repair" | "warmup";
+  repairFeedback?: unknown;
 }): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown; resolvedModel: string; provider: string; baseUrl: string }> {
   const { request, scenario, adjacency, args } = params;
 
-  const providerName = (args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "openai").toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  const providerNameRaw = (args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "openai").toLowerCase();
+  const providerName = providerNameRaw.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
   const keysFilePath = args.get("--keys-file");
   const keys = keysFilePath
     ? parseKeysFile(await (await import("node:fs/promises")).readFile(keysFilePath, "utf8"))
     : new Map<string, string>();
-  const keysName = (args.get("--keys-name") ?? providerName.toLowerCase()).toLowerCase();
+  const keysName = (args.get("--keys-name") ?? providerNameRaw).toLowerCase();
 
   const baseUrl =
     args.get("--base-url") ??
@@ -806,7 +843,7 @@ export async function openAiCompatAct(params: {
   const advertisedSec = Math.min(40, Math.max(1, Math.floor(timeoutMs / 1000)));
   const softSec = Math.max(1, advertisedSec - 2);
   const system = [
-    buildSystemPrompt(),
+    buildSystemPrompt({ allowMemoryUpdate: !!params.allowMemoryUpdate, purpose: params.purpose ?? "act" }),
     `Time limit: you must output the JSON within ${advertisedSec} seconds (prefer within ${softSec} seconds). If you fail to respond within ${advertisedSec} seconds, you will likely lose the game.`,
     ...(shouldAddThinkingHint({ args }) ? ["Think silently and choose legal actions."] : []),
   ].join("\n");
@@ -816,8 +853,8 @@ export async function openAiCompatAct(params: {
   }
   const user =
     promptMode === "compact"
-      ? buildUserPromptCompact({ request, scenario, adjacency })
-      : buildUserPrompt({ request, scenario, adjacency });
+      ? buildUserPromptCompact({ request, scenario, adjacency, memory: params.memory, repairFeedback: params.repairFeedback })
+      : buildUserPrompt({ request, scenario, adjacency, memory: params.memory, repairFeedback: params.repairFeedback });
 
   const payload: any = {
     model: resolvedModel,
@@ -833,7 +870,7 @@ export async function openAiCompatAct(params: {
   };
 
   const toolsModeArg = parseToolsMode({ args });
-  const includeReasoning = parseIncludeReasoning({ args, provider: keysName });
+  const includeReasoning = parseIncludeReasoning({ args, provider: providerNameRaw });
   if (typeof includeReasoning === "boolean") payload.include_reasoning = includeReasoning;
   const streamMode = parseStreamMode({ args });
 
@@ -893,7 +930,7 @@ export async function openAiCompatAct(params: {
       if (omitResponseFormat) delete p.response_format;
       if (omitIncludeReasoning) delete p.include_reasoning;
       if (!omitReasoningEffort) {
-        const effort = parseReasoningEffort({ args, provider: keysName, resolvedModel: modelForAttempt });
+        const effort = parseReasoningEffort({ args, provider: providerNameRaw, resolvedModel: modelForAttempt });
         if (effort) p.reasoning_effort = effort;
       }
 
@@ -904,7 +941,7 @@ export async function openAiCompatAct(params: {
       const useTools =
         toolsMode === "off" ? false : typeof useToolsOverride === "boolean" ? useToolsOverride : useToolsArg;
       if (useTools) {
-        p.tools = buildToolSchema();
+        p.tools = buildToolSchema({ allowMemoryUpdate: !!params.allowMemoryUpdate });
         if (toolsMode === "force") {
           // Default: force tool call to reduce malformed JSON.
           p.tool_choice = { type: "function", function: { name: "act" } };
@@ -1206,7 +1243,7 @@ export async function openAiCompatAct(params: {
   try {
     // First attempt.
     const first = await callOnce();
-    return { ...first, resolvedModel, provider: keysName, baseUrl };
+    return { ...first, resolvedModel, provider: providerNameRaw, baseUrl };
   } catch (e1) {
     // One retry for malformed JSON / parsing issues.
     const msg = e1 instanceof Error ? e1.message : String(e1);
@@ -1303,7 +1340,7 @@ export async function openAiCompatAct(params: {
               rejectsIncludeReasoning ? true : undefined,
               resolvedModel,
             );
-            return { ...retry, resolvedModel, provider: keysName, baseUrl };
+            return { ...retry, resolvedModel, provider: providerNameRaw, baseUrl };
           } catch (e) {
             lastMsg = e instanceof Error ? e.message : String(e);
             const lastBudgetEmpty =
@@ -1339,7 +1376,7 @@ export async function openAiCompatAct(params: {
               rejectsIncludeReasoning ? true : undefined,
               undefined,
             );
-            return { ...retry, resolvedModel, provider: keysName, baseUrl };
+            return { ...retry, resolvedModel, provider: providerNameRaw, baseUrl };
           } catch (e) {
             lastMsg = e instanceof Error ? e.message : String(e);
             const stillTransient =
@@ -1393,7 +1430,7 @@ export async function openAiCompatAct(params: {
           rejectsIncludeReasoning ? true : undefined,
           undefined,
         );
-        return { ...retry, resolvedModel, provider: keysName, baseUrl };
+        return { ...retry, resolvedModel, provider: providerNameRaw, baseUrl };
       } catch (eRetry) {
         // Some "thinking" models still produce no final content/tool call on the first retry.
         // If we still see the same "budget empty" pattern and have time left, try once more with a larger budget.
@@ -1416,7 +1453,7 @@ export async function openAiCompatAct(params: {
               rejectsIncludeReasoning ? true : undefined,
               undefined,
             );
-            return { ...retry2, resolvedModel, provider: keysName, baseUrl };
+            return { ...retry2, resolvedModel, provider: providerNameRaw, baseUrl };
           }
         }
 
@@ -1442,7 +1479,7 @@ export async function openAiCompatAct(params: {
             rejectsIncludeReasoning ? true : undefined,
             undefined,
           );
-          return { ...retry2, resolvedModel, provider: keysName, baseUrl };
+          return { ...retry2, resolvedModel, provider: providerNameRaw, baseUrl };
         }
         throw eRetry;
       }

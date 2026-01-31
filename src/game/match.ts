@@ -42,6 +42,8 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
       actions: decision.actions,
       rationaleText: decision.rationaleText,
       latencyMs,
+      controllerId: controller.id,
+      diagnostics: decision.diagnostics,
       events: applied.events,
       stateAfter: state,
     });

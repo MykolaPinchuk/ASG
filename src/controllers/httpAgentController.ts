@@ -23,6 +23,12 @@ type AgentResponse = {
     model?: string;
     modelMode?: "auto" | "explicit";
   };
+  server_diagnostics?: {
+    provider?: string;
+    upstreamStatus?: number;
+    upstreamError?: string;
+    usedFallback?: boolean;
+  };
 };
 
 function ensureActUrl(url: string): string {
@@ -85,7 +91,23 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
       modelMode,
     };
   }
-  return { api_version: json.api_version, actions: actions as Action[], rationale_text, agent_info };
+
+  const diagRaw = (json as any).server_diagnostics;
+  let server_diagnostics: AgentResponse["server_diagnostics"] | undefined;
+  if (isObject(diagRaw)) {
+    const upstreamStatus =
+      typeof (diagRaw as any).upstreamStatus === "number" && Number.isFinite((diagRaw as any).upstreamStatus)
+        ? Math.floor((diagRaw as any).upstreamStatus)
+        : undefined;
+    const upstreamError = typeof (diagRaw as any).upstreamError === "string" ? (diagRaw as any).upstreamError : undefined;
+    const usedFallback = typeof (diagRaw as any).usedFallback === "boolean" ? (diagRaw as any).usedFallback : undefined;
+    const provider = typeof (diagRaw as any).provider === "string" ? (diagRaw as any).provider : undefined;
+    if (provider || upstreamStatus !== undefined || upstreamError || usedFallback !== undefined) {
+      server_diagnostics = { provider, upstreamStatus, upstreamError, usedFallback };
+    }
+  }
+
+  return { api_version: json.api_version, actions: actions as Action[], rationale_text, agent_info, server_diagnostics };
 }
 
 export type HttpAgentControllerParams = {
@@ -205,13 +227,25 @@ export class HttpAgentController implements Controller {
 
     if (!parsedResponse) {
       const why = error ? `agent error: ${error}` : "agent error";
-      return { actions: [{ type: "pass" }], rationaleText: why + ` (latency ${latencyMs}ms)`, latencyMs };
+      return {
+        actions: [{ type: "pass" }],
+        rationaleText: why + ` (latency ${latencyMs}ms)`,
+        latencyMs,
+        diagnostics: { httpStatus, error },
+      };
     }
 
     return {
       actions: parsedResponse.actions,
       rationaleText: parsedResponse.rationale_text,
       latencyMs,
+      diagnostics: {
+        httpStatus,
+        error,
+        upstreamStatus: parsedResponse.server_diagnostics?.upstreamStatus,
+        upstreamError: parsedResponse.server_diagnostics?.upstreamError,
+        usedFallback: parsedResponse.server_diagnostics?.usedFallback,
+      },
     };
   }
 }

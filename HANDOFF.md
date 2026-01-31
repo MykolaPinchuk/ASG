@@ -5,24 +5,36 @@ MVP v0 is implemented end-to-end (engine → replays → viewer → agent server
 
 Branching:
 - `master` is now the default branch.
-- Ongoing work should land on `v05` (pre-v1 hardening).
+- Ongoing work should land on `v06` (pre-v1 hardening).
 
 Latest focus:
 - Snapshot OSS and paid model performance vs MixBot (30 plies), with strict replay + latency persistence.
 - Add Cerebras as an OpenAI-compatible provider and begin evaluating `gpt-oss-120b` variants.
 - Maintain a focus shortlist of 20 models: `docs/focus20_models.md`.
+- v06: experiment scaffolding + evaluation protocol for agent behavior interventions (repair loop, warmup/memory), with results recorded in diagnostics (see below).
+
+## v06 conclusion (baseline shortlist)
+For v07 we will focus on comparing how these models behave under a more complex game setup (new mechanics / rules), rather than continuing v06 harness/provider experiments:
+- Cerebras: `gpt-oss-120b` (very fast + strong, but still has frequent output/parse failures in some configs)
+- Chutes: `tngtech/DeepSeek-R1T-Chimera` (backup baseline: strong + very reliable)
+- OpenRouter: `x-ai/grok-4.1-fast` (strong but very slow in this harness)
+
+Evidence:
+- Always-updated local performance snapshot: `performance.md` (generated via `npm run -s perf:top20`)
+- `gpt-oss-120b` provider/effort sweep: `docs/diagnostics/2026-01-30_gpt_oss_120b_reasoning_effort_sweep.md` (commit `ea6b1aa`)
+- Latest `performance.md` refresh: commit `dba8805`
 
 ## OSS baselines (default for testing)
 These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):
 - Chutes:
-  - `tngtech/DeepSeek-R1T-Chimera`
+  - `tngtech/DeepSeek-R1T-Chimera` (backup baseline)
   - `chutesai/Mistral-Small-3.1-24B-Instruct-2503`
   - `deepseek-ai/DeepSeek-V3-0324-TEE`
 - NanoGPT:
   - `deepseek/deepseek-v3.2`
   - `mistralai/devstral-2-123b-instruct-2512`
 - Cerebras (requires provider key):
-  - `gpt-oss-120b` (see `configs/cerebras_models.txt`)
+  - `gpt-oss-120b` (see `configs/cerebras_models.txt`; run with `--keys-name cerebras-paid` if keys are stored under that alias)
 
 Smoke (1 game each vs GreedyBot, seed=3):
 - Chutes: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
@@ -49,7 +61,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Deterministic replays: same seed + same actions ⇒ identical outcomes.
 - No secrets or bulky artifacts in git (see `.gitignore`).
 - `IA_HANDOFF/` is an immutable snapshot (do not edit).
-- v0 / `v05` eval guardrails: default to `turnCapPlies<=30` and `games/count<=5` unless explicitly overridden (see `extra_instructions_v0.md`).
+- v0 / v0.x eval guardrails: default to `turnCapPlies<=30` and `games/count<=5` unless explicitly overridden (see `extra_instructions_v0.md`).
 
 ## State of work
 
@@ -63,6 +75,8 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - Evidence: `96a05b8` (`agent01: checkpoint(viewer): show agent model`), `f1cf8fa` (`agent01: checkpoint(viewer): add in-app explanations + event highlighting`)
 - Viewer now shows per-ply agent latency (required for eval runs; do not regress it):
   - `viewer/index.html` reads `turn.latencyMs`
+- Viewer now shows per-ply quick badges derived from replay diagnostics (PASS / INVALID_ACTION / ERROR / FALLBACK):
+  - Evidence: `592ccad` (`agent06: checkpoint(runner): replay diagnostics + v06 guardrails`)
 - HTTP agent controller + agent server:
   - Controller: `src/controllers/httpAgentController.ts`
   - Server: `src/cli/agentServer.ts` (providers: `stub`, `openai_compat`)
@@ -73,6 +87,13 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Mechanics-only prompt policy for fairness (remove strategy-like hints):
   - `src/providers/openaiCompat.ts`
   - Evidence: `cd39e17` (`agent03: checkpoint(runner): remove strategic guidance from prompts`), `e35fd22` (`agent03: checkpoint(runner): clarify sequential mechanics wording`)
+- v06 experiment tooling + analysis helpers (all opt-in; baseline unchanged unless flags are passed):
+  - `src/cli/agentServer.ts` flags: `--repair`, `--memory`, `--warmup` (plus related caps)
+  - `src/cli/analyzeReplays.ts` (`npm run analyze:replays`)
+  - Evidence: `46c6b72` (`agent06: checkpoint(runner): warmup/memory + repair loop flags`)
+- Results writeup for those experiments:
+  - `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`
+  - Evidence: `b4fe8e7` (`agent06: checkpoint(docs): document warmup/memory + repair results`)
 - OSS model allowlist/priority list (derived from TML-bench) + model listing:
   - `configs/oss_models.json`, `src/llm/models.ts`, `npm run agent:list-models`
   - Evidence: `f6daf7a` (`agent01: checkpoint(misc): OSS allowlist + model auto`)
@@ -105,11 +126,14 @@ When making harness changes, keep the paid regression check stable and cost-capp
    - Add a small tuning sweep tool and promote tuned defaults into scenario settings.
 2) Improve viewer “debug speed”:
    - Add a match summary panel (captures, pass/error counts, latency stats).
-   - Add per-turn badges for `pass` / `invalid_action` / provider errors.
+   - Add per-turn badges for `pass` / `invalid_action` / provider errors. (Done; see `592ccad`.)
 3) Improve agent observability in replays:
-   - Persist additional per-turn diagnostics (e.g., http status / error string) so failures are visible in the viewer without opening logs.
+   - Persist additional per-turn diagnostics (e.g., http status / error string) so failures are visible in the viewer without opening logs. (Done; see `592ccad`.)
 4) Continue `openai_compat` robustness work (no strategic fallback):
    - Focus on “thinking-only / no final JSON” behavior for some providers/models.
+
+### v0.6 Experiments backlog
+- See `docs/planning/V06_EXPERIMENTS.md` (warmup step + memory, validator-guided repair loop, and other optional experiments).
 
 ### Agent05 suggestions (next experiments)
 1) Confirm whether Cerebras `gpt-oss-120b` strength is repeatable (not a one-off):
@@ -129,17 +153,21 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - Validate replay JSON: `npm run validate:replay -- replays/<replay>.json`
   - View replay: open `viewer/index.html` (file picker) and select the replay JSON.
   - Agent vs Random (requires `secrets/provider_apis.txt`): `npm run agent:vs-random -- --provider-name nanogpt --model auto --count 3 --start 1 --save-replays true`
+  - Summarize a replay folder (paired A/B supported): `npm run analyze:replays -- --dir runs/<some_run>/replays`
   - OSS baselines (Chutes) vs GreedyBot: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
   - OSS sweep (can take a while; requires provider keys): `npm run agent:sweep-oss -- --providers nanogpt,chutes --max-models 30 --full-seed 3 --full-turn-cap 30`
 
 ## Known issues / current breakage
 - Provider flakiness: capacity/rate-limit errors can cause many agent passes (esp. some Chutes models); these are surfaced as `openai_compat failed: ...` in rationale.
 - Some models produce malformed JSON/tool output; `openai_compat` retries once but can still fail and fall back to `pass`.
+- Cerebras `gpt-oss-120b` with `reasoning-effort=high` can be fast/strong but still shows frequent output/parse failures (often `Unexpected non-whitespace character after JSON ...`), even on paid keys; treat it as “strong but not yet clean”.
 - Important: earlier “big win-rate” OSS results were shown to be driven by prompt strategy hints; after removing hints, re-runs produced 0 wins in the same one-ply micro-sweep setup (see `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`).
 - Some providers/models emit the primary text in `message.reasoning` and may omit `message.content`; `openai_compat` has best-effort parsing for this but is not universally reliable (notably for `zai-glm-4.7` on Cerebras).
+- v06 experiments (repair loop / warmup + memory) are currently not recommended as defaults; keep them opt-in. See `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`.
 
 ## Git notes (handoff)
 - Intentionally uncommitted local-only data:
   - `secrets/` (provider API keys)
   - `runs/` (sweep outputs)
   - `replays/` (generated match replays)
+  - `.trash/` (manual quarantine for misconfigured local experiment runs; safe to delete locally)

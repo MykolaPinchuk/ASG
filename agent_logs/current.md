@@ -1,15 +1,14 @@
 # agent_logs/current.md
 
 ## Agent
-- id: agent05
+- id: agent??
 
 ## Timestamp (Pacific)
-- start: 2026-01-30
+- start: 2026-01-31
 
 ## Intent
-- TBD
+- (fill in)
 
 ## Notes
 - Do not commit secrets or bulky artifacts (see `.gitignore`).
-
-## Log
+- Keep v0 / v0.x eval guardrails by default (`turnCapPlies<=30`, `games<=5`, always save replays, persist `turns[*].latencyMs`).

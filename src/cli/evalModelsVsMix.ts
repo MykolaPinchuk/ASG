@@ -145,6 +145,7 @@ function nowStamp(): string {
 async function evalOneModel(params: {
   providerName: ProviderName;
   keysFile: string;
+  keysName?: string;
   baseUrl?: string;
   model: string;
   modelsConfig: string;
@@ -159,6 +160,7 @@ async function evalOneModel(params: {
   temperature: string;
   useTools: boolean;
   toolsMode?: string;
+  stream?: string;
   thinkHint?: string;
   reasoningEffort?: string;
   promptMode?: string;
@@ -203,8 +205,10 @@ async function evalOneModel(params: {
     "--fallback",
     "pass",
   ];
+  if (params.keysName) serverArgs.push("--keys-name", params.keysName);
   if (params.promptMode) serverArgs.push("--prompt-mode", params.promptMode);
   if (params.toolsMode) serverArgs.push("--tools-mode", params.toolsMode);
+  if (params.stream) serverArgs.push("--stream", params.stream);
   if (params.thinkHint) serverArgs.push("--think-hint", params.thinkHint);
   if (params.reasoningEffort) serverArgs.push("--reasoning-effort", params.reasoningEffort);
   if (params.baseUrl) serverArgs.push("--base-url", params.baseUrl);
@@ -417,6 +421,7 @@ async function main() {
 
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
+  const keysName = args.get("--keys-name") ?? undefined;
   const providerName: ProviderName = args.get("--provider-name") ?? "nanogpt";
   const baseUrl =
     args.get("--base-url") ??
@@ -458,6 +463,7 @@ async function main() {
   const serverLogDir = args.get("--server-log-dir") ?? undefined;
   const liveOut = args.get("--live-out") ?? undefined;
   const toolsMode = args.get("--tools-mode") ?? undefined;
+  const stream = args.get("--stream") ?? undefined;
   const thinkHint = args.get("--think-hint") ?? undefined;
   const reasoningEffort = args.get("--reasoning-effort") ?? undefined;
 
@@ -502,10 +508,10 @@ async function main() {
     throw new Error("--stop-after-errors must be an integer in [0, 100]");
   }
   if (turnCapPlies > 30 && !unsafeAllowLong) {
-    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v0.x (pass --unsafe-allow-long true to override).");
   }
   if (games > 5 && !unsafeAllowMany) {
-    throw new Error("Policy: --games/--trials must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
+    throw new Error("Policy: --games/--trials must be <= 5 on v0/v0.x (pass --unsafe-allow-many true to override).");
   }
 
   let seeds: number[] = [];
@@ -520,7 +526,7 @@ async function main() {
     seeds = Array.from({ length: games }, (_, i) => seedStart + i);
   }
   if (seeds.length > 5 && !unsafeAllowMany) {
-    throw new Error("Policy: number of seeds/games must be <= 5 on v0/v05 (pass --unsafe-allow-many true to override).");
+    throw new Error("Policy: number of seeds/games must be <= 5 on v0/v0.x (pass --unsafe-allow-many true to override).");
   }
 
   const scenario = await loadScenarioFromFile(scenarioPath);
@@ -563,6 +569,7 @@ async function main() {
       const row = await evalOneModel({
         providerName,
         keysFile,
+        keysName,
         baseUrl,
         model,
         modelsConfig,
@@ -577,6 +584,7 @@ async function main() {
         temperature,
         useTools,
         toolsMode,
+        stream,
         thinkHint,
         reasoningEffort,
         promptMode,
@@ -647,6 +655,9 @@ async function main() {
           opponent,
           mixGreedyProb: opponent === "mix" ? mixGreedyProb : undefined,
           useTools,
+          toolsMode,
+          stream,
+          reasoningEffort,
           saveReplays,
           replaysDir,
           rows,

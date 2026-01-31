@@ -9,3 +9,19 @@ agents seem to often get confused about which moves and actions are valid action
 separately, it may be useful to let an agent to run 2 full games. so first it does game1 (scores and recorded). then it has 1 min of thinking time to analyse logs from game 1, think what it means, and learn something. then it will do game2.
 
 Actually, it seems that we do not provide any past information to agents. So it appears that each tunr is stateless. for our very simple current setup it is ok. but in general we should soon move to some information persistence.
+
+possible progression:
+- v06: pick model to focus on
+- v07: pick provider and reasoning level. do many runs, carefully explore them manually.
+- v08: setup complexity experiment. slowly increase complexity of the setup. monitor how agent performs:
+08.1: fully define rules. 3 actions per unit. split/consoidation rules.
+08.2: add consolidation penalty. add adjacency bonus.
+08.3: add defensive bonus.
+- v09: start adding basic information persistence. try first 1-turn persistence of event log and few sentence of a2a notes. then try increasing the length of the log and notes.
+
+- v1.0 add evth planned up to v1 in the original prd.
+- v1.1. increase number of nodes to 22-25.
+- v1.2. tweak base v1 game mechanics. e.g., different combat calculations, 1 move required to capture resource etc. v1 will add much more complexity soon. create a game mode for human to make it easier to understand/test.
+- v1.3. add stack cap. add upgrades to increase it.
+- v1.4. add unit types.
+- v1.5 add unit upgrades.

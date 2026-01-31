@@ -55,7 +55,7 @@ async function main() {
   const turnCapPlies = Number.parseInt(args.get("--turn-cap-plies") ?? "30", 10);
   if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be an integer >= 1");
   if (turnCapPlies > 30 && !unsafeAllowLong) {
-    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v05 (pass --unsafe-allow-long true to override).");
+    throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v0.x (pass --unsafe-allow-long true to override).");
   }
 
   const scenario = await loadScenarioFromFile(path.resolve(scenarioPath));
