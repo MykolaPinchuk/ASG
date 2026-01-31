@@ -12,3 +12,4 @@ Format:
 - 2026-01-28_agent04.md — short-horizon OSS evals + replay/latency instrumentation hardening
 - 2026-01-30_agent05.md — Cerebras provider setup + focus-20 shortlist + timeout/prompt policy updates
 - 2026-01-30_agent06.md — v06: eval protocol + repair/warmup/memory experiments + diagnostics writeup
+- 2026-01-31_agent07.md — v06: perf leaderboard + gpt-oss-120b provider sweep + baseline shortlist

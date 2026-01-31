@@ -13,17 +13,28 @@ Latest focus:
 - Maintain a focus shortlist of 20 models: `docs/focus20_models.md`.
 - v06: experiment scaffolding + evaluation protocol for agent behavior interventions (repair loop, warmup/memory), with results recorded in diagnostics (see below).
 
+## v06 conclusion (baseline shortlist)
+For v07 we will focus on comparing how these models behave under a more complex game setup (new mechanics / rules), rather than continuing v06 harness/provider experiments:
+- Cerebras: `gpt-oss-120b` (very fast + strong, but still has frequent output/parse failures in some configs)
+- Chutes: `tngtech/DeepSeek-R1T-Chimera` (backup baseline: strong + very reliable)
+- OpenRouter: `x-ai/grok-4.1-fast` (strong but very slow in this harness)
+
+Evidence:
+- Always-updated local performance snapshot: `performance.md` (generated via `npm run -s perf:top20`)
+- `gpt-oss-120b` provider/effort sweep: `docs/diagnostics/2026-01-30_gpt_oss_120b_reasoning_effort_sweep.md` (commit `ea6b1aa`)
+- Latest `performance.md` refresh: commit `dba8805`
+
 ## OSS baselines (default for testing)
 These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):
 - Chutes:
-  - `tngtech/DeepSeek-R1T-Chimera`
+  - `tngtech/DeepSeek-R1T-Chimera` (backup baseline)
   - `chutesai/Mistral-Small-3.1-24B-Instruct-2503`
   - `deepseek-ai/DeepSeek-V3-0324-TEE`
 - NanoGPT:
   - `deepseek/deepseek-v3.2`
   - `mistralai/devstral-2-123b-instruct-2512`
 - Cerebras (requires provider key):
-  - `gpt-oss-120b` (see `configs/cerebras_models.txt`)
+  - `gpt-oss-120b` (see `configs/cerebras_models.txt`; run with `--keys-name cerebras-paid` if keys are stored under that alias)
 
 Smoke (1 game each vs GreedyBot, seed=3):
 - Chutes: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
@@ -149,6 +160,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
 ## Known issues / current breakage
 - Provider flakiness: capacity/rate-limit errors can cause many agent passes (esp. some Chutes models); these are surfaced as `openai_compat failed: ...` in rationale.
 - Some models produce malformed JSON/tool output; `openai_compat` retries once but can still fail and fall back to `pass`.
+- Cerebras `gpt-oss-120b` with `reasoning-effort=high` can be fast/strong but still shows frequent output/parse failures (often `Unexpected non-whitespace character after JSON ...`), even on paid keys; treat it as “strong but not yet clean”.
 - Important: earlier “big win-rate” OSS results were shown to be driven by prompt strategy hints; after removing hints, re-runs produced 0 wins in the same one-ply micro-sweep setup (see `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`).
 - Some providers/models emit the primary text in `message.reasoning` and may omit `message.content`; `openai_compat` has best-effort parsing for this but is not universally reliable (notably for `zai-glm-4.7` on Cerebras).
 - v06 experiments (repair loop / warmup + memory) are currently not recommended as defaults; keep them opt-in. See `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`.
@@ -158,3 +170,4 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - `secrets/` (provider API keys)
   - `runs/` (sweep outputs)
   - `replays/` (generated match replays)
+  - `.trash/` (manual quarantine for misconfigured local experiment runs; safe to delete locally)
