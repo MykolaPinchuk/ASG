@@ -33,3 +33,9 @@
 - Replays: `replays/model_evals/cerebras_gpt-oss-120b_repeatability_2026-01-30T23-24-49-476Z`
 - Summary JSON: `runs/experiments/cerebras_gpt-oss-120b_repeatability_2026-01-30T23-24-49-476Z.json`
 - `analyze:replays` summary: 4W-1D-0L, but very high pass/error turn rates (~70.6%), suggesting request reliability issues dominate despite high “strength”.
+
+### 2026-01-30 (PT) — Self-consistency + 1-ply engine scoring (A/B)
+- Implemented opt-in selection flags in `src/cli/agentServer.ts` (`--select-mode one_ply --select-k K --select-candidate-temperature t --select-until-ply N`) and plumbed them through `src/cli/agentVsRandom.ts`.
+- A/B vs MixBot on Chutes `Qwen/Qwen3-Next-80B-A3B-Instruct` (seeds 3..7, 30 plies):
+  - Win rate unchanged (all draws); captures/game decreased; latency increased substantially.
+  - Details: `docs/diagnostics/2026-01-30_self_consistency_engine_scoring.md`.

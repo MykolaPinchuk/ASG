@@ -1,6 +1,6 @@
 # Performance (Focus-20 models)
 
-Updated (Pacific): 01/30/2026 15:28:28
+Updated (Pacific): 01/30/2026 16:12:00
 
 This file is generated from saved replay JSONs. It summarizes Focus-20 model performance under v0/v0.x guardrails (plies <= 30).
 
@@ -14,8 +14,8 @@ npm run -s perf:top20
 
 - Focus list: `docs/focus20_models.md` (20 entries)
 - Replay roots scanned: `replays`, `runs`
-- JSON files considered: 2655
-- Replays parsed (plies <= 30): 504
+- JSON files considered: 2815
+- Replays parsed (plies <= 30): 514
 
 ## Caveats
 
@@ -40,7 +40,7 @@ npm run -s perf:top20
 | chutes | chutesai/Mistral-Small-3.1-24B-Instruct-2503 | 8 | 3-5-0 | 38% | 100% | 20941 | 0% | 9% | 0% | 0% | 6 |
 | chutes | chutesai/Mistral-Small-3.2-24B-Instruct-2506 | 2 | 0-2-0 | 0% | 100% | 18147 | 0% | 17% | 0% | 0% | 10 |
 | chutes | moonshotai/Kimi-K2-Instruct-0905 | 6 | 3-3-0 | 50% | 100% | 10234 | 7% | 12% | 0% | 0% | 7 |
-| chutes | Qwen/Qwen3-Next-80B-A3B-Instruct | 3 | 0-3-0 | 0% | 100% | 8920 | 0% | 0% | 0% | 0% | 3 |
+| chutes | Qwen/Qwen3-Next-80B-A3B-Instruct | 13 | 0-13-0 | 0% | 100% | 15976 | 0% | 0% | 0% | 0% | 5 |
 | chutes | Qwen/Qwen2.5-VL-32B-Instruct | 2 | 0-2-0 | 0% | 100% | 12615 | 0% | 3% | 0% | 0% | 4 |
 | chutes | deepseek-ai/DeepSeek-R1-Distill-Llama-70B | 2 | 0-2-0 | 0% | 100% | 5775 | 0% | 50% | 0% | 0% | 10 |
 | chutes | deepseek-ai/DeepSeek-V3.2-TEE | 3 | 1-2-0 | 33% | 100% | 25395 | 6% | 3% | 0% | 0% | 6 |
@@ -239,11 +239,11 @@ npm run -s perf:top20
 ### chutes / Qwen/Qwen3-Next-80B-A3B-Instruct
 
 - Focus: Reliable + moderate latency
-- MixBot: games=3 W-D-L=0-3-0 win=0% okTurns=100% p50/p95OkLatencyMs=5381/8920
+- MixBot: games=13 W-D-L=0-13-0 win=0% okTurns=100% p50/p95OkLatencyMs=4914/15976
   - pass=0% invalid=0% error=0% fallback=0%
-  - captures/game=3 ttfCaptureAvgPly=4 supplyYield@10=0 supplyYieldEnd=1
-  - seeds(outcome): 3:D, 3:D, 3:D
-  - sources: `replays/chutes_vs_mix_30ply_40s_1g_2026-01-28T17-57-33PST`, `replays/model_evals/2026-01-27T13-12-05-086Z`, `replays/model_evals/oss_zeroerr_vs_mix_chutes_seed3_1game_tc30`
+  - captures/game=5 ttfCaptureAvgPly=4 supplyYield@10=1 supplyYieldEnd=1
+  - seeds(outcome): 3:D, 3:D, 3:D, 3:D, 3:D, 4:D, 4:D, 5:D, 5:D, 6:D, 6:D, 7:D, 7:D
+  - sources: `replays/chutes_vs_mix_30ply_40s_1g_2026-01-28T17-57-33PST`, `replays/experiments/self_consistency_engine1ply_2026-01-30T23-52-27-453Z_chutes_qwen3_next80b/control`, `replays/experiments/self_consistency_engine1ply_2026-01-30T23-52-27-453Z_chutes_qwen3_next80b/select_k3_t0p2_until10`, `replays/model_evals/2026-01-27T13-12-05-086Z`, `replays/model_evals/oss_zeroerr_vs_mix_chutes_seed3_1game_tc30`
 - GreedyBot: games=0 W-D-L=0-0-0 win=— okTurns=— p50/p95OkLatencyMs=—/—
   - pass=— invalid=— error=— fallback=—
   - captures/game=— ttfCaptureAvgPly=— supplyYield@10=— supplyYieldEnd=—

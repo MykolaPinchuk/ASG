@@ -2,6 +2,8 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
+import { applyTurn } from "../game/engine.js";
+import { PRNG } from "../game/prng.js";
 
 type PlayerId = "P1" | "P2";
 
@@ -45,6 +47,8 @@ type Scenario = {
     actionBudget: number;
     baseIncome?: number;
     reinforceCostPerStrength: number;
+    combatVarianceFraction?: number;
+    turnCapPlies?: number;
   };
   players: Record<PlayerId, { hq: string }>;
   map: { nodes: { id: string; supplyYield: number }[]; edges: [string, string][] };
@@ -377,6 +381,132 @@ function clampMemoryText(text: string, maxChars: number): string {
   return t.slice(0, maxChars).replace(/\s+\S*$/, "").trim();
 }
 
+function fnv1a32(input: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+function sumSupplyYieldOwned(nodes: Record<string, any>, player: PlayerId): number {
+  let sum = 0;
+  for (const n of Object.values(nodes)) {
+    if (!n) continue;
+    if (n.owner !== player) continue;
+    const y = n.supplyYield;
+    if (typeof y === "number" && Number.isFinite(y)) sum += y;
+  }
+  return sum;
+}
+
+function bfsDistances(adjacency: Record<string, string[]>, start: string): Record<string, number> {
+  const dist: Record<string, number> = {};
+  if (!start) return dist;
+  const q: string[] = [start];
+  dist[start] = 0;
+  while (q.length > 0) {
+    const cur = q.shift()!;
+    const nd = dist[cur]! + 1;
+    for (const n of adjacency[cur] ?? []) {
+      if (dist[n] === undefined) {
+        dist[n] = nd;
+        q.push(n);
+      }
+    }
+  }
+  return dist;
+}
+
+function engineStateFromObservation(request: AgentRequest, scenario: Scenario): any {
+  const obs: any = request.observation ?? {};
+  const suppliesRaw: any = obs.supplies ?? {};
+  const supplies = {
+    P1: Math.max(0, Math.floor(Number.isFinite(suppliesRaw.P1) ? Number(suppliesRaw.P1) : 0)),
+    P2: Math.max(0, Math.floor(Number.isFinite(suppliesRaw.P2) ? Number(suppliesRaw.P2) : 0)),
+  };
+
+  const nodesRaw: Record<string, any> = obs.nodes ?? {};
+  const nodes: Record<string, any> = {};
+  for (const [id, n] of Object.entries(nodesRaw)) {
+    const forcesRaw: any = n?.forces ?? {};
+    nodes[id] = {
+      id: typeof n?.id === "string" ? n.id : id,
+      x: Number.isFinite(n?.x) ? Number(n.x) : 0,
+      y: Number.isFinite(n?.y) ? Number(n.y) : 0,
+      owner: typeof n?.owner === "string" ? n.owner : "Neutral",
+      supplyYield: Math.max(0, Math.floor(Number.isFinite(n?.supplyYield) ? Number(n.supplyYield) : 0)),
+      forces: {
+        P1: Math.max(0, Math.floor(Number.isFinite(forcesRaw.P1) ? Number(forcesRaw.P1) : 0)),
+        P2: Math.max(0, Math.floor(Number.isFinite(forcesRaw.P2) ? Number(forcesRaw.P2) : 0)),
+      },
+    };
+  }
+
+  return {
+    scenarioId: scenario.id,
+    ply: request.ply,
+    activePlayer: request.player,
+    supplies,
+    nodes,
+  };
+}
+
+function scoreOnePly(params: {
+  request: AgentRequest;
+  scenario: Scenario;
+  adjacency: Record<string, string[]>;
+  actions: Action[];
+  issues: Array<{ kind: string }>;
+  candidateIndex: number;
+}): { score: number; captures: number; winNow: boolean; minDistToEnemyHq: number | null; deltaYieldOwned: number } {
+  const player = params.request.player;
+  const enemy = otherPlayer(player);
+
+  const state0 = engineStateFromObservation(params.request, params.scenario);
+  const yield0 = sumSupplyYieldOwned(state0.nodes ?? {}, player);
+
+  const rngSeed = fnv1a32(`${params.request.match_id}|${player}|${params.request.ply}|cand${params.candidateIndex}`) || 1;
+  const rng = new PRNG(rngSeed);
+  const ctx = { scenario: params.scenario as any, adjacency: params.adjacency as any };
+  const out = applyTurn(ctx as any, state0 as any, params.actions as any, rng);
+
+  const events: any[] = Array.isArray(out.events) ? out.events : [];
+  const captures = events.filter((e) => e && e.type === "capture").length;
+  const winNow = !!(out.result && out.result.type === "win" && out.result.winner === player);
+
+  const stateAfter: any = out.state ?? {};
+  const nodesAfter: Record<string, any> = stateAfter.nodes ?? {};
+  const yieldAfter = sumSupplyYieldOwned(nodesAfter, player);
+  const deltaYieldOwned = yieldAfter - yield0;
+
+  const enemyHq = params.scenario.players?.[enemy]?.hq ?? "";
+  const dist = bfsDistances(params.adjacency, enemyHq);
+  let minDist: number | null = null;
+  for (const [id, n] of Object.entries(nodesAfter)) {
+    const f = n?.forces?.[player];
+    if (!Number.isFinite(f) || f <= 0) continue;
+    const d = dist[id];
+    if (typeof d !== "number") continue;
+    if (minDist === null || d < minDist) minDist = d;
+  }
+
+  const issuePenalty = params.issues.filter((i) => i.kind !== "normalize").length;
+  const passPenalty = params.actions.length === 1 && params.actions[0]?.type === "pass" ? 1 : 0;
+
+  let score = 0;
+  if (winNow) score += 1_000_000_000;
+  score += captures * 1_000_000;
+  score += deltaYieldOwned * 50_000;
+  score += yieldAfter * 1_000;
+  if (minDist !== null) score -= minDist * 200;
+  score -= issuePenalty * 2_000;
+  if (passPenalty) score -= 5_000_000;
+
+  return { score, captures, winNow, minDistToEnemyHq: minDist, deltaYieldOwned };
+}
+
 async function maybeLogIo(params: {
   logDir?: string;
   request: AgentRequest;
@@ -427,6 +557,13 @@ async function main() {
   const repairEnabled = parseOnOffFlag(args.get("--repair"), false);
   const repairMaxRounds = Number.parseInt(args.get("--repair-max-rounds") ?? "1", 10);
 
+  const selectModeRaw = (args.get("--select-mode") ?? "off").toLowerCase(); // off|one_ply
+  if (!["off", "one_ply"].includes(selectModeRaw)) throw new Error("--select-mode must be off|one_ply");
+  const selectMode = selectModeRaw as "off" | "one_ply";
+  const selectK = Number.parseInt(args.get("--select-k") ?? "1", 10);
+  const selectCandidateTemperature = Number.parseFloat(args.get("--select-candidate-temperature") ?? "0.2");
+  const selectUntilPly = Number.parseInt(args.get("--select-until-ply") ?? "30", 10);
+
   if (!Number.isInteger(port) || port <= 0) throw new Error("--port must be a positive integer");
   if (!["stub", "openai_compat"].includes(provider)) throw new Error("--provider must be stub or openai_compat");
   if (!["pass", "stub"].includes(fallbackMode)) throw new Error("--fallback must be pass or stub");
@@ -435,6 +572,11 @@ async function main() {
   if (!Number.isInteger(warmupTimeoutMs) || warmupTimeoutMs < 500) throw new Error("--warmup-timeout-ms must be an integer >= 500");
   if (!Number.isInteger(warmupMaxTokens) || warmupMaxTokens < 50) throw new Error("--warmup-max-tokens must be an integer >= 50");
   if (!Number.isInteger(repairMaxRounds) || repairMaxRounds < 0 || repairMaxRounds > 3) throw new Error("--repair-max-rounds must be an integer in [0,3]");
+  if (!Number.isInteger(selectK) || selectK < 1 || selectK > 8) throw new Error("--select-k must be an integer in [1,8]");
+  if (!Number.isFinite(selectCandidateTemperature) || selectCandidateTemperature < 0 || selectCandidateTemperature > 2) {
+    throw new Error("--select-candidate-temperature must be in [0,2]");
+  }
+  if (!Number.isInteger(selectUntilPly) || selectUntilPly < 0 || selectUntilPly > 1000) throw new Error("--select-until-ply must be an integer in [0,1000]");
 
   const scenarioCache = new Map<string, { scenario: Scenario; adjacency: Record<string, string[]> }>();
   const memoryByKey = new Map<string, MemoryState>();
@@ -584,28 +726,123 @@ async function main() {
         const memoryNow = memoryEnabled ? memoryByKey.get(memoryKey)?.text : undefined;
         const allowMemoryUpdate = memoryEnabled && warmupMode === "inline" && !memoryNow && request.ply === 0;
 
-        const out = await openAiCompatAct({
-          request,
-          scenario,
-          adjacency,
-          args,
-          memory: memoryNow,
-          allowMemoryUpdate,
-          purpose: "act",
-        });
-        response = out.response;
-        upstreamStatus = out.httpStatus;
-        upstreamRaw = out.raw;
-        response.agent_info = {
-          provider: out.provider,
-          baseUrl: out.baseUrl,
-          model: out.resolvedModel,
-          modelMode: (args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? "").toLowerCase() === "auto" ? "auto" : "explicit",
-        };
+        const selectEnabled = provider === "openai_compat" && selectMode === "one_ply" && selectK > 1 && request.ply <= selectUntilPly;
+        if (selectEnabled) {
+          const baseTimeoutMs = Number.parseInt(args.get("--timeout-ms") ?? "70000", 10);
+          const deadlineAt = startedAt + (Number.isFinite(baseTimeoutMs) ? baseTimeoutMs : 70000);
 
-        if (memoryEnabled && allowMemoryUpdate && typeof response.memory_update === "string") {
-          const clamped = clampMemoryText(response.memory_update, memoryMaxChars);
-          if (clamped) memoryByKey.set(memoryKey, { text: clamped, updatedAtPly: request.ply });
+          const candidates: Array<{
+            out: Awaited<ReturnType<typeof openAiCompatAct>>;
+            actions: Action[];
+            issues: Array<{ kind: string }>;
+            score: number;
+          }> = [];
+
+          for (let i = 0; i < selectK; i++) {
+            const remaining = Math.max(0, deadlineAt - Date.now());
+            if (remaining < 1500) break;
+            const perCall = Math.max(1000, Math.floor(remaining / Math.max(1, selectK - i)));
+            const candArgs = new Map(args);
+            candArgs.set("--timeout-ms", String(perCall));
+            candArgs.set("--temperature", String(selectCandidateTemperature));
+
+            try {
+              const out = await openAiCompatAct({
+                request,
+                scenario,
+                adjacency,
+                args: candArgs,
+                memory: memoryNow,
+                allowMemoryUpdate: false,
+                purpose: "act",
+              });
+
+              const sanitizedCand = sanitizeActionsAgainstObservation({
+                actions: out.response.actions,
+                budget,
+                req: request,
+                scenario,
+                adjacency,
+                fallbackMode: fallbackMode as "pass" | "stub",
+              });
+
+              const scored = scoreOnePly({
+                request,
+                scenario,
+                adjacency,
+                actions: sanitizedCand.actions,
+                issues: sanitizedCand.issues,
+                candidateIndex: i,
+              });
+
+              candidates.push({ out, actions: sanitizedCand.actions, issues: sanitizedCand.issues, score: scored.score });
+            } catch {
+              // Best-effort: skip failed candidates.
+            }
+          }
+
+          if (candidates.length === 0) {
+            const out = await openAiCompatAct({
+              request,
+              scenario,
+              adjacency,
+              args,
+              memory: memoryNow,
+              allowMemoryUpdate,
+              purpose: "act",
+            });
+            response = out.response;
+            upstreamStatus = out.httpStatus;
+            upstreamRaw = out.raw;
+            response.agent_info = {
+              provider: out.provider,
+              baseUrl: out.baseUrl,
+              model: out.resolvedModel,
+              modelMode: (args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? "").toLowerCase() === "auto" ? "auto" : "explicit",
+            };
+
+            if (memoryEnabled && allowMemoryUpdate && typeof response.memory_update === "string") {
+              const clamped = clampMemoryText(response.memory_update, memoryMaxChars);
+              if (clamped) memoryByKey.set(memoryKey, { text: clamped, updatedAtPly: request.ply });
+            }
+          } else {
+            candidates.sort((a, b) => b.score - a.score || a.issues.length - b.issues.length);
+            const best = candidates[0]!;
+            response = best.out.response;
+            response.actions = best.actions;
+            upstreamStatus = best.out.httpStatus;
+            upstreamRaw = best.out.raw;
+            response.agent_info = {
+              provider: best.out.provider,
+              baseUrl: best.out.baseUrl,
+              model: best.out.resolvedModel,
+              modelMode: (args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? "").toLowerCase() === "auto" ? "auto" : "explicit",
+            };
+          }
+        } else {
+          const out = await openAiCompatAct({
+            request,
+            scenario,
+            adjacency,
+            args,
+            memory: memoryNow,
+            allowMemoryUpdate,
+            purpose: "act",
+          });
+          response = out.response;
+          upstreamStatus = out.httpStatus;
+          upstreamRaw = out.raw;
+          response.agent_info = {
+            provider: out.provider,
+            baseUrl: out.baseUrl,
+            model: out.resolvedModel,
+            modelMode: (args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? "").toLowerCase() === "auto" ? "auto" : "explicit",
+          };
+
+          if (memoryEnabled && allowMemoryUpdate && typeof response.memory_update === "string") {
+            const clamped = clampMemoryText(response.memory_update, memoryMaxChars);
+            if (clamped) memoryByKey.set(memoryKey, { text: clamped, updatedAtPly: request.ply });
+          }
         }
       }
     } catch (e) {

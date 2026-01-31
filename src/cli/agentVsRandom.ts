@@ -173,6 +173,10 @@ async function main() {
   const serverWarmupMaxTokens = args.get("--warmup-max-tokens") ?? undefined;
   const serverRepair = args.get("--repair") ?? undefined;
   const serverRepairMaxRounds = args.get("--repair-max-rounds") ?? undefined;
+  const serverSelectMode = args.get("--select-mode") ?? undefined;
+  const serverSelectK = args.get("--select-k") ?? undefined;
+  const serverSelectCandidateTemperature = args.get("--select-candidate-temperature") ?? undefined;
+  const serverSelectUntilPly = args.get("--select-until-ply") ?? undefined;
 
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");
   if (!Number.isInteger(count) || count < 1 || count > 200) throw new Error("--count must be an integer in [1, 200]");
@@ -228,6 +232,10 @@ async function main() {
   if (serverWarmupMaxTokens) serverArgs.push("--warmup-max-tokens", serverWarmupMaxTokens);
   if (serverRepair) serverArgs.push("--repair", serverRepair);
   if (serverRepairMaxRounds) serverArgs.push("--repair-max-rounds", serverRepairMaxRounds);
+  if (serverSelectMode) serverArgs.push("--select-mode", serverSelectMode);
+  if (serverSelectK) serverArgs.push("--select-k", serverSelectK);
+  if (serverSelectCandidateTemperature) serverArgs.push("--select-candidate-temperature", serverSelectCandidateTemperature);
+  if (serverSelectUntilPly) serverArgs.push("--select-until-ply", serverSelectUntilPly);
   if (promptMode) serverArgs.push("--prompt-mode", promptMode);
   if (baseUrl) serverArgs.push("--base-url", baseUrl);
 
