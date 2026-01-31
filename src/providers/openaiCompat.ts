@@ -759,12 +759,13 @@ export async function openAiCompatAct(params: {
 }): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown; resolvedModel: string; provider: string; baseUrl: string }> {
   const { request, scenario, adjacency, args } = params;
 
-  const providerName = (args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "openai").toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  const providerNameRaw = (args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "openai").toLowerCase();
+  const providerName = providerNameRaw.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
   const keysFilePath = args.get("--keys-file");
   const keys = keysFilePath
     ? parseKeysFile(await (await import("node:fs/promises")).readFile(keysFilePath, "utf8"))
     : new Map<string, string>();
-  const keysName = (args.get("--keys-name") ?? providerName.toLowerCase()).toLowerCase();
+  const keysName = (args.get("--keys-name") ?? providerNameRaw).toLowerCase();
 
   const baseUrl =
     args.get("--base-url") ??
@@ -869,7 +870,7 @@ export async function openAiCompatAct(params: {
   };
 
   const toolsModeArg = parseToolsMode({ args });
-  const includeReasoning = parseIncludeReasoning({ args, provider: keysName });
+  const includeReasoning = parseIncludeReasoning({ args, provider: providerNameRaw });
   if (typeof includeReasoning === "boolean") payload.include_reasoning = includeReasoning;
   const streamMode = parseStreamMode({ args });
 
@@ -929,7 +930,7 @@ export async function openAiCompatAct(params: {
       if (omitResponseFormat) delete p.response_format;
       if (omitIncludeReasoning) delete p.include_reasoning;
       if (!omitReasoningEffort) {
-        const effort = parseReasoningEffort({ args, provider: keysName, resolvedModel: modelForAttempt });
+        const effort = parseReasoningEffort({ args, provider: providerNameRaw, resolvedModel: modelForAttempt });
         if (effort) p.reasoning_effort = effort;
       }
 
@@ -1242,7 +1243,7 @@ export async function openAiCompatAct(params: {
   try {
     // First attempt.
     const first = await callOnce();
-    return { ...first, resolvedModel, provider: keysName, baseUrl };
+    return { ...first, resolvedModel, provider: providerNameRaw, baseUrl };
   } catch (e1) {
     // One retry for malformed JSON / parsing issues.
     const msg = e1 instanceof Error ? e1.message : String(e1);
@@ -1339,7 +1340,7 @@ export async function openAiCompatAct(params: {
               rejectsIncludeReasoning ? true : undefined,
               resolvedModel,
             );
-            return { ...retry, resolvedModel, provider: keysName, baseUrl };
+            return { ...retry, resolvedModel, provider: providerNameRaw, baseUrl };
           } catch (e) {
             lastMsg = e instanceof Error ? e.message : String(e);
             const lastBudgetEmpty =
@@ -1375,7 +1376,7 @@ export async function openAiCompatAct(params: {
               rejectsIncludeReasoning ? true : undefined,
               undefined,
             );
-            return { ...retry, resolvedModel, provider: keysName, baseUrl };
+            return { ...retry, resolvedModel, provider: providerNameRaw, baseUrl };
           } catch (e) {
             lastMsg = e instanceof Error ? e.message : String(e);
             const stillTransient =
@@ -1429,7 +1430,7 @@ export async function openAiCompatAct(params: {
           rejectsIncludeReasoning ? true : undefined,
           undefined,
         );
-        return { ...retry, resolvedModel, provider: keysName, baseUrl };
+        return { ...retry, resolvedModel, provider: providerNameRaw, baseUrl };
       } catch (eRetry) {
         // Some "thinking" models still produce no final content/tool call on the first retry.
         // If we still see the same "budget empty" pattern and have time left, try once more with a larger budget.
@@ -1452,7 +1453,7 @@ export async function openAiCompatAct(params: {
               rejectsIncludeReasoning ? true : undefined,
               undefined,
             );
-            return { ...retry2, resolvedModel, provider: keysName, baseUrl };
+            return { ...retry2, resolvedModel, provider: providerNameRaw, baseUrl };
           }
         }
 
@@ -1478,7 +1479,7 @@ export async function openAiCompatAct(params: {
             rejectsIncludeReasoning ? true : undefined,
             undefined,
           );
-          return { ...retry2, resolvedModel, provider: keysName, baseUrl };
+          return { ...retry2, resolvedModel, provider: providerNameRaw, baseUrl };
         }
         throw eRetry;
       }

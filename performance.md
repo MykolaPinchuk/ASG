@@ -1,6 +1,6 @@
 # Performance (Focus-20 models)
 
-Updated (Pacific): 01/30/2026 17:19:48
+Updated (Pacific): 01/30/2026 19:37:26
 
 This file is generated from saved replay JSONs. It summarizes Focus-20 model performance under v0/v0.x guardrails (plies <= 30).
 
@@ -14,8 +14,8 @@ npm run -s perf:top20
 
 - Focus list: `docs/focus20_models.md` (20 entries)
 - Replay roots scanned: `replays`, `runs`
-- JSON files considered: 2834
-- Replays parsed (plies <= 30): 529
+- JSON files considered: 2858
+- Replays parsed (plies <= 30): 541
 
 ## Caveats
 
@@ -30,10 +30,10 @@ npm run -s perf:top20
 | chutes | tngtech/DeepSeek-R1T-Chimera | 9 | 8-1-0 | 89% | 6138 | 13 | 100% | 0% | 7% | 0% | 0% | 6 |
 | chutes | deepseek-ai/DeepSeek-V3-0324-TEE | 8 | 7-1-0 | 88% | 12358 | 18 | 100% | 1% | 6% | 0% | 0% | 9 |
 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus | 7 | 5-2-0 | 71% | 31743 | 15 | 98% | 14% | 14% | 2% | 0% | 6 |
-| chutes | openai/gpt-oss-120b-TEE | 6 | 3-3-0 | 50% | 21882 | 15 | 100% | 2% | 2% | 0% | 0% | 6 |
+| chutes | openai/gpt-oss-120b-TEE | 10 | 4-6-0 | 40% | 19745 | 15 | 99% | 2% | 1% | 1% | 0% | 7 |
 | chutes | openai/gpt-oss-120b-TEE | 0 | 0-0-0 | — | — | — | — | — | — | — | — | — |
 | chutes | openai/gpt-oss-20b | 1 | 0-1-0 | 0% | 23764 | — | 100% | 7% | 0% | 0% | 0% | 8 |
-| cerebras | gpt-oss-120b | 14 | 9-5-0 | 64% | 6383 | 5 | 48% | 57% | 0% | 52% | 0% | 4 |
+| cerebras | gpt-oss-120b | 18 | 13-5-0 | 72% | 3363 | 11 | 71% | 31% | 0% | 29% | 0% | 5 |
 | nanogpt | Qwen/Qwen3-235B-A22B-Thinking-2507 | 4 | 1-3-0 | 25% | 18159 | 13 | 100% | 15% | 0% | 0% | 0% | 3 |
 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus:thinking | 4 | 0-4-0 | 0% | 22355 | — | 97% | 12% | 0% | 3% | 0% | 4 |
 | nanogpt | zai-org/GLM-4.5:thinking | 2 | 0-2-0 | 0% | 41200 | — | 100% | 25% | 0% | 0% | 0% | 4 |
@@ -54,9 +54,9 @@ npm run -s perf:top20
 | 1 | openrouter | x-ai/grok-4.1-fast |  | 6 | 6-0-0 | 100% | 42561 | 5 | 89% |
 | 2 | chutes | tngtech/DeepSeek-R1T-Chimera |  | 9 | 8-1-0 | 89% | 6138 | 13 | 100% |
 | 3 | chutes | deepseek-ai/DeepSeek-V3-0324-TEE |  | 8 | 7-1-0 | 88% | 12358 | 18 | 100% |
-| 4 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=low | 6 | 3-3-0 | 50% | 21882 | 15 | 100% |
+| 4 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=low | 10 | 4-6-0 | 40% | 19745 | 15 | 99% |
 | 5 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus |  | 7 | 5-2-0 | 71% | 31743 | 15 | 98% |
-| 6 | cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools=off | 14 | 9-5-0 | 64% | 6383 | 5 | 48% |
+| 6 | cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools=off | 18 | 13-5-0 | 72% | 3363 | 11 | 71% |
 
 ## Details (Focus-20 order)
 
@@ -119,11 +119,11 @@ npm run -s perf:top20
 ### chutes / openai/gpt-oss-120b-TEE (reasoning-effort=low)
 
 - Focus: Keeps strength but reduces thinking time
-- MixBot: games=6 W-D-L=3-3-0 win=50% avgOkLatencyMs=21882 avgPliesToWin=15 okTurns=100% p50/p95OkLatencyMs=17555/50079
-  - pass=2% invalid=2% error=0% fallback=0%
-  - captures/game=6 ttfCaptureAvgPly=1 supplyYield@10=1 supplyYieldEnd=2
-  - seeds(outcome): 3:W, 3:W, 3:D, 3:W, 3:D, 4:D
-  - sources: `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T16-07-45PST_chutes_gptoss/chutes`, `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T16-27-17PST_chutes_gptoss120b_effort_low/chutes`, `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T16-35-27PST_chutes_gptoss120b_effort_medium/chutes`, `replays/mix_30ply_70s_advert40_rationale_3to5_2026-01-29T16-37-40PST_chutes_gptoss120b_effort_medium/chutes`, `replays/model_evals/top6_2games_2026-01-31T00-41-39-071Z/chutes`
+- MixBot: games=10 W-D-L=4-6-0 win=40% avgOkLatencyMs=19745 avgPliesToWin=15 okTurns=99% p50/p95OkLatencyMs=16494/47514
+  - pass=2% invalid=1% error=1% fallback=0%
+  - captures/game=7 ttfCaptureAvgPly=1 supplyYield@10=1 supplyYieldEnd=2
+  - seeds(outcome): 3:W, 3:W, 3:D, 3:W, 3:D, 3:D, 3:D, 4:D, 4:W, 4:D
+  - sources: `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T16-07-45PST_chutes_gptoss/chutes`, `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T16-27-17PST_chutes_gptoss120b_effort_low/chutes`, `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T16-35-27PST_chutes_gptoss120b_effort_medium/chutes`, `replays/mix_30ply_70s_advert40_rationale_3to5_2026-01-29T16-37-40PST_chutes_gptoss120b_effort_medium/chutes`, `replays/model_evals/gpt_oss_120b_sweep_2026-01-31T02-27-29-383Z/chutes_low`, `replays/model_evals/gpt_oss_120b_sweep_2026-01-31T02-27-29-383Z/chutes_medium`, …
 - GreedyBot: games=0 W-D-L=0-0-0 win=— avgOkLatencyMs=— avgPliesToWin=— okTurns=— p50/p95OkLatencyMs=—/—
   - pass=— invalid=— error=— fallback=—
   - captures/game=— ttfCaptureAvgPly=— supplyYield@10=— supplyYieldEnd=—
@@ -157,10 +157,10 @@ npm run -s perf:top20
 ### cerebras / gpt-oss-120b (reasoning-effort=high, max-tokens=8000, stream=off, tools=off)
 
 - Focus: Very strong when configured carefully
-- MixBot: games=14 W-D-L=9-5-0 win=64% avgOkLatencyMs=6383 avgPliesToWin=5 okTurns=48% p50/p95OkLatencyMs=5912/11724
-  - pass=57% invalid=0% error=52% fallback=0%
-  - captures/game=4 ttfCaptureAvgPly=3 supplyYield@10=1 supplyYieldEnd=0
-  - seeds(outcome): 3:D, 3:D, 3:W, 3:D, 3:D, 3:W, 3:W, 4:W, 4:D, 4:W, 5:W, 5:W, 6:W, 7:W
+- MixBot: games=18 W-D-L=13-5-0 win=72% avgOkLatencyMs=3363 avgPliesToWin=11 okTurns=71% p50/p95OkLatencyMs=1957/8825
+  - pass=31% invalid=0% error=29% fallback=0%
+  - captures/game=5 ttfCaptureAvgPly=3 supplyYield@10=1 supplyYieldEnd=1
+  - seeds(outcome): 3:D, 3:D, 3:W, 3:D, 3:D, 3:W, 3:W, 3:W, 3:W, 4:W, 4:D, 4:W, 4:W, 4:W, 5:W, 5:W, 6:W, 7:W
   - sources: `replays/model_evals/2026-01-30T01-11-11-685Z`, `replays/model_evals/2026-01-30T01-12-41-825Z`, `replays/model_evals/2026-01-30T01-15-22-286Z`, `replays/model_evals/cerebras_gpt-oss-120b_repeatability_2026-01-30T23-22-19-235Z`, `replays/model_evals/cerebras_gpt-oss-120b_repeatability_2026-01-30T23-22-58-967Z`, `replays/model_evals/cerebras_gpt-oss-120b_repeatability_2026-01-30T23-24-49-476Z`, …
 - GreedyBot: games=0 W-D-L=0-0-0 win=— avgOkLatencyMs=— avgPliesToWin=— okTurns=— p50/p95OkLatencyMs=—/—
   - pass=— invalid=— error=— fallback=—

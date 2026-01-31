@@ -145,6 +145,7 @@ function nowStamp(): string {
 async function evalOneModel(params: {
   providerName: ProviderName;
   keysFile: string;
+  keysName?: string;
   baseUrl?: string;
   model: string;
   modelsConfig: string;
@@ -204,6 +205,7 @@ async function evalOneModel(params: {
     "--fallback",
     "pass",
   ];
+  if (params.keysName) serverArgs.push("--keys-name", params.keysName);
   if (params.promptMode) serverArgs.push("--prompt-mode", params.promptMode);
   if (params.toolsMode) serverArgs.push("--tools-mode", params.toolsMode);
   if (params.stream) serverArgs.push("--stream", params.stream);
@@ -419,6 +421,7 @@ async function main() {
 
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
+  const keysName = args.get("--keys-name") ?? undefined;
   const providerName: ProviderName = args.get("--provider-name") ?? "nanogpt";
   const baseUrl =
     args.get("--base-url") ??
@@ -566,6 +569,7 @@ async function main() {
       const row = await evalOneModel({
         providerName,
         keysFile,
+        keysName,
         baseUrl,
         model,
         modelsConfig,

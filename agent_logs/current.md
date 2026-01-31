@@ -47,3 +47,6 @@
 - Refreshed `performance.md` to include:
   - `avg ok latency (ms)` (mean over ok agent turns)
   - `avg plies to win` (mean match plies over wins only)
+
+### 2026-01-30 (PT) — `gpt-oss-120b` reasoning-effort sweep (OR/Chutes/Cerebras)
+- Sweep results + commands: `docs/diagnostics/2026-01-30_gpt_oss_120b_reasoning_effort_sweep.md`.

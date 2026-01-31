@@ -117,6 +117,13 @@ function inferOpponentKind(replay: Replay, agent: PlayerId): string | null {
   return typeof k === "string" ? k : null;
 }
 
+function normalizeProvider(provider: string | null): string | null {
+  if (!provider) return null;
+  const p = provider.toLowerCase();
+  if (p === "cerebras-paid" || p === "cerebras-free" || p.startsWith("cerebras-")) return "cerebras";
+  return provider;
+}
+
 type GameMetrics = {
   seed: number;
   outcome: "WIN" | "LOSS" | "DRAW";
@@ -138,7 +145,8 @@ function metricsForReplay(replay: Replay, agentOverride?: PlayerId): { agent: Pl
   const agent = agentOverride ?? inferAgentSide(replay) ?? null;
   if (!agent) return null;
   const p = replay.players?.[agent] as any;
-  const provider = typeof p?.provider === "string" ? p.provider : null;
+  const providerRaw = typeof p?.provider === "string" ? p.provider : null;
+  const provider = normalizeProvider(providerRaw);
   const model = typeof p?.model === "string" ? p.model : null;
   const opponentKind = inferOpponentKind(replay, agent);
 
