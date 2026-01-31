@@ -24,6 +24,10 @@ Evidence:
 - `gpt-oss-120b` provider/effort sweep: `docs/diagnostics/2026-01-30_gpt_oss_120b_reasoning_effort_sweep.md` (commit `ea6b1aa`)
 - Latest `performance.md` refresh: commit `dba8805`
 
+## v07 next slice (complexity)
+- Plan: `docs/planning/V07_COMPLEXITY_EXPERIMENT.md`
+- Objective: increase game-mechanics complexity step-by-step and measure the 3 baselines above under the same eval protocol (MixBot, `turnCapPlies=30`, small fixed seeds, saved replays, update `performance.md`).
+
 ## OSS baselines (default for testing)
 These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):
 - Chutes:

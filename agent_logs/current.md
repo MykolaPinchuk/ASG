@@ -7,7 +7,13 @@
 - start: 2026-01-31
 
 ## Intent
-- (fill in)
+- v07: increase game-mechanics complexity step-by-step and evaluate baseline models (`gpt-oss-120b`, Chimera, Grok) under the stable protocol.
+
+## Next agent checklist
+- Read `docs/planning/V07_COMPLEXITY_EXPERIMENT.md`.
+- Keep prompts mechanics-only; avoid strategic “hints”.
+- Use small fixed seeds first (`3,4`), then confirm with a wider set (`3..7`).
+- Update `performance.md` via `npm run -s perf:top20`.
 
 ## Notes
 - Do not commit secrets or bulky artifacts (see `.gitignore`).
