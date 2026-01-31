@@ -1,6 +1,6 @@
 # Performance (Focus-20 models)
 
-Updated (Pacific): 01/30/2026 19:37:26
+Updated (Pacific): 01/30/2026 20:05:02
 
 This file is generated from saved replay JSONs. It summarizes Focus-20 model performance under v0/v0.x guardrails (plies <= 30).
 
@@ -14,8 +14,8 @@ npm run -s perf:top20
 
 - Focus list: `docs/focus20_models.md` (20 entries)
 - Replay roots scanned: `replays`, `runs`
-- JSON files considered: 2858
-- Replays parsed (plies <= 30): 541
+- JSON files considered: 2870
+- Replays parsed (plies <= 30): 551
 
 ## Caveats
 
@@ -33,7 +33,7 @@ npm run -s perf:top20
 | chutes | openai/gpt-oss-120b-TEE | 10 | 4-6-0 | 40% | 19745 | 15 | 99% | 2% | 1% | 1% | 0% | 7 |
 | chutes | openai/gpt-oss-120b-TEE | 0 | 0-0-0 | — | — | — | — | — | — | — | — | — |
 | chutes | openai/gpt-oss-20b | 1 | 0-1-0 | 0% | 23764 | — | 100% | 7% | 0% | 0% | 0% | 8 |
-| cerebras | gpt-oss-120b | 18 | 13-5-0 | 72% | 3363 | 11 | 71% | 31% | 0% | 29% | 0% | 5 |
+| cerebras | gpt-oss-120b | 28 | 19-9-0 | 68% | 3959 | 11 | 65% | 36% | 0% | 35% | 0% | 6 |
 | nanogpt | Qwen/Qwen3-235B-A22B-Thinking-2507 | 4 | 1-3-0 | 25% | 18159 | 13 | 100% | 15% | 0% | 0% | 0% | 3 |
 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus:thinking | 4 | 0-4-0 | 0% | 22355 | — | 97% | 12% | 0% | 3% | 0% | 4 |
 | nanogpt | zai-org/GLM-4.5:thinking | 2 | 0-2-0 | 0% | 41200 | — | 100% | 25% | 0% | 0% | 0% | 4 |
@@ -56,7 +56,7 @@ npm run -s perf:top20
 | 3 | chutes | deepseek-ai/DeepSeek-V3-0324-TEE |  | 8 | 7-1-0 | 88% | 12358 | 18 | 100% |
 | 4 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=low | 10 | 4-6-0 | 40% | 19745 | 15 | 99% |
 | 5 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus |  | 7 | 5-2-0 | 71% | 31743 | 15 | 98% |
-| 6 | cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools=off | 18 | 13-5-0 | 72% | 3363 | 11 | 71% |
+| 6 | cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools=off | 28 | 19-9-0 | 68% | 3959 | 11 | 65% |
 
 ## Details (Focus-20 order)
 
@@ -157,10 +157,10 @@ npm run -s perf:top20
 ### cerebras / gpt-oss-120b (reasoning-effort=high, max-tokens=8000, stream=off, tools=off)
 
 - Focus: Very strong when configured carefully
-- MixBot: games=18 W-D-L=13-5-0 win=72% avgOkLatencyMs=3363 avgPliesToWin=11 okTurns=71% p50/p95OkLatencyMs=1957/8825
-  - pass=31% invalid=0% error=29% fallback=0%
-  - captures/game=5 ttfCaptureAvgPly=3 supplyYield@10=1 supplyYieldEnd=1
-  - seeds(outcome): 3:D, 3:D, 3:W, 3:D, 3:D, 3:W, 3:W, 3:W, 3:W, 4:W, 4:D, 4:W, 4:W, 4:W, 5:W, 5:W, 6:W, 7:W
+- MixBot: games=28 W-D-L=19-9-0 win=68% avgOkLatencyMs=3959 avgPliesToWin=11 okTurns=65% p50/p95OkLatencyMs=2970/10160
+  - pass=36% invalid=0% error=35% fallback=0%
+  - captures/game=6 ttfCaptureAvgPly=2 supplyYield@10=2 supplyYieldEnd=1
+  - seeds(outcome): 3:D, 3:D, 3:W, 3:D, 3:D, 3:W, 3:W, 3:W, 3:W, 3:W, 4:W, 4:D, 4:W, 4:W, 4:W, 4:W, 5:W, 5:W, 5:W, 6:W …
   - sources: `replays/model_evals/2026-01-30T01-11-11-685Z`, `replays/model_evals/2026-01-30T01-12-41-825Z`, `replays/model_evals/2026-01-30T01-15-22-286Z`, `replays/model_evals/cerebras_gpt-oss-120b_repeatability_2026-01-30T23-22-19-235Z`, `replays/model_evals/cerebras_gpt-oss-120b_repeatability_2026-01-30T23-22-58-967Z`, `replays/model_evals/cerebras_gpt-oss-120b_repeatability_2026-01-30T23-24-49-476Z`, …
 - GreedyBot: games=0 W-D-L=0-0-0 win=— avgOkLatencyMs=— avgPliesToWin=— okTurns=— p50/p95OkLatencyMs=—/—
   - pass=— invalid=— error=— fallback=—
