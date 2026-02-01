@@ -19,6 +19,12 @@ For v07 we will focus on comparing how these models behave under a more complex 
 - Chutes: `tngtech/DeepSeek-R1T-Chimera` (backup baseline: strong + very reliable)
 - OpenRouter: `x-ai/grok-4.1-fast` (strong but very slow in this harness)
 
+## Current conclusion (2026-02-01)
+We have ~3 models that are “reasonably good” vs MixBot, but **none are suitable for rapid iteration on more complex game setups** right now:
+- OpenRouter `x-ai/grok-4.1-fast` appears to be the only one that consistently applies rules well and plays close to optimal, but its latency is high and often exceeds the current ~70s per-turn budget (leading to provider-error turns / passes).
+- Cerebras `gpt-oss-120b` and Chutes Chimera are good enough for baseline comparisons, but they do not reliably match Grok’s rule utilization/optimality; for Cerebras we now rely on structured/tools-forced + retry-to-medium to keep it stable.
+- Practical expectation: for “good, cheap, fast” at higher complexity, we likely need to wait ~2–3 months for the next generation of models/providers.
+
 Evidence:
 - Always-updated local performance snapshot: `performance.md` (generated via `npm run -s perf:top20`)
 - `gpt-oss-120b` provider/effort sweep: `docs/diagnostics/2026-01-30_gpt_oss_120b_reasoning_effort_sweep.md` (commit `ea6b1aa`)
