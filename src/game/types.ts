@@ -131,6 +131,17 @@ export interface Replay {
         baseUrl?: string;
         model?: string;
         modelMode?: "auto" | "explicit";
+        config?: {
+          reasoningEffort?: "low" | "medium" | "high";
+          promptMode?: "compact" | "full";
+          timeoutMs?: number;
+          maxTokens?: number;
+          temperature?: number;
+          useTools?: boolean;
+          toolsMode?: "auto" | "force" | "off";
+          stream?: "auto" | "on" | "off";
+          thinkHint?: "on" | "off";
+        };
       }
   >;
   turns: TurnRecord[];

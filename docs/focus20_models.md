@@ -10,12 +10,12 @@ Selection intent:
 |---|---|---|---|---|
 | openrouter | x-ai/grok-4.1-fast |  | Beats Mix reliably | vs Mix: 4-0-0 (100% win) |
 | chutes | tngtech/DeepSeek-R1T-Chimera |  | Beats Mix reliably | vs Mix: 6-1-0 (86% win) |
+| cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools=off | Very strong when configured carefully | seed3 vs Mix: win; avg ok latency ~11.3s; 1 providerError turn |
 | chutes | deepseek-ai/DeepSeek-V3-0324-TEE |  | Beats Mix reliably | vs Mix: 5-1-0 (83% win) |
 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus |  | Beats Mix (borderline) | vs Mix: 3-2-0 (60% win) |
 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=low | Keeps strength but reduces thinking time | seed3 vs Mix: win; avg ok latency ~12.5s |
 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=medium | Keep as slower/stronger variant | seed3 vs Mix (70s allowed): win; avg ok latency ~46.8s |
 | chutes | openai/gpt-oss-20b |  | Keep (slow; mostly works) | seed3 vs Mix: draw; 1 providerError turn; avg ok latency ~23.8s |
-| cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools=off | Very strong when configured carefully | seed3 vs Mix: win; avg ok latency ~11.3s; 1 providerError turn |
 | nanogpt | Qwen/Qwen3-235B-A22B-Thinking-2507 |  | Low error rate + thinking | vs Mix: 1-3-0; avg ok latency ~18.2s |
 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus:thinking |  | Low error rate + thinking | vs Mix: 0-3-0; avg ok latency ~22.4s |
 | nanogpt | zai-org/GLM-4.5:thinking |  | Slow + thinking (stress test) | vs Mix: 0-2-0; avg ok latency ~41.2s |

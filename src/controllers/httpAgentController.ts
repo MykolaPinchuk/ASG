@@ -22,6 +22,17 @@ type AgentResponse = {
     baseUrl?: string;
     model?: string;
     modelMode?: "auto" | "explicit";
+    config?: {
+      reasoningEffort?: "low" | "medium" | "high";
+      promptMode?: "compact" | "full";
+      timeoutMs?: number;
+      maxTokens?: number;
+      temperature?: number;
+      useTools?: boolean;
+      toolsMode?: "auto" | "force" | "off";
+      stream?: "auto" | "on" | "off";
+      thinkHint?: "on" | "off";
+    };
   };
   server_diagnostics?: {
     provider?: string;
@@ -84,11 +95,57 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
   if (isObject(infoRaw) && (typeof infoRaw.provider === "string" || typeof infoRaw.model === "string")) {
     const mm = (infoRaw as any).modelMode;
     const modelMode = mm === "auto" || mm === "explicit" ? mm : undefined;
+    const cfgRaw = (infoRaw as any).config;
+    let config: NonNullable<AgentResponse["agent_info"]>["config"] | undefined;
+    if (isObject(cfgRaw)) {
+      const reasoningEffortRaw = (cfgRaw as any).reasoningEffort;
+      const promptModeRaw = (cfgRaw as any).promptMode;
+      const toolsModeRaw = (cfgRaw as any).toolsMode;
+      const streamRaw = (cfgRaw as any).stream;
+      const thinkHintRaw = (cfgRaw as any).thinkHint;
+
+      const reasoningEffort =
+        reasoningEffortRaw === "low" || reasoningEffortRaw === "medium" || reasoningEffortRaw === "high"
+          ? reasoningEffortRaw
+          : undefined;
+      const promptMode = promptModeRaw === "compact" || promptModeRaw === "full" ? promptModeRaw : undefined;
+      const toolsMode = toolsModeRaw === "auto" || toolsModeRaw === "force" || toolsModeRaw === "off" ? toolsModeRaw : undefined;
+      const stream = streamRaw === "auto" || streamRaw === "on" || streamRaw === "off" ? streamRaw : undefined;
+      const thinkHint = thinkHintRaw === "on" || thinkHintRaw === "off" ? thinkHintRaw : undefined;
+      const timeoutMs =
+        typeof (cfgRaw as any).timeoutMs === "number" && Number.isFinite((cfgRaw as any).timeoutMs)
+          ? Math.floor((cfgRaw as any).timeoutMs)
+          : undefined;
+      const maxTokens =
+        typeof (cfgRaw as any).maxTokens === "number" && Number.isFinite((cfgRaw as any).maxTokens)
+          ? Math.floor((cfgRaw as any).maxTokens)
+          : undefined;
+      const temperature =
+        typeof (cfgRaw as any).temperature === "number" && Number.isFinite((cfgRaw as any).temperature)
+          ? Number((cfgRaw as any).temperature)
+          : undefined;
+      const useTools = typeof (cfgRaw as any).useTools === "boolean" ? (cfgRaw as any).useTools : undefined;
+
+      if (
+        reasoningEffort !== undefined ||
+        promptMode !== undefined ||
+        timeoutMs !== undefined ||
+        maxTokens !== undefined ||
+        temperature !== undefined ||
+        useTools !== undefined ||
+        toolsMode !== undefined ||
+        stream !== undefined ||
+        thinkHint !== undefined
+      ) {
+        config = { reasoningEffort, promptMode, timeoutMs, maxTokens, temperature, useTools, toolsMode, stream, thinkHint };
+      }
+    }
     agent_info = {
       provider: typeof infoRaw.provider === "string" ? infoRaw.provider : undefined,
       baseUrl: typeof infoRaw.baseUrl === "string" ? infoRaw.baseUrl : undefined,
       model: typeof infoRaw.model === "string" ? infoRaw.model : undefined,
       modelMode,
+      config,
     };
   }
 

@@ -61,24 +61,44 @@ type AgentResponse = {
   memory_update?: string;
 };
 
+class OpenAiCompatError extends Error {
+  readonly raw?: unknown;
+  readonly httpStatus?: number;
+
+  constructor(message: string, params?: { raw?: unknown; httpStatus?: number }) {
+    super(message);
+    this.name = "OpenAiCompatError";
+    this.raw = params?.raw;
+    this.httpStatus = params?.httpStatus;
+  }
+}
+
+function getOpenAiCompatErrorMeta(e: unknown): { raw?: unknown; httpStatus?: number } {
+  if (!e || typeof e !== "object") return {};
+  const anyE = e as any;
+  return {
+    raw: anyE.raw,
+    httpStatus: typeof anyE.httpStatus === "number" && Number.isFinite(anyE.httpStatus) ? Math.floor(anyE.httpStatus) : undefined,
+  };
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
 function extractJsonObject(text: string): unknown {
-  // Prefer raw JSON.
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Try to extract the first {...} block.
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      const slice = text.slice(start, end + 1);
-      return JSON.parse(slice);
-    }
-    throw new Error("no JSON object found in model output");
+  // Prefer extracting the first complete JSON object from anywhere in the text.
+  // This intentionally tolerates:
+  // - leading/trailing commentary
+  // - multiple JSON objects concatenated
+  // as long as the FIRST complete object is valid JSON.
+  for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
+    const candidate = tryExtractCompleteJsonObject(text.slice(start));
+    if (candidate !== null) return candidate;
+    // Cap work for pathological outputs.
+    if (start > 50_000) break;
   }
+  throw new Error("no JSON object found in model output");
 }
 
 function tryExtractCompleteJsonObject(text: string): unknown | null {
@@ -1114,16 +1134,19 @@ export async function openAiCompatAct(params: {
                 }
               }
               if (reasoningText && (reasoningText.includes("{") || reasoningText.includes("\"actions\""))) {
-                const parsed = tryExtractCompleteJsonObject(reasoningText);
-                if (parsed) {
-                  const maybe = tryReturn(parsed);
-                  if (maybe) {
-                    try {
-                      await reader.cancel();
-                    } catch {
-                      // ignore
+                // Only parse reasoning stream if it looks like it is the final JSON object (not a schema/example).
+                if (reasoningText.trimStart().startsWith("{")) {
+                  const parsed = tryExtractCompleteJsonObject(reasoningText);
+                  if (parsed) {
+                    const maybe = tryReturn(parsed);
+                    if (maybe) {
+                      try {
+                        await reader.cancel();
+                      } catch {
+                        // ignore
+                      }
+                      return maybe;
                     }
-                    return maybe;
                   }
                 }
               }
@@ -1206,7 +1229,7 @@ export async function openAiCompatAct(params: {
       }
 
       // Some providers/models emit the primary text in a separate reasoning field.
-      // Prefer parsing it ONLY if it likely contains the final JSON object.
+      // Prefer parsing it ONLY if it is likely the final JSON object (some providers put final content in reasoning).
       const reasoningText =
         msg?.reasoning_content ??
         msg?.reasoning ??
@@ -1215,10 +1238,9 @@ export async function openAiCompatAct(params: {
         msg?.analysis ??
         undefined;
       if (typeof reasoningText === "string" && reasoningText.length > 0) {
-        const looksLikeJson =
-          reasoningText.trimStart().startsWith("{") ||
-          (reasoningText.includes("{") && (reasoningText.includes("\"actions\"") || reasoningText.includes("'actions'")));
-        if (looksLikeJson) {
+        // Guardrail: do NOT try to parse JSON that merely appears inside an explanation snippet.
+        // Only parse reasoning if it *begins* with a JSON object.
+        if (reasoningText.trimStart().startsWith("{")) {
           const extracted = extractJsonObject(reasoningText);
           const response = validateAgentResponse(extracted, request.api_version);
           return { response, httpStatus, raw };
@@ -1235,6 +1257,9 @@ export async function openAiCompatAct(params: {
         `empty_output (finish_reason=${finishReason ?? ""} native_finish_reason=${nativeFinishReason ?? ""}) (choiceKeys=[${choiceKeys}] messageKeys=[${msgKeys}] bodySnippet=${snippet})`,
       );
 
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new OpenAiCompatError(msg, { raw, httpStatus });
     } finally {
       clearTimeout(timeout);
     }
@@ -1311,7 +1336,7 @@ export async function openAiCompatAct(params: {
       rejectsReasoningEffort ||
       rejectsResponseFormat ||
       rejectsIncludeReasoning;
-    if (!shouldRetry) throw new Error(`openai_compat failed: ${msg}`);
+    if (!shouldRetry) throw new OpenAiCompatError(`openai_compat failed: ${msg}`, getOpenAiCompatErrorMeta(e1));
 
     try {
       // If we're in model=auto mode and the chosen model is clearly failing (unavailable/timeout/budget-empty),
@@ -1485,7 +1510,7 @@ export async function openAiCompatAct(params: {
       }
     } catch (e2) {
       const msg2 = e2 instanceof Error ? e2.message : String(e2);
-      throw new Error(`openai_compat failed: ${msg2}`);
+      throw new OpenAiCompatError(`openai_compat failed: ${msg2}`, getOpenAiCompatErrorMeta(e2));
     }
   }
 }

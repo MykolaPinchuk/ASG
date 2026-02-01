@@ -62,7 +62,22 @@
             "provider": { "type": "string" },
             "baseUrl": { "type": "string" },
             "model": { "type": "string" },
-            "modelMode": { "type": "string", "enum": ["auto", "explicit"] }
+            "modelMode": { "type": "string", "enum": ["auto", "explicit"] },
+            "config": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "reasoningEffort": { "type": "string", "enum": ["low", "medium", "high"] },
+                "promptMode": { "type": "string", "enum": ["compact", "full"] },
+                "timeoutMs": { "type": "integer", "minimum": 0 },
+                "maxTokens": { "type": "integer", "minimum": 0 },
+                "temperature": { "type": "number" },
+                "useTools": { "type": "boolean" },
+                "toolsMode": { "type": "string", "enum": ["auto", "force", "off"] },
+                "stream": { "type": "string", "enum": ["auto", "on", "off"] },
+                "thinkHint": { "type": "string", "enum": ["on", "off"] }
+              }
+            }
           }
         }
       ]

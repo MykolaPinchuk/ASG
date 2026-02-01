@@ -32,6 +32,17 @@ type AgentResponse = {
     baseUrl?: string;
     model?: string;
     modelMode?: "auto" | "explicit";
+    config?: {
+      reasoningEffort?: "low" | "medium" | "high";
+      promptMode?: "compact" | "full";
+      timeoutMs?: number;
+      maxTokens?: number;
+      temperature?: number;
+      useTools?: boolean;
+      toolsMode?: "auto" | "force" | "off";
+      stream?: "auto" | "on" | "off";
+      thinkHint?: "on" | "off";
+    };
   };
   server_diagnostics?: {
     provider: Provider;
@@ -374,6 +385,76 @@ function parseOnOffFlag(value: string | undefined, defaultValue: boolean): boole
   throw new Error(`invalid boolean flag '${value}' (expected on|off)`);
 }
 
+function parseReasoningEffort(value: string | undefined): "low" | "medium" | "high" | undefined {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return undefined;
+  if (raw === "low" || raw === "medium" || raw === "high") return raw;
+  return undefined;
+}
+
+function parsePromptMode(value: string | undefined): "compact" | "full" | undefined {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return undefined;
+  if (raw === "compact" || raw === "full") return raw;
+  return undefined;
+}
+
+function parseToolsMode(value: string | undefined): "auto" | "force" | "off" | undefined {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return undefined;
+  if (raw === "auto" || raw === "force" || raw === "off") return raw;
+  return undefined;
+}
+
+function parseStreamMode(value: string | undefined): "auto" | "on" | "off" | undefined {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return undefined;
+  if (raw === "auto" || raw === "on" || raw === "off") return raw;
+  return undefined;
+}
+
+function parseThinkHintMode(value: string | undefined): "on" | "off" | undefined {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return undefined;
+  if (raw === "on" || raw === "off") return raw;
+  if (raw === "true" || raw === "1") return "on";
+  if (raw === "false" || raw === "0") return "off";
+  return undefined;
+}
+
+function parseFiniteInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return undefined;
+  return n;
+}
+
+function parseFiniteNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return undefined;
+  return n;
+}
+
+function buildAgentConfigFromArgs(args: Map<string, string>): NonNullable<NonNullable<AgentResponse["agent_info"]>["config"]> {
+  const timeoutMs = parseFiniteInt(args.get("--timeout-ms")) ?? 70000;
+  const maxTokens = parseFiniteInt(args.get("--max-tokens"));
+  const temperature = parseFiniteNumber(args.get("--temperature"));
+  const useTools = parseOnOffFlag(args.get("--use-tools"), true);
+
+  return {
+    reasoningEffort: parseReasoningEffort(args.get("--reasoning-effort")),
+    promptMode: parsePromptMode(args.get("--prompt-mode")),
+    timeoutMs,
+    maxTokens,
+    temperature,
+    useTools,
+    toolsMode: parseToolsMode(args.get("--tools-mode")),
+    stream: parseStreamMode(args.get("--stream")),
+    thinkHint: parseThinkHintMode(args.get("--think-hint")),
+  };
+}
+
 function clampMemoryText(text: string, maxChars: number): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (!Number.isFinite(maxChars) || maxChars <= 0) return "";
@@ -685,11 +766,13 @@ async function main() {
       // Allows omitting --model when using OpenRouter.
       if (!modelArg0 && providerKey === "openrouter") args.set("--model", "x-ai/grok-4.1-fast");
       const modelArg = args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? undefined;
+      const config = buildAgentConfigFromArgs(args);
       agentInfo = {
         provider: providerKey,
         baseUrl,
         model: modelArg && modelArg !== "auto" ? modelArg : undefined,
         modelMode: modelArg === "auto" ? "auto" : modelArg ? "explicit" : undefined,
+        config,
       };
     }
 
@@ -817,6 +900,7 @@ async function main() {
               baseUrl: best.out.baseUrl,
               model: best.out.resolvedModel,
               modelMode: (args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? "").toLowerCase() === "auto" ? "auto" : "explicit",
+              config: buildAgentConfigFromArgs(args),
             };
           }
         } else {
@@ -837,6 +921,7 @@ async function main() {
             baseUrl: out.baseUrl,
             model: out.resolvedModel,
             modelMode: (args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? "").toLowerCase() === "auto" ? "auto" : "explicit",
+            config: buildAgentConfigFromArgs(args),
           };
 
           if (memoryEnabled && allowMemoryUpdate && typeof response.memory_update === "string") {
@@ -847,6 +932,11 @@ async function main() {
       }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
+      const anyE = e as any;
+      if (anyE && typeof anyE === "object") {
+        if (anyE.raw !== undefined) upstreamRaw = anyE.raw;
+        if (typeof anyE.httpStatus === "number" && Number.isFinite(anyE.httpStatus)) upstreamStatus = Math.floor(anyE.httpStatus);
+      }
       response = { api_version: request.api_version, actions: [{ type: "pass" }], rationale_text: `server: ${provider} error (${error})` };
       if (agentInfo) response.agent_info = agentInfo;
     }
