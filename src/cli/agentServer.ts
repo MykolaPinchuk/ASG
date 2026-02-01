@@ -42,6 +42,8 @@ type AgentResponse = {
       toolsMode?: "auto" | "force" | "off";
       stream?: "auto" | "on" | "off";
       thinkHint?: "on" | "off";
+      retryOnFailure?: boolean;
+      retryReasoningEffort?: "low" | "medium" | "high";
     };
   };
   server_diagnostics?: {
@@ -49,6 +51,20 @@ type AgentResponse = {
     upstreamStatus?: number;
     upstreamError?: string;
     usedFallback?: boolean;
+    usedRetry?: boolean;
+    retry?: {
+      fromReasoningEffort: "low" | "medium" | "high";
+      toReasoningEffort: "low" | "medium" | "high";
+      firstError: string;
+      firstUpstreamStatus?: number;
+    };
+    attempts?: Array<{
+      attempt: number;
+      reasoningEffort: "low" | "medium" | "high";
+      latencyMs: number;
+      upstreamStatus?: number;
+      error?: string;
+    }>;
   };
 };
 
@@ -441,6 +457,8 @@ function buildAgentConfigFromArgs(args: Map<string, string>): NonNullable<NonNul
   const maxTokens = parseFiniteInt(args.get("--max-tokens"));
   const temperature = parseFiniteNumber(args.get("--temperature"));
   const useTools = parseOnOffFlag(args.get("--use-tools"), true);
+  const retryOnFailure = parseOnOffFlag(args.get("--retry-on-failure"), true);
+  const retryReasoningEffort = parseReasoningEffort(args.get("--retry-reasoning-effort")) ?? "medium";
 
   return {
     reasoningEffort: parseReasoningEffort(args.get("--reasoning-effort")),
@@ -452,6 +470,8 @@ function buildAgentConfigFromArgs(args: Map<string, string>): NonNullable<NonNul
     toolsMode: parseToolsMode(args.get("--tools-mode")),
     stream: parseStreamMode(args.get("--stream")),
     thinkHint: parseThinkHintMode(args.get("--think-hint")),
+    retryOnFailure,
+    retryReasoningEffort,
   };
 }
 
@@ -638,6 +658,11 @@ async function main() {
   const repairEnabled = parseOnOffFlag(args.get("--repair"), false);
   const repairMaxRounds = Number.parseInt(args.get("--repair-max-rounds") ?? "1", 10);
 
+  // Reliability: when using high reasoning, some providers/models can produce non-JSON / "empty_output" responses.
+  // Default behavior for this repo: retry once with medium reasoning when the turn fails.
+  const retryOnFailure = parseOnOffFlag(args.get("--retry-on-failure"), true);
+  const retryReasoningEffort = parseReasoningEffort(args.get("--retry-reasoning-effort")) ?? "medium";
+
   const selectModeRaw = (args.get("--select-mode") ?? "off").toLowerCase(); // off|one_ply
   if (!["off", "one_ply"].includes(selectModeRaw)) throw new Error("--select-mode must be off|one_ply");
   const selectMode = selectModeRaw as "off" | "one_ply";
@@ -658,6 +683,13 @@ async function main() {
     throw new Error("--select-candidate-temperature must be in [0,2]");
   }
   if (!Number.isInteger(selectUntilPly) || selectUntilPly < 0 || selectUntilPly > 1000) throw new Error("--select-until-ply must be an integer in [0,1000]");
+
+  // Default reasoning effort: keep OpenRouter behavior stable unless explicitly configured.
+  // For Cerebras (this repo's current OSS baseline), default to high.
+  if (provider === "openai_compat" && !parseReasoningEffort(args.get("--reasoning-effort"))) {
+    const providerNameRaw = (args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "").toLowerCase();
+    if (providerNameRaw === "cerebras" || providerNameRaw.startsWith("cerebras")) args.set("--reasoning-effort", "high");
+  }
 
   const scenarioCache = new Map<string, { scenario: Scenario; adjacency: Record<string, string[]> }>();
   const memoryByKey = new Map<string, MemoryState>();
@@ -749,6 +781,23 @@ async function main() {
     let upstreamStatus: number | undefined;
     let upstreamRaw: unknown | undefined;
     let agentInfo: AgentResponse["agent_info"] | undefined;
+    let retryDiagnostics:
+      | {
+          fromReasoningEffort: "low" | "medium" | "high";
+          toReasoningEffort: "low" | "medium" | "high";
+          firstError: string;
+          firstUpstreamStatus?: number;
+        }
+      | undefined;
+    let attemptDiagnostics:
+      | Array<{
+          attempt: number;
+          reasoningEffort: "low" | "medium" | "high";
+          latencyMs: number;
+          upstreamStatus?: number;
+          error?: string;
+        }>
+      | undefined;
 
     const memoryKey = `${request.match_id}|${request.player}`;
     const existingMemory = memoryEnabled ? memoryByKey.get(memoryKey) : undefined;
@@ -808,6 +857,53 @@ async function main() {
 
         const memoryNow = memoryEnabled ? memoryByKey.get(memoryKey)?.text : undefined;
         const allowMemoryUpdate = memoryEnabled && warmupMode === "inline" && !memoryNow && request.ply === 0;
+        const requestOk = request;
+        if (!requestOk) throw new Error("server: internal error (missing request)");
+
+        const primaryReasoningEffort = parseReasoningEffort(args.get("--reasoning-effort")) ?? "high";
+        const retryReasoningEffortResolved = retryReasoningEffort;
+        attemptDiagnostics = [];
+
+        async function actAttempt(params: {
+          attempt: number;
+          reasoningEffort: "low" | "medium" | "high";
+          argsForCall: Map<string, string>;
+        }): Promise<Awaited<ReturnType<typeof openAiCompatAct>>> {
+          const started = Date.now();
+          try {
+            const out = await openAiCompatAct({
+              request: requestOk,
+              scenario,
+              adjacency,
+              args: params.argsForCall,
+              memory: memoryNow,
+              allowMemoryUpdate,
+              purpose: "act",
+            });
+            attemptDiagnostics!.push({
+              attempt: params.attempt,
+              reasoningEffort: params.reasoningEffort,
+              latencyMs: Date.now() - started,
+              upstreamStatus: out.httpStatus,
+            });
+            return out;
+          } catch (e) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            const anyE = e as any;
+            const httpStatus =
+              anyE && typeof anyE === "object" && typeof anyE.httpStatus === "number" && Number.isFinite(anyE.httpStatus)
+                ? Math.floor(anyE.httpStatus)
+                : undefined;
+            attemptDiagnostics!.push({
+              attempt: params.attempt,
+              reasoningEffort: params.reasoningEffort,
+              latencyMs: Date.now() - started,
+              upstreamStatus: httpStatus,
+              error: errMsg,
+            });
+            throw e;
+          }
+        }
 
         const selectEnabled = provider === "openai_compat" && selectMode === "one_ply" && selectK > 1 && request.ply <= selectUntilPly;
         if (selectEnabled) {
@@ -865,15 +961,38 @@ async function main() {
           }
 
           if (candidates.length === 0) {
-            const out = await openAiCompatAct({
-              request,
-              scenario,
-              adjacency,
-              args,
-              memory: memoryNow,
-              allowMemoryUpdate,
-              purpose: "act",
-            });
+            let out: Awaited<ReturnType<typeof openAiCompatAct>>;
+            try {
+              out = await actAttempt({ attempt: 1, reasoningEffort: primaryReasoningEffort, argsForCall: args });
+            } catch (e1) {
+              const err1 = e1 instanceof Error ? e1.message : String(e1);
+              const anyE1 = e1 as any;
+              const status1 =
+                anyE1 && typeof anyE1 === "object" && typeof anyE1.httpStatus === "number" && Number.isFinite(anyE1.httpStatus)
+                  ? Math.floor(anyE1.httpStatus)
+                  : undefined;
+
+              const shouldRetry =
+                retryOnFailure && primaryReasoningEffort === "high" && retryReasoningEffortResolved !== "high" && retryReasoningEffortResolved !== undefined;
+              if (!shouldRetry) throw e1;
+
+              const baseTimeoutMs = Number.parseInt(args.get("--timeout-ms") ?? "70000", 10);
+              const deadlineAt = startedAt + (Number.isFinite(baseTimeoutMs) ? baseTimeoutMs : 70000);
+              const remainingMs = Math.max(1000, deadlineAt - Date.now());
+
+              const retryArgs = new Map(args);
+              retryArgs.set("--reasoning-effort", retryReasoningEffortResolved);
+              retryArgs.set("--timeout-ms", String(remainingMs));
+
+              retryDiagnostics = {
+                fromReasoningEffort: primaryReasoningEffort,
+                toReasoningEffort: retryReasoningEffortResolved,
+                firstError: err1,
+                firstUpstreamStatus: status1,
+              };
+
+              out = await actAttempt({ attempt: 2, reasoningEffort: retryReasoningEffortResolved, argsForCall: retryArgs });
+            }
             response = out.response;
             upstreamStatus = out.httpStatus;
             upstreamRaw = out.raw;
@@ -904,15 +1023,41 @@ async function main() {
             };
           }
         } else {
-          const out = await openAiCompatAct({
-            request,
-            scenario,
-            adjacency,
-            args,
-            memory: memoryNow,
-            allowMemoryUpdate,
-            purpose: "act",
-          });
+          let out: Awaited<ReturnType<typeof openAiCompatAct>> | undefined;
+          try {
+            out = await actAttempt({ attempt: 1, reasoningEffort: primaryReasoningEffort, argsForCall: args });
+          } catch (e1) {
+            const err1 = e1 instanceof Error ? e1.message : String(e1);
+            const anyE1 = e1 as any;
+            const status1 =
+              anyE1 && typeof anyE1 === "object" && typeof anyE1.httpStatus === "number" && Number.isFinite(anyE1.httpStatus)
+                ? Math.floor(anyE1.httpStatus)
+                : undefined;
+
+            const shouldRetry =
+              retryOnFailure && primaryReasoningEffort === "high" && retryReasoningEffortResolved !== "high" && retryReasoningEffortResolved !== undefined;
+
+            if (!shouldRetry) throw e1;
+
+            // Retry with medium reasoning (or configured retry effort) within the original timeout budget.
+            const baseTimeoutMs = Number.parseInt(args.get("--timeout-ms") ?? "70000", 10);
+            const deadlineAt = startedAt + (Number.isFinite(baseTimeoutMs) ? baseTimeoutMs : 70000);
+            const remainingMs = Math.max(1000, deadlineAt - Date.now());
+
+            const retryArgs = new Map(args);
+            retryArgs.set("--reasoning-effort", retryReasoningEffortResolved);
+            retryArgs.set("--timeout-ms", String(remainingMs));
+
+            retryDiagnostics = {
+              fromReasoningEffort: primaryReasoningEffort,
+              toReasoningEffort: retryReasoningEffortResolved,
+              firstError: err1,
+              firstUpstreamStatus: status1,
+            };
+
+            out = await actAttempt({ attempt: 2, reasoningEffort: retryReasoningEffortResolved, argsForCall: retryArgs });
+          }
+
           response = out.response;
           upstreamStatus = out.httpStatus;
           upstreamRaw = out.raw;
@@ -1006,6 +1151,9 @@ async function main() {
       upstreamStatus,
       upstreamError: error,
       usedFallback: sanitized.usedFallback,
+      usedRetry: !!retryDiagnostics,
+      retry: retryDiagnostics,
+      attempts: attemptDiagnostics,
     };
     delete (response as any).memory_update;
     if (response.api_version !== request.api_version) {

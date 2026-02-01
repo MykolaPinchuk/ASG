@@ -32,6 +32,8 @@ type AgentResponse = {
       toolsMode?: "auto" | "force" | "off";
       stream?: "auto" | "on" | "off";
       thinkHint?: "on" | "off";
+      retryOnFailure?: boolean;
+      retryReasoningEffort?: "low" | "medium" | "high";
     };
   };
   server_diagnostics?: {
@@ -39,6 +41,20 @@ type AgentResponse = {
     upstreamStatus?: number;
     upstreamError?: string;
     usedFallback?: boolean;
+    usedRetry?: boolean;
+    retry?: {
+      fromReasoningEffort?: "low" | "medium" | "high";
+      toReasoningEffort?: "low" | "medium" | "high";
+      firstError?: string;
+      firstUpstreamStatus?: number;
+    };
+    attempts?: Array<{
+      attempt?: number;
+      reasoningEffort?: "low" | "medium" | "high";
+      latencyMs?: number;
+      upstreamStatus?: number;
+      error?: string;
+    }>;
   };
 };
 
@@ -103,6 +119,7 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
       const toolsModeRaw = (cfgRaw as any).toolsMode;
       const streamRaw = (cfgRaw as any).stream;
       const thinkHintRaw = (cfgRaw as any).thinkHint;
+      const retryReasoningEffortRaw = (cfgRaw as any).retryReasoningEffort;
 
       const reasoningEffort =
         reasoningEffortRaw === "low" || reasoningEffortRaw === "medium" || reasoningEffortRaw === "high"
@@ -112,6 +129,10 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
       const toolsMode = toolsModeRaw === "auto" || toolsModeRaw === "force" || toolsModeRaw === "off" ? toolsModeRaw : undefined;
       const stream = streamRaw === "auto" || streamRaw === "on" || streamRaw === "off" ? streamRaw : undefined;
       const thinkHint = thinkHintRaw === "on" || thinkHintRaw === "off" ? thinkHintRaw : undefined;
+      const retryReasoningEffort =
+        retryReasoningEffortRaw === "low" || retryReasoningEffortRaw === "medium" || retryReasoningEffortRaw === "high"
+          ? retryReasoningEffortRaw
+          : undefined;
       const timeoutMs =
         typeof (cfgRaw as any).timeoutMs === "number" && Number.isFinite((cfgRaw as any).timeoutMs)
           ? Math.floor((cfgRaw as any).timeoutMs)
@@ -125,6 +146,7 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
           ? Number((cfgRaw as any).temperature)
           : undefined;
       const useTools = typeof (cfgRaw as any).useTools === "boolean" ? (cfgRaw as any).useTools : undefined;
+      const retryOnFailure = typeof (cfgRaw as any).retryOnFailure === "boolean" ? (cfgRaw as any).retryOnFailure : undefined;
 
       if (
         reasoningEffort !== undefined ||
@@ -135,9 +157,23 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
         useTools !== undefined ||
         toolsMode !== undefined ||
         stream !== undefined ||
-        thinkHint !== undefined
+        thinkHint !== undefined ||
+        retryOnFailure !== undefined ||
+        retryReasoningEffort !== undefined
       ) {
-        config = { reasoningEffort, promptMode, timeoutMs, maxTokens, temperature, useTools, toolsMode, stream, thinkHint };
+        config = {
+          reasoningEffort,
+          promptMode,
+          timeoutMs,
+          maxTokens,
+          temperature,
+          useTools,
+          toolsMode,
+          stream,
+          thinkHint,
+          retryOnFailure,
+          retryReasoningEffort,
+        };
       }
     }
     agent_info = {
@@ -158,9 +194,62 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
         : undefined;
     const upstreamError = typeof (diagRaw as any).upstreamError === "string" ? (diagRaw as any).upstreamError : undefined;
     const usedFallback = typeof (diagRaw as any).usedFallback === "boolean" ? (diagRaw as any).usedFallback : undefined;
+    const usedRetry = typeof (diagRaw as any).usedRetry === "boolean" ? (diagRaw as any).usedRetry : undefined;
     const provider = typeof (diagRaw as any).provider === "string" ? (diagRaw as any).provider : undefined;
-    if (provider || upstreamStatus !== undefined || upstreamError || usedFallback !== undefined) {
-      server_diagnostics = { provider, upstreamStatus, upstreamError, usedFallback };
+
+    const retryRaw = (diagRaw as any).retry;
+    let retry: NonNullable<AgentResponse["server_diagnostics"]>["retry"] | undefined;
+    if (isObject(retryRaw)) {
+      const from =
+        (retryRaw as any).fromReasoningEffort === "low" ||
+        (retryRaw as any).fromReasoningEffort === "medium" ||
+        (retryRaw as any).fromReasoningEffort === "high"
+          ? ((retryRaw as any).fromReasoningEffort as "low" | "medium" | "high")
+          : undefined;
+      const to =
+        (retryRaw as any).toReasoningEffort === "low" ||
+        (retryRaw as any).toReasoningEffort === "medium" ||
+        (retryRaw as any).toReasoningEffort === "high"
+          ? ((retryRaw as any).toReasoningEffort as "low" | "medium" | "high")
+          : undefined;
+      const firstError = typeof (retryRaw as any).firstError === "string" ? (retryRaw as any).firstError : undefined;
+      const firstUpstreamStatus =
+        typeof (retryRaw as any).firstUpstreamStatus === "number" && Number.isFinite((retryRaw as any).firstUpstreamStatus)
+          ? Math.floor((retryRaw as any).firstUpstreamStatus)
+          : undefined;
+      if (from || to || firstError || firstUpstreamStatus !== undefined) {
+        retry = { fromReasoningEffort: from, toReasoningEffort: to, firstError, firstUpstreamStatus };
+      }
+    }
+
+    const attemptsRaw = (diagRaw as any).attempts;
+    let attempts: NonNullable<AgentResponse["server_diagnostics"]>["attempts"] | undefined;
+    if (Array.isArray(attemptsRaw)) {
+      const parsedAttempts: NonNullable<NonNullable<AgentResponse["server_diagnostics"]>["attempts"]> = [];
+      for (const a of attemptsRaw) {
+        if (!isObject(a)) continue;
+        const attempt =
+          typeof (a as any).attempt === "number" && Number.isFinite((a as any).attempt) ? Math.floor((a as any).attempt) : undefined;
+        const reasoningEffort =
+          (a as any).reasoningEffort === "low" || (a as any).reasoningEffort === "medium" || (a as any).reasoningEffort === "high"
+            ? ((a as any).reasoningEffort as "low" | "medium" | "high")
+            : undefined;
+        const latencyMs =
+          typeof (a as any).latencyMs === "number" && Number.isFinite((a as any).latencyMs) ? Math.max(0, Math.floor((a as any).latencyMs)) : undefined;
+        const upstreamStatus =
+          typeof (a as any).upstreamStatus === "number" && Number.isFinite((a as any).upstreamStatus)
+            ? Math.floor((a as any).upstreamStatus)
+            : undefined;
+        const error = typeof (a as any).error === "string" ? (a as any).error : undefined;
+        if (attempt !== undefined || reasoningEffort || latencyMs !== undefined || upstreamStatus !== undefined || error) {
+          parsedAttempts.push({ attempt, reasoningEffort, latencyMs, upstreamStatus, error });
+        }
+      }
+      if (parsedAttempts.length) attempts = parsedAttempts;
+    }
+
+    if (provider || upstreamStatus !== undefined || upstreamError || usedFallback !== undefined || usedRetry !== undefined || retry || attempts) {
+      server_diagnostics = { provider, upstreamStatus, upstreamError, usedFallback, usedRetry, retry, attempts };
     }
   }
 
@@ -302,6 +391,9 @@ export class HttpAgentController implements Controller {
         upstreamStatus: parsedResponse.server_diagnostics?.upstreamStatus,
         upstreamError: parsedResponse.server_diagnostics?.upstreamError,
         usedFallback: parsedResponse.server_diagnostics?.usedFallback,
+        usedRetry: parsedResponse.server_diagnostics?.usedRetry,
+        retry: parsedResponse.server_diagnostics?.retry,
+        attempts: parsedResponse.server_diagnostics?.attempts,
       },
     };
   }

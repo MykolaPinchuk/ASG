@@ -700,6 +700,13 @@
         switch (e.type) {
           case "income":
             return `income: ${e.player} +${e.amount} (supply now ${e.supplyAfter})`;
+          case "agent_retry": {
+            const from = e.fromReasoningEffort || "?";
+            const to = e.toReasoningEffort || "?";
+            const status = typeof e.firstUpstreamStatus === "number" ? ` upstream=${e.firstUpstreamStatus}` : "";
+            const err = typeof e.firstError === "string" && e.firstError ? ` error="${e.firstError}"` : "";
+            return `agent retry: attempt=${e.attempt} reasoning ${from}→${to}${status}${err}`;
+          }
           case "invalid_action":
             return `invalid: ${e.player} ${formatAction(e.action)} — ${e.message}`;
           case "reinforce":
@@ -910,6 +917,8 @@
         if (hasDiagError) badgeBits.push("ERROR");
         const usedFallback = !!(diag && diag.usedFallback === true);
         if (usedFallback) badgeBits.push("FALLBACK");
+        const usedRetry = !!(diag && diag.usedRetry === true);
+        if (usedRetry) badgeBits.push("RETRY");
         const badgesLine = `Badges: ${badgeBits.length ? badgeBits.join(", ") : "—"}`;
         let diagLine = "";
         if (diag) {

@@ -75,7 +75,9 @@
                 "useTools": { "type": "boolean" },
                 "toolsMode": { "type": "string", "enum": ["auto", "force", "off"] },
                 "stream": { "type": "string", "enum": ["auto", "on", "off"] },
-                "thinkHint": { "type": "string", "enum": ["on", "off"] }
+                "thinkHint": { "type": "string", "enum": ["on", "off"] },
+                "retryOnFailure": { "type": "boolean" },
+                "retryReasoningEffort": { "type": "string", "enum": ["low", "medium", "high"] }
               }
             }
           }
@@ -302,6 +304,19 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["type", "attempt", "fromReasoningEffort", "toReasoningEffort"],
+          "properties": {
+            "type": { "const": "agent_retry" },
+            "attempt": { "type": "integer", "minimum": 1 },
+            "fromReasoningEffort": { "type": "string", "enum": ["low", "medium", "high"] },
+            "toReasoningEffort": { "type": "string", "enum": ["low", "medium", "high"] },
+            "firstError": { "type": "string" },
+            "firstUpstreamStatus": { "type": "integer", "minimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["type", "player", "amount", "supplyAfter"],
           "properties": {
             "type": { "const": "income" },
@@ -444,7 +459,32 @@
         "error": { "type": "string" },
         "upstreamStatus": { "type": "integer", "minimum": 0 },
         "upstreamError": { "type": "string" },
-        "usedFallback": { "type": "boolean" }
+        "usedFallback": { "type": "boolean" },
+        "usedRetry": { "type": "boolean" },
+        "retry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fromReasoningEffort": { "type": "string", "enum": ["low", "medium", "high"] },
+            "toReasoningEffort": { "type": "string", "enum": ["low", "medium", "high"] },
+            "firstError": { "type": "string" },
+            "firstUpstreamStatus": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "attempt": { "type": "integer", "minimum": 1 },
+              "reasoningEffort": { "type": "string", "enum": ["low", "medium", "high"] },
+              "latencyMs": { "type": "integer", "minimum": 0 },
+              "upstreamStatus": { "type": "integer", "minimum": 0 },
+              "error": { "type": "string" }
+            }
+          }
+        }
       }
     }
   }

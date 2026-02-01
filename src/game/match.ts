@@ -35,6 +35,24 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
     state = applied.state;
     result = applied.result;
 
+    const events = applied.events.slice();
+    const retry = decision.diagnostics?.retry;
+    if (
+      decision.diagnostics?.usedRetry === true &&
+      retry &&
+      typeof retry.fromReasoningEffort === "string" &&
+      typeof retry.toReasoningEffort === "string"
+    ) {
+      events.push({
+        type: "agent_retry",
+        attempt: 2,
+        fromReasoningEffort: retry.fromReasoningEffort,
+        toReasoningEffort: retry.toReasoningEffort,
+        firstError: retry.firstError,
+        firstUpstreamStatus: retry.firstUpstreamStatus,
+      });
+    }
+
     turns.push({
       ply: observations[player].ply,
       player,
@@ -44,7 +62,7 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
       latencyMs,
       controllerId: controller.id,
       diagnostics: decision.diagnostics,
-      events: applied.events,
+      events,
       stateAfter: state,
     });
   }

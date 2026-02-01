@@ -1,6 +1,6 @@
 # Performance (Focus-20 models)
 
-Updated (Pacific): 01/31/2026 15:48:48
+Updated (Pacific): 01/31/2026 18:06:41
 
 This file is generated from saved replay JSONs. It summarizes Focus-20 model performance under v0/v0.x guardrails (plies <= 30).
 
@@ -14,8 +14,8 @@ npm run -s perf:top20
 
 - Focus list: `docs/focus20_models.md` (20 entries)
 - Replay roots scanned: `replays`, `runs`
-- JSON files considered: 2892
-- Replays parsed (plies <= 30): 573
+- JSON files considered: 3360
+- Replays parsed (plies <= 30): 606
 
 ## Caveats
 
@@ -26,12 +26,12 @@ npm run -s perf:top20
 
 | provider | model | games | W-D-L | win | avg ok latency (ms) | avg plies to win | ok turns | pass | invalid | error | fallback | captures/game |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| openrouter | x-ai/grok-4.1-fast | 14 | 13-1-0 | 93% | 39767 | 5 | 85% | 15% | 4% | 15% | 0% | 6 |
+| openrouter | x-ai/grok-4.1-fast | 16 | 15-1-0 | 94% | 38531 | 6 | 84% | 16% | 3% | 16% | 0% | 7 |
 | chutes | tngtech/DeepSeek-R1T-Chimera | 16 | 15-1-0 | 94% | 8395 | 16 | 100% | 0% | 5% | 0% | 0% | 6 |
-| cerebras | gpt-oss-120b | 5 | 4-1-0 | 80% | 4712 | 2 | 71% | 29% | 0% | 29% | 0% | 5 |
+| cerebras | gpt-oss-120b | 3 | 3-0-0 | 100% | 5787 | 25 | 100% | 0% | 0% | 0% | 0% | 12 |
 | chutes | deepseek-ai/DeepSeek-V3-0324-TEE | 8 | 7-1-0 | 88% | 12358 | 18 | 100% | 1% | 6% | 0% | 0% | 9 |
 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus | 7 | 5-2-0 | 71% | 31743 | 15 | 98% | 14% | 14% | 2% | 0% | 6 |
-| chutes | openai/gpt-oss-120b-TEE | 10 | 4-6-0 | 40% | 19745 | 15 | 99% | 2% | 1% | 1% | 0% | 7 |
+| chutes | openai/gpt-oss-120b-TEE | 0 | 0-0-0 | — | — | — | — | — | — | — | — | — |
 | chutes | openai/gpt-oss-120b-TEE | 0 | 0-0-0 | — | — | — | — | — | — | — | — | — |
 | chutes | openai/gpt-oss-20b | 1 | 0-1-0 | 0% | 23764 | — | 100% | 7% | 0% | 0% | 0% | 8 |
 | nanogpt | Qwen/Qwen3-235B-A22B-Thinking-2507 | 4 | 1-3-0 | 25% | 18159 | 13 | 100% | 15% | 0% | 0% | 0% | 3 |
@@ -51,11 +51,11 @@ npm run -s perf:top20
 
 | rank | provider | model | config | games | W-D-L | win | avg ok latency (ms) | avg plies to win | ok turns |
 |---:|---|---|---|---:|---:|---:|---:|---:|---:|
-| 1 | openrouter | x-ai/grok-4.1-fast |  | 14 | 13-1-0 | 93% | 39767 | 5 | 85% |
+| 1 | openrouter | x-ai/grok-4.1-fast |  | 16 | 15-1-0 | 94% | 38531 | 6 | 84% |
 | 2 | chutes | tngtech/DeepSeek-R1T-Chimera |  | 16 | 15-1-0 | 94% | 8395 | 16 | 100% |
-| 3 | cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools=off | 5 | 4-1-0 | 80% | 4712 | 2 | 71% |
+| 3 | cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools-mode=force, retry-on-failure=on, retry-reasoning-effort=medium | 3 | 3-0-0 | 100% | 5787 | 25 | 100% |
 | 4 | chutes | deepseek-ai/DeepSeek-V3-0324-TEE |  | 8 | 7-1-0 | 88% | 12358 | 18 | 100% |
-| 5 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=low | 10 | 4-6-0 | 40% | 19745 | 15 | 99% |
+| 5 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=low | 0 | 0-0-0 | — | — | — | — |
 | 6 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus |  | 7 | 5-2-0 | 71% | 31743 | 15 | 98% |
 
 ## Details (Focus-20 order)
@@ -63,11 +63,11 @@ npm run -s perf:top20
 ### openrouter / x-ai/grok-4.1-fast
 
 - Focus: Beats Mix reliably
-- MixBot: games=14 W-D-L=13-1-0 win=93% avgOkLatencyMs=39767 avgPliesToWin=5 okTurns=85% p50/p95OkLatencyMs=38249/61129
-  - pass=15% invalid=4% error=15% fallback=0%
-  - captures/game=6 ttfCaptureAvgPly=0 supplyYield@10=3 supplyYieldEnd=2
-  - seeds(outcome): 3:W, 3:W, 3:D, 3:W, 3:W, 3:W, 3:W, 3:W, 4:W, 4:W, 4:W, 5:W, 6:W, 7:W
-  - sources: `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T05-09-47PST_openrouter6/openrouter`, `replays/model_evals/2026-01-31T20-41-54-087Z`, `replays/model_evals/2026-01-31T20-59-59-881Z`, `replays/model_evals/2026-01-31T21-04-57-380Z`, `replays/model_evals/2026-01-31T23-43-09-762Z`, `replays/model_evals/seed3_vs_mix/openrouter_1game_tc120`, …
+- MixBot: games=16 W-D-L=15-1-0 win=94% avgOkLatencyMs=38531 avgPliesToWin=6 okTurns=84% p50/p95OkLatencyMs=38249/61129
+  - pass=16% invalid=3% error=16% fallback=0%
+  - captures/game=7 ttfCaptureAvgPly=0 supplyYield@10=3 supplyYieldEnd=2
+  - seeds(outcome): 3:W, 3:W, 3:D, 3:W, 3:W, 3:W, 3:W, 3:W, 4:W, 4:W, 4:W, 5:W, 6:W, 7:W, 22:W, 23:W
+  - sources: `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T05-09-47PST_openrouter6/openrouter`, `replays/model_evals/2026-01-31T20-41-54-087Z`, `replays/model_evals/2026-01-31T20-59-59-881Z`, `replays/model_evals/2026-01-31T21-04-57-380Z`, `replays/model_evals/2026-01-31T23-43-09-762Z`, `replays/model_evals/grok_4_1_fast_2026-02-01T01-59-33Z`, …
 - GreedyBot: games=3 W-D-L=3-0-0 win=100% avgOkLatencyMs=— avgPliesToWin=8 okTurns=100% p50/p95OkLatencyMs=—/—
   - pass=0% invalid=0% error=0% fallback=0%
   - captures/game=8 ttfCaptureAvgPly=1 supplyYield@10=4 supplyYieldEnd=4
@@ -88,14 +88,14 @@ npm run -s perf:top20
   - seeds(outcome): 3:W, 3:W, 4:W, 5:W
   - sources: `replays/model_evals/2026-01-27T21-25-47-548Z`, `replays/model_evals/2026-01-27T23-06-01-188Z`
 
-### cerebras / gpt-oss-120b (reasoning-effort=high, max-tokens=8000, stream=off, tools=off)
+### cerebras / gpt-oss-120b (reasoning-effort=high, max-tokens=8000, stream=off, tools-mode=force, retry-on-failure=on, retry-reasoning-effort=medium)
 
 - Focus: Very strong when configured carefully
-- MixBot: games=5 W-D-L=4-1-0 win=80% avgOkLatencyMs=4712 avgPliesToWin=2 okTurns=71% p50/p95OkLatencyMs=3591/8033
-  - pass=29% invalid=0% error=29% fallback=0%
-  - captures/game=5 ttfCaptureAvgPly=1 supplyYield@10=0 supplyYieldEnd=1
-  - seeds(outcome): 3:W, 4:W, 5:W, 6:W, 7:D
-  - sources: `replays/model_evals/2026-01-31T20-59-43-655Z`, `replays/model_evals/2026-01-31T23-41-12-407Z`
+- MixBot: games=3 W-D-L=3-0-0 win=100% avgOkLatencyMs=5787 avgPliesToWin=25 okTurns=100% p50/p95OkLatencyMs=3508/11347
+  - pass=0% invalid=0% error=0% fallback=0%
+  - captures/game=12 ttfCaptureAvgPly=0 supplyYield@10=3 supplyYieldEnd=3
+  - seeds(outcome): 22:W, 23:W, 24:W
+  - sources: `replays/model_evals/cerebras_structured_baseline_2026-02-01T01-55-14Z`
 - GreedyBot: games=0 W-D-L=0-0-0 win=— avgOkLatencyMs=— avgPliesToWin=— okTurns=— p50/p95OkLatencyMs=—/—
   - pass=— invalid=— error=— fallback=—
   - captures/game=— ttfCaptureAvgPly=— supplyYield@10=— supplyYieldEnd=—
@@ -132,11 +132,10 @@ npm run -s perf:top20
 ### chutes / openai/gpt-oss-120b-TEE (reasoning-effort=low)
 
 - Focus: Keeps strength but reduces thinking time
-- MixBot: games=10 W-D-L=4-6-0 win=40% avgOkLatencyMs=19745 avgPliesToWin=15 okTurns=99% p50/p95OkLatencyMs=16494/47514
-  - pass=2% invalid=1% error=1% fallback=0%
-  - captures/game=7 ttfCaptureAvgPly=1 supplyYield@10=1 supplyYieldEnd=2
-  - seeds(outcome): 3:W, 3:W, 3:D, 3:W, 3:D, 3:D, 3:D, 4:D, 4:W, 4:D
-  - sources: `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T16-07-45PST_chutes_gptoss/chutes`, `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T16-27-17PST_chutes_gptoss120b_effort_low/chutes`, `replays/mix_30ply_60s_advert40_rationale_3to5_2026-01-29T16-35-27PST_chutes_gptoss120b_effort_medium/chutes`, `replays/mix_30ply_70s_advert40_rationale_3to5_2026-01-29T16-37-40PST_chutes_gptoss120b_effort_medium/chutes`, `replays/model_evals/gpt_oss_120b_sweep_2026-01-31T02-27-29-383Z/chutes_low`, `replays/model_evals/gpt_oss_120b_sweep_2026-01-31T02-27-29-383Z/chutes_medium`, …
+- MixBot: games=0 W-D-L=0-0-0 win=— avgOkLatencyMs=— avgPliesToWin=— okTurns=— p50/p95OkLatencyMs=—/—
+  - pass=— invalid=— error=— fallback=—
+  - captures/game=— ttfCaptureAvgPly=— supplyYield@10=— supplyYieldEnd=—
+  - seeds(outcome): —
 - GreedyBot: games=0 W-D-L=0-0-0 win=— avgOkLatencyMs=— avgPliesToWin=— okTurns=— p50/p95OkLatencyMs=—/—
   - pass=— invalid=— error=— fallback=—
   - captures/game=— ttfCaptureAvgPly=— supplyYield@10=— supplyYieldEnd=—
