@@ -291,6 +291,8 @@ function buildSystemPrompt(params: { allowMemoryUpdate: boolean; purpose: "act" 
     "Rules reminders:",
     "- move only along an edge from the provided adjacency list.",
     "- do not exceed available forces at the from node.",
+    "- Splitting is allowed: you may move ANY positive amount up to the forces available at the time of that action (leaving the rest behind).",
+    "- You can split a stack by issuing multiple move actions from the same node (possibly to different neighbors), as long as each move amount is <= the remaining forces at that node when the move is executed.",
     "- reinforce costs supply: amount * reinforceCostPerStrength.",
     "Never output an empty actions array; include at least one action.",
     ...(params.purpose === "warmup"
@@ -417,7 +419,7 @@ function buildUserPromptCompact(params: {
       .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || a.maxAmount - b.maxAmount)
       .slice(0, 60),
     notes:
-      "For moves: choose amount between 1 and maxAmount. Actions apply in order; later moves may use forces you moved earlier, even if not listed.",
+      "For moves: choose amount between 1 and maxAmount. Actions apply in order; later moves may use forces you moved earlier, even if not listed. Splitting is allowed: you can move only part of a stack and/or do multiple moves from the same node, as long as you never exceed remaining forces at that node.",
   };
 
   const board = Object.entries(nodes)
@@ -515,7 +517,7 @@ function buildUserPrompt(params: {
       .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || a.maxAmount - b.maxAmount)
       .slice(0, 60),
     notes:
-      "For moves: choose amount between 1 and maxAmount. Actions apply in order; later moves may use forces you moved earlier, even if not listed.",
+      "For moves: choose amount between 1 and maxAmount. Actions apply in order; later moves may use forces you moved earlier, even if not listed. Splitting is allowed: you can move only part of a stack and/or do multiple moves from the same node, as long as you never exceed remaining forces at that node.",
   };
 
   const myHq = scenario.players[request.player].hq;
