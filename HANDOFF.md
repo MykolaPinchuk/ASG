@@ -15,7 +15,7 @@ Latest focus:
 
 ## v06 conclusion (baseline shortlist)
 For v07 we will focus on comparing how these models behave under a more complex game setup (new mechanics / rules), rather than continuing v06 harness/provider experiments:
-- Cerebras: `gpt-oss-120b` (very fast + strong, but still has frequent output/parse failures in some configs)
+- Cerebras: `gpt-oss-120b` (fast + strong; stabilized via structured/tools-forced + per-turn retry to medium)
 - Chutes: `tngtech/DeepSeek-R1T-Chimera` (backup baseline: strong + very reliable)
 - OpenRouter: `x-ai/grok-4.1-fast` (strong but very slow in this harness)
 
@@ -28,7 +28,8 @@ We have ~3 models that are “reasonably good” vs MixBot, but **none are suita
 Evidence:
 - Always-updated local performance snapshot: `performance.md` (generated via `npm run -s perf:top20`)
 - `gpt-oss-120b` provider/effort sweep: `docs/diagnostics/2026-01-30_gpt_oss_120b_reasoning_effort_sweep.md` (commit `ea6b1aa`)
-- Latest `performance.md` refresh: commit `dba8805`
+- Retry + structured-baseline changes: commit `7aeb7e3`
+- Latest “latency constraints” note: commit `8dfd77d`
 
 ## v07 next slice (complexity)
 - Plan: `docs/planning/V07_COMPLEXITY_EXPERIMENT.md`
@@ -57,10 +58,11 @@ If provider/model availability changes, these OpenRouter models have recently wo
 
 Notes:
 - `openai/gpt-5-mini` is currently unreliable in this harness (frequent empty/partial outputs leading to passes).
+- OpenRouter `openai/gpt-5.1` (reasoning-effort=low) was tried briefly and deemed not useful for this harness (aborted run); do not prioritize without a specific reason.
 - OpenRouter now defaults to `x-ai/grok-4.1-fast` when `--model` is omitted.
 - Recent OpenRouter runs showed `google/gemini-2.5-flash` and `google/gemini-3-flash-preview` producing mostly `pass` actions vs `GreedyBot` (losses), so they are not currently a recommended fallback.
 - Cerebras rejects `include_reasoning` (even when `false`), so `openai_compat` omits it for provider `cerebras`.
-- Cerebras `gpt-oss-120b` can be extremely strong, but is sensitive to request shape; a known-good config is: `--reasoning-effort high --max-tokens 8000 --stream off --tools-mode off --use-tools false`.
+- Cerebras `gpt-oss-120b` baseline config (stable): `--reasoning-effort high --max-tokens 8000 --stream off --use-tools true --tools-mode force --retry-on-failure on --retry-reasoning-effort medium` (retry is recorded per turn via `diagnostics.usedRetry` + `agent_retry` event in the replay).
 
 ## Regression spec (paid)
 When making harness changes, keep the paid regression check stable and cost-capped:
