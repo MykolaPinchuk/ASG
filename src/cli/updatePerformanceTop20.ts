@@ -10,7 +10,21 @@ type Replay = {
   scenario?: { settings?: { turnCapPlies?: number } };
   players?: Record<
     PlayerId,
-    | { kind: "agent"; provider?: string; model?: string }
+    | {
+        kind: "agent";
+        provider?: string;
+        model?: string;
+        config?: {
+          reasoningEffort?: "low" | "medium" | "high";
+          promptMode?: "compact" | "full";
+          maxTokens?: number;
+          useTools?: boolean;
+          toolsMode?: "auto" | "force" | "off";
+          stream?: "auto" | "on" | "off";
+          retryOnFailure?: boolean;
+          retryReasoningEffort?: "low" | "medium" | "high";
+        };
+      }
     | { kind: "mix" }
     | { kind: "greedy" }
     | { kind: "random" }
@@ -124,6 +138,55 @@ function normalizeProvider(provider: string | null): string | null {
   return provider;
 }
 
+function parseRequiredReasoningEffort(configLabel: string): "low" | "medium" | "high" | null {
+  const m = configLabel.match(/reasoning-effort\s*=\s*(low|medium|high)/i);
+  if (!m) return null;
+  const v = (m[1] ?? "").toLowerCase();
+  if (v === "low" || v === "medium" || v === "high") return v;
+  return null;
+}
+
+function parseRequiredToolsMode(configLabel: string): "auto" | "force" | "off" | null {
+  const m = configLabel.match(/tools-mode\s*=\s*(auto|force|off)/i);
+  if (!m) return null;
+  const v = (m[1] ?? "").toLowerCase();
+  if (v === "auto" || v === "force" || v === "off") return v;
+  return null;
+}
+
+function parseBooleanToken(raw: string): boolean | null {
+  const v = raw.trim().toLowerCase();
+  if (v === "true" || v === "1" || v === "yes" || v === "on") return true;
+  if (v === "false" || v === "0" || v === "no" || v === "off") return false;
+  return null;
+}
+
+function parseRequiredUseTools(configLabel: string): boolean | null {
+  // Support both "use-tools=true/false" and legacy "tools=off/force".
+  const m1 = configLabel.match(/use-tools\s*=\s*(true|false|1|0|on|off|yes|no)/i);
+  if (m1) return parseBooleanToken(m1[1] ?? "");
+  const m2 = configLabel.match(/tools\s*=\s*(on|off|true|false|force|auto)/i);
+  if (!m2) return null;
+  const v = (m2[1] ?? "").toLowerCase();
+  if (v === "force" || v === "on" || v === "true") return true;
+  if (v === "off" || v === "false") return false;
+  return null;
+}
+
+function parseRequiredRetryOnFailure(configLabel: string): boolean | null {
+  const m = configLabel.match(/retry-on-failure\s*=\s*(true|false|1|0|on|off|yes|no)/i);
+  if (!m) return null;
+  return parseBooleanToken(m[1] ?? "");
+}
+
+function parseRequiredRetryReasoningEffort(configLabel: string): "low" | "medium" | "high" | null {
+  const m = configLabel.match(/retry-reasoning-effort\s*=\s*(low|medium|high)/i);
+  if (!m) return null;
+  const v = (m[1] ?? "").toLowerCase();
+  if (v === "low" || v === "medium" || v === "high") return v;
+  return null;
+}
+
 type GameMetrics = {
   seed: number;
   outcome: "WIN" | "LOSS" | "DRAW";
@@ -141,13 +204,41 @@ type GameMetrics = {
   okLatenciesMs: number[];
 };
 
-function metricsForReplay(replay: Replay, agentOverride?: PlayerId): { agent: PlayerId; provider: string | null; model: string | null; opponentKind: string | null; metrics: GameMetrics } | null {
+function metricsForReplay(
+  replay: Replay,
+  agentOverride?: PlayerId,
+): {
+  agent: PlayerId;
+  provider: string | null;
+  model: string | null;
+  reasoningEffort: "low" | "medium" | "high" | null;
+  toolsMode: "auto" | "force" | "off" | null;
+  useTools: boolean | null;
+  retryOnFailure: boolean | null;
+  retryReasoningEffort: "low" | "medium" | "high" | null;
+  opponentKind: string | null;
+  metrics: GameMetrics;
+} | null {
   const agent = agentOverride ?? inferAgentSide(replay) ?? null;
   if (!agent) return null;
   const p = replay.players?.[agent] as any;
   const providerRaw = typeof p?.provider === "string" ? p.provider : null;
   const provider = normalizeProvider(providerRaw);
   const model = typeof p?.model === "string" ? p.model : null;
+  const reasoningEffort =
+    p?.config?.reasoningEffort === "low" || p?.config?.reasoningEffort === "medium" || p?.config?.reasoningEffort === "high"
+      ? p.config.reasoningEffort
+      : null;
+  const toolsMode =
+    p?.config?.toolsMode === "auto" || p?.config?.toolsMode === "force" || p?.config?.toolsMode === "off" ? p.config.toolsMode : null;
+  const useTools = typeof p?.config?.useTools === "boolean" ? (p.config.useTools as boolean) : null;
+  const retryOnFailure = typeof p?.config?.retryOnFailure === "boolean" ? (p.config.retryOnFailure as boolean) : null;
+  const retryReasoningEffort =
+    p?.config?.retryReasoningEffort === "low" ||
+    p?.config?.retryReasoningEffort === "medium" ||
+    p?.config?.retryReasoningEffort === "high"
+      ? p.config.retryReasoningEffort
+      : null;
   const opponentKind = inferOpponentKind(replay, agent);
 
   const agentTurns = replay.turns.filter((t) => t.player === agent);
@@ -189,6 +280,11 @@ function metricsForReplay(replay: Replay, agentOverride?: PlayerId): { agent: Pl
     agent,
     provider,
     model,
+    reasoningEffort,
+    toolsMode,
+    useTools,
+    retryOnFailure,
+    retryReasoningEffort,
     opponentKind,
     metrics: {
       seed: replay.seed,
@@ -297,7 +393,17 @@ function summarize(games: GameMetrics[]): Summary {
   };
 }
 
-type FocusEntry = { provider: string; model: string; config: string; why: string };
+type FocusEntry = {
+  provider: string;
+  model: string;
+  config: string;
+  why: string;
+  requiredReasoningEffort: "low" | "medium" | "high" | null;
+  requiredToolsMode: "auto" | "force" | "off" | null;
+  requiredUseTools: boolean | null;
+  requiredRetryOnFailure: boolean | null;
+  requiredRetryReasoningEffort: "low" | "medium" | "high" | null;
+};
 
 function parseFocus20(text: string): FocusEntry[] {
   const lines = text.split(/\r?\n/);
@@ -320,7 +426,17 @@ function parseFocus20(text: string): FocusEntry[] {
     if (parts.length < 4) continue;
     const [provider, model, config, why] = parts;
     if (!provider || !model) continue;
-    rows.push({ provider, model, config, why });
+    rows.push({
+      provider,
+      model,
+      config,
+      why,
+      requiredReasoningEffort: parseRequiredReasoningEffort(config),
+      requiredToolsMode: parseRequiredToolsMode(config),
+      requiredUseTools: parseRequiredUseTools(config),
+      requiredRetryOnFailure: parseRequiredRetryOnFailure(config),
+      requiredRetryReasoningEffort: parseRequiredRetryReasoningEffort(config),
+    });
   }
   return rows;
 }
@@ -486,18 +602,23 @@ async function main() {
     const opponentKind = info.opponentKind;
     if (opponentKind !== "mix" && opponentKind !== "greedy") continue;
 
-    const maybeKeys: string[] = [];
-    for (const e of focus) {
-      if (e.provider !== info.provider) continue;
-      if (e.model !== info.model) continue;
-      maybeKeys.push(`${e.provider}||${e.model}||${e.config}`);
-    }
-    if (maybeKeys.length === 0) continue;
+    const candidates = focus.filter((e) => e.provider === info.provider && e.model === info.model);
+    if (candidates.length === 0) continue;
 
-    // We cannot reliably attribute per-run config (reasoning-effort/tools/etc) from the replay today.
-    // If the focus file contains multiple rows for the same provider+model with different config labels,
-    // attribute the replay to the first matching row to avoid double-counting.
-    const key = maybeKeys[0]!;
+    const matchesEntry = (e: FocusEntry): boolean => {
+      if (e.requiredReasoningEffort && e.requiredReasoningEffort !== info.reasoningEffort) return false;
+      if (e.requiredToolsMode && e.requiredToolsMode !== info.toolsMode) return false;
+      if (e.requiredUseTools !== null && e.requiredUseTools !== info.useTools) return false;
+      if (e.requiredRetryOnFailure !== null && e.requiredRetryOnFailure !== info.retryOnFailure) return false;
+      if (e.requiredRetryReasoningEffort && e.requiredRetryReasoningEffort !== info.retryReasoningEffort) return false;
+      return true;
+    };
+
+    const chosen: FocusEntry | null = candidates.find(matchesEntry) ?? null;
+
+    if (!chosen) continue;
+
+    const key = `${chosen.provider}||${chosen.model}||${chosen.config}`;
     const bucket = byKey.get(key);
     if (!bucket) continue;
 
@@ -534,8 +655,8 @@ async function main() {
   lines.push("");
   lines.push("## Caveats");
   lines.push("");
-  lines.push("- Replays currently do not persist full run config (e.g. `reasoning-effort`, `tools-mode`, `max-tokens`).");
-  lines.push("- If Focus-20 contains multiple rows for the same provider+model with different config labels, metrics cannot be split reliably yet; this generator avoids double-counting by attributing replays to the first matching row.");
+  lines.push("- Some replays persist partial run config (e.g. `reasoning-effort`) under `players[*].config`; older replays may not.");
+  lines.push("- If Focus-20 contains multiple rows for the same provider+model, this generator uses available replay config to disambiguate; if config is missing it may skip those rows to avoid mixing.");
   lines.push("");
 
   lines.push("## Summary (vs MixBot, plies <= 30)");

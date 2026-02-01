@@ -14,10 +14,12 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/MVP_SPEC.md` — normative MVP rules/spec (source of truth).
 - `docs/planning/EXPERIMENT_EVAL_PROTOCOL.md` — how to run comparable experiment A/Bs (baselines, metrics, success criteria).
 - `docs/planning/V06_EXPERIMENTS.md` — v06 backlog of agent-improvement experiments (warmup/memory/repair loops).
+- `docs/planning/V07_COMPLEXITY_EXPERIMENT.md` — v07 plan: stepwise increase in game-mechanics complexity + evaluate baseline models.
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.
 - `docs/planning/ROADMAP.md` — post-MVP direction.
 - `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md` — OSS provider debugging notes (failure modes + tests).
 - `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md` — results writeup for repair loop + warmup/memory experiments.
+- `docs/GAME_RULES.md` — current game rules reference (used by humans when viewing replays / validating legality).
 - `docs/focus20_models.md` — focus shortlist of 20 models vs MixBot (configs + stats snapshot).
 - `performance.md` — generated, up-to-date metrics for Focus-20 models (run `npm run -s perf:top20`).
 - `configs/leaderboard_top6_models.txt` — pinned Top-6 models displayed at the top of `performance.md`.
@@ -42,6 +44,7 @@ Keep this file short. Update it only when something important changes.
 - `src/controllers/httpAgentController.ts` — game runner → HTTP agent API.
 - `src/cli/agentServer.ts` — HTTP agent server (providers: `stub`, `openai_compat`).
 - `src/providers/openaiCompat.ts` — OpenAI-compatible client + parsing/tooling behavior.
+  - Note: per-turn retry metadata is recorded in replay diagnostics (`usedRetry`) and also injected as an `agent_retry` event for visibility in the viewer.
 
 ## Model tooling
 - `configs/oss_models.json` — OSS model allowlist / priority list (derived from TML-bench).

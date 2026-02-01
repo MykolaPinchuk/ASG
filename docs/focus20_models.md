@@ -10,12 +10,12 @@ Selection intent:
 |---|---|---|---|---|
 | openrouter | x-ai/grok-4.1-fast |  | Beats Mix reliably | vs Mix: 4-0-0 (100% win) |
 | chutes | tngtech/DeepSeek-R1T-Chimera |  | Beats Mix reliably | vs Mix: 6-1-0 (86% win) |
+| cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools-mode=force, retry-on-failure=on, retry-reasoning-effort=medium | Very strong when configured carefully | Structured/tools forced improves reliability; keep retry-to-medium on failures |
 | chutes | deepseek-ai/DeepSeek-V3-0324-TEE |  | Beats Mix reliably | vs Mix: 5-1-0 (83% win) |
 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus |  | Beats Mix (borderline) | vs Mix: 3-2-0 (60% win) |
 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=low | Keeps strength but reduces thinking time | seed3 vs Mix: win; avg ok latency ~12.5s |
 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=medium | Keep as slower/stronger variant | seed3 vs Mix (70s allowed): win; avg ok latency ~46.8s |
 | chutes | openai/gpt-oss-20b |  | Keep (slow; mostly works) | seed3 vs Mix: draw; 1 providerError turn; avg ok latency ~23.8s |
-| cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools=off | Very strong when configured carefully | seed3 vs Mix: win; avg ok latency ~11.3s; 1 providerError turn |
 | nanogpt | Qwen/Qwen3-235B-A22B-Thinking-2507 |  | Low error rate + thinking | vs Mix: 1-3-0; avg ok latency ~18.2s |
 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus:thinking |  | Low error rate + thinking | vs Mix: 0-3-0; avg ok latency ~22.4s |
 | nanogpt | zai-org/GLM-4.5:thinking |  | Slow + thinking (stress test) | vs Mix: 0-2-0; avg ok latency ~41.2s |
@@ -44,7 +44,7 @@ Notes:
 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=low | 1 | 1-0-0 | 100% | 100% | 10/10 (100%) | 12497 | 24291 | 19 | 0.0 | 0.0 |
 | chutes | openai/gpt-oss-120b-TEE | reasoning-effort=medium | 2 | 1-1-0 | 50% | 100% | 7/8 (88%) | 46784 | 66872 | 7 | 0.5 | 0.5 |
 | chutes | openai/gpt-oss-20b |  | 1 | 0-1-0 | 0% | 100% | 13/14 (93%) | 20976 | 51395 | 27 | 1.0 | 1.0 |
-| cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools=off | 1 | 1-0-0 | 100% | 100% | 2/3 (67%) | 11341 | 13857 | 5 | 1.0 | 1.0 |
+| cerebras | gpt-oss-120b | reasoning-effort=high, max-tokens=8000, stream=off, tools-mode=force, retry-on-failure=on, retry-reasoning-effort=medium | — | — | — | — | — | — | — | — | — | — |
 | nanogpt | Qwen/Qwen3-235B-A22B-Thinking-2507 |  | 4 | 1-3-0 | 25% | 100% | 35/39 (90%) | 18159 | 20839 | 18.8 | 1.5 | 1.0 |
 | nanogpt | deepseek-ai/DeepSeek-V3.1-Terminus:thinking |  | 3 | 0-3-0 | 0% | 100% | 29/32 (91%) | 22355 | 42815 | 21 | 1.0 | 1.0 |
 | nanogpt | zai-org/GLM-4.5:thinking |  | 2 | 0-2-0 | 0% | 100% | 9/12 (75%) | 37439 | 41588 | 11 | 1.5 | 1.5 |

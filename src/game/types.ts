@@ -64,7 +64,15 @@ export type Event =
       winnerStrengthAfter: number;
     }
   | { type: "capture"; location: LocationId; newOwner: Owner }
-  | { type: "game_end"; result: GameResult };
+  | { type: "game_end"; result: GameResult }
+  | {
+      type: "agent_retry";
+      attempt: number;
+      fromReasoningEffort: "low" | "medium" | "high";
+      toReasoningEffort: "low" | "medium" | "high";
+      firstError?: string;
+      firstUpstreamStatus?: number;
+    };
 
 export type GameResult =
   | { type: "win"; winner: PlayerId; reason: "hq_captured" }
@@ -99,6 +107,29 @@ export interface DecisionDiagnostics {
    * Whether the controller (or agent server) used a configured fallback.
    */
   usedFallback?: boolean;
+  /**
+   * Whether the controller (or agent server) retried the turn.
+   */
+  usedRetry?: boolean;
+  /**
+   * Best-effort metadata about the retry (if any).
+   */
+  retry?: {
+    fromReasoningEffort?: "low" | "medium" | "high";
+    toReasoningEffort?: "low" | "medium" | "high";
+    firstError?: string;
+    firstUpstreamStatus?: number;
+  };
+  /**
+   * Per-attempt metadata (best-effort; may omit candidate selection calls).
+   */
+  attempts?: Array<{
+    attempt?: number;
+    reasoningEffort?: "low" | "medium" | "high";
+    latencyMs?: number;
+    upstreamStatus?: number;
+    error?: string;
+  }>;
 }
 
 export interface TurnRecord {
@@ -131,6 +162,19 @@ export interface Replay {
         baseUrl?: string;
         model?: string;
         modelMode?: "auto" | "explicit";
+        config?: {
+          reasoningEffort?: "low" | "medium" | "high";
+          promptMode?: "compact" | "full";
+          timeoutMs?: number;
+          maxTokens?: number;
+          temperature?: number;
+          useTools?: boolean;
+          toolsMode?: "auto" | "force" | "off";
+          stream?: "auto" | "on" | "off";
+          thinkHint?: "on" | "off";
+          retryOnFailure?: boolean;
+          retryReasoningEffort?: "low" | "medium" | "high";
+        };
       }
   >;
   turns: TurnRecord[];

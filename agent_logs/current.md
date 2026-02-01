@@ -1,14 +1,13 @@
 # agent_logs/current.md
 
 ## Agent
-- id: agent??
+- id: agent08
 
 ## Timestamp (Pacific)
 - start: 2026-01-31
 
 ## Intent
-- (fill in)
+- Next slice: v07 complexity experiment (increment mechanics and evaluate baselines).
 
-## Notes
-- Do not commit secrets or bulky artifacts (see `.gitignore`).
-- Keep v0 / v0.x eval guardrails by default (`turnCapPlies<=30`, `games<=5`, always save replays, persist `turns[*].latencyMs`).
+## Log
+
