@@ -102,3 +102,18 @@ You can also run the agent server using a `--keys-file` (same format as TML-benc
 ## Context manager integration
 To generate `agents.md` and `business_context.md`:
 - `python /path/to/context-manager-1/sync_context.py --repo /path/to/ASG`
+
+
+### H2H notes
+
+ASG in its current form is a perfect env/lab to explore and learn how to use and build LLM-based agents to take actions in a structured environment. Spending lots of time figuring out how to make an agent to do smth seemingly straighforward and reasonable is a feature, not a bug. This is exactly the learning which is the main goal of this project. Getting an agent which finally has a reasonably good performance after many months of struggling to build it is a bonus. It is not a goal per se.
+
+Current (as of March 2026) OSS models are good enough for this. So models are ready.
+
+As of early March I am seemingly stuck with 95%+ models not willing to use rules of a very simple v0 setup fully. I suspect that the solution is to move away of fully stateless setup. Currently model just gets a short set up rules and some arbitrary-looking format of a game state, and then is immediately asked to take meaningful action in such a setup. The fact that pretty much all models behave 30%+ reasonably is actually a good sign. To get models really internalize and understand all rules smth more is needed. 
+
+Making rules more detailed and adding bunch of examples is somewhat hacky way to do it. OFC this will massively boost performance of model. But in the LR this is not very scalable and will have a limited ability to discriminate between very good and decent models. It can still be worth trying first as a robustnes check to validate that most models are capable to behave 100% reasonably given enough examples.
+
+Better and more ambitious solution may be to give an agent ability to explore and experiment first. This can take a form of a short warm-up game where agent can explore and learn the rules. Then it will have to write a short doc to serve as a complement to official rules for the future agent to use. This is a more scalable and more interesting solution. This solution can be brough much further via multiple warm-up games, self-play etc.
+
+Sooner or later these approaches are supposed to work for at least 20% of models. after this happens we can start to explore more complex setups.

@@ -703,6 +703,23 @@ function parseIncludeReasoning(params: { args: ProviderArgs; provider: string })
   throw new Error(`invalid --include-reasoning '${raw}' (expected auto|true|false)`);
 }
 
+function isMiniMaxProvider(provider: string): boolean {
+  const p = provider.toLowerCase();
+  return p === "minimax" || p.startsWith("minimax");
+}
+
+function parseReasoningSplit(params: { args: ProviderArgs; provider: string }): boolean | null {
+  const raw = (params.args.get("--reasoning-split") ?? process.env.ASG_OPENAI_REASONING_SPLIT ?? "auto").toLowerCase().trim();
+  if (raw === "auto" || raw === "") return null;
+  if (raw === "true" || raw === "1" || raw === "on" || raw === "yes") {
+    return isMiniMaxProvider(params.provider) ? true : null;
+  }
+  if (raw === "false" || raw === "0" || raw === "off" || raw === "no") {
+    return isMiniMaxProvider(params.provider) ? false : null;
+  }
+  throw new Error(`invalid --reasoning-split '${raw}' (expected auto|true|false)`);
+}
+
 async function resolveOpenAiCompatModel(params: {
   args: ProviderArgs;
   keys: Map<string, string>;
@@ -894,6 +911,10 @@ export async function openAiCompatAct(params: {
   const toolsModeArg = parseToolsMode({ args });
   const includeReasoning = parseIncludeReasoning({ args, provider: providerNameRaw });
   if (typeof includeReasoning === "boolean") payload.include_reasoning = includeReasoning;
+  const reasoningSplit = parseReasoningSplit({ args, provider: providerNameRaw });
+  if (typeof reasoningSplit === "boolean") {
+    payload.extra_body = { ...(isObject(payload.extra_body) ? payload.extra_body : {}), reasoning_split: reasoningSplit };
+  }
   const streamMode = parseStreamMode({ args });
 
   const headers: Record<string, string> = {
@@ -927,6 +948,7 @@ export async function openAiCompatAct(params: {
     omitResponseFormat?: boolean,
     omitIncludeReasoning?: boolean,
     modelOverride?: string,
+    omitReasoningSplit?: boolean,
   ): Promise<{ response: AgentResponse; httpStatus: number; raw: unknown }> {
     const attemptIdx = callOnceCount++;
     const remainingMs = deadlineAt - Date.now();
@@ -951,6 +973,12 @@ export async function openAiCompatAct(params: {
       if (omitReasoningEffort) delete p.reasoning_effort;
       if (omitResponseFormat) delete p.response_format;
       if (omitIncludeReasoning) delete p.include_reasoning;
+      if (omitReasoningSplit && isObject(p.extra_body)) {
+        const eb = { ...(p.extra_body as Record<string, unknown>) };
+        delete eb.reasoning_split;
+        if (Object.keys(eb).length > 0) p.extra_body = eb;
+        else delete p.extra_body;
+      }
       if (!omitReasoningEffort) {
         const effort = parseReasoningEffort({ args, provider: providerNameRaw, resolvedModel: modelForAttempt });
         if (effort) p.reasoning_effort = effort;
@@ -1318,6 +1346,11 @@ export async function openAiCompatAct(params: {
       (msg.toLowerCase().includes("include_reasoning") ||
         msg.toLowerCase().includes("include-reasoning"));
 
+    const rejectsReasoningSplit =
+      (msg.startsWith("HTTP 400") || msg.startsWith("HTTP 422")) &&
+      (msg.toLowerCase().includes("reasoning_split") ||
+        msg.toLowerCase().includes("reasoning-split"));
+
     const wantsToolsOff =
       (msg.includes("HTTP 400") || msg.includes("HTTP 422")) &&
       (msg.toLowerCase().includes("forced function calling") ||
@@ -1337,7 +1370,8 @@ export async function openAiCompatAct(params: {
       isTimeouty ||
       rejectsReasoningEffort ||
       rejectsResponseFormat ||
-      rejectsIncludeReasoning;
+      rejectsIncludeReasoning ||
+      rejectsReasoningSplit;
     if (!shouldRetry) throw new OpenAiCompatError(`openai_compat failed: ${msg}`, getOpenAiCompatErrorMeta(e1));
 
     try {
@@ -1366,6 +1400,7 @@ export async function openAiCompatAct(params: {
               rejectsResponseFormat ? true : undefined,
               rejectsIncludeReasoning ? true : undefined,
               resolvedModel,
+              rejectsReasoningSplit ? true : undefined,
             );
             return { ...retry, resolvedModel, provider: providerNameRaw, baseUrl };
           } catch (e) {
@@ -1402,6 +1437,7 @@ export async function openAiCompatAct(params: {
               rejectsResponseFormat ? true : undefined,
               rejectsIncludeReasoning ? true : undefined,
               undefined,
+              rejectsReasoningSplit ? true : undefined,
             );
             return { ...retry, resolvedModel, provider: providerNameRaw, baseUrl };
           } catch (e) {
@@ -1456,6 +1492,7 @@ export async function openAiCompatAct(params: {
           omitResponseFormatRetry ? true : undefined,
           rejectsIncludeReasoning ? true : undefined,
           undefined,
+          rejectsReasoningSplit ? true : undefined,
         );
         return { ...retry, resolvedModel, provider: providerNameRaw, baseUrl };
       } catch (eRetry) {
@@ -1479,6 +1516,7 @@ export async function openAiCompatAct(params: {
               omitResponseFormatRetry ? true : undefined,
               rejectsIncludeReasoning ? true : undefined,
               undefined,
+              rejectsReasoningSplit ? true : undefined,
             );
             return { ...retry2, resolvedModel, provider: providerNameRaw, baseUrl };
           }
@@ -1505,6 +1543,7 @@ export async function openAiCompatAct(params: {
             omitResponseFormatRetry ? true : undefined,
             rejectsIncludeReasoning ? true : undefined,
             undefined,
+            rejectsReasoningSplit ? true : undefined,
           );
           return { ...retry2, resolvedModel, provider: providerNameRaw, baseUrl };
         }

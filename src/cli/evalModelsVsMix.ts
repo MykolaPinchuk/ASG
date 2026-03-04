@@ -163,6 +163,7 @@ async function evalOneModel(params: {
   stream?: string;
   thinkHint?: string;
   reasoningEffort?: string;
+  reasoningSplit?: string;
   promptMode?: string;
   stopAfterErrors?: number;
   saveReplays: boolean;
@@ -211,6 +212,7 @@ async function evalOneModel(params: {
   if (params.stream) serverArgs.push("--stream", params.stream);
   if (params.thinkHint) serverArgs.push("--think-hint", params.thinkHint);
   if (params.reasoningEffort) serverArgs.push("--reasoning-effort", params.reasoningEffort);
+  if (params.reasoningSplit) serverArgs.push("--reasoning-split", params.reasoningSplit);
   if (params.baseUrl) serverArgs.push("--base-url", params.baseUrl);
   if (params.serverLogDir) serverArgs.push("--log-dir", params.serverLogDir);
 
@@ -466,6 +468,7 @@ async function main() {
   const stream = args.get("--stream") ?? undefined;
   const thinkHint = args.get("--think-hint") ?? undefined;
   const reasoningEffort = args.get("--reasoning-effort") ?? undefined;
+  const reasoningSplit = args.get("--reasoning-split") ?? undefined;
 
   const modelsRaw = args.get("--models") ?? "";
   const modelsFile = args.get("--models-file");
@@ -587,6 +590,7 @@ async function main() {
         stream,
         thinkHint,
         reasoningEffort,
+        reasoningSplit,
         promptMode,
         stopAfterErrors,
         saveReplays: true,
@@ -658,6 +662,7 @@ async function main() {
           toolsMode,
           stream,
           reasoningEffort,
+          reasoningSplit,
           saveReplays,
           replaysDir,
           rows,
