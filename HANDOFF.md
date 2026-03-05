@@ -12,6 +12,8 @@ Latest focus:
 - Select one operationally reliable reasoning model and use it as the primary subject for harness/prompt/context experiments.
 - Keep strict observability for every experiment: replay persistence, per-ply latency, and token-usage evidence from provider responses.
 - Keep v0/v0.x guardrails by default (`turnCapPlies<=30`, `games<=5`) unless explicitly overridden.
+- Operational constraint (March 4, 2026 PST): Chutes currently returns `Subscription usage cap exceeded` for this workspace/account, so Chutes baselines are historical-only until quota/billing changes.
+- Operational constraint (March 4, 2026 PST): Google AI Studio free tier for `gemini-3.1-flash-lite` is currently budgeted at `15 RPM` and `500 RPD` for this workspace/account; keep runs short and paced.
 
 ## v06 conclusion (baseline shortlist)
 For v07 we will focus on comparing how these models behave under a more complex game setup (new mechanics / rules), rather than continuing v06 harness/provider experiments:

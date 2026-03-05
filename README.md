@@ -45,6 +45,10 @@ The replay viewer shows controller/model metadata (when present) in the **Player
 Run the agent server with `openai_compat` and point it at an OpenAI-compatible endpoint (e.g. OpenRouter).
 Keys stay local (env vars / `secrets/`), never committed.
 
+> Operational note (March 4, 2026 PST): in this workspace, Chutes currently returns `Subscription usage cap exceeded` on completions. Existing Chutes metrics in repo docs are historical, not current operational baselines.
+>
+> Operational note (March 4, 2026 PST): Google AI Studio free tier for `gemini-3.1-flash-lite` is currently budgeted at `15 RPM` and `500 RPD` for this workspace/account. Keep eval batches small to avoid rate-limit noise.
+
 Example (OpenRouter):
 - `export ASG_OPENROUTER_API_KEY='...'`
 - `npm run agent:server -- --provider openai_compat --provider-name openrouter --base-url https://openrouter.ai/api/v1`

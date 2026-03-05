@@ -4,6 +4,8 @@ Updated (Pacific): 01/31/2026 18:06:41
 
 This file is generated from saved replay JSONs. It summarizes Focus-20 model performance under v0/v0.x guardrails (plies <= 30).
 
+> Operational note (March 4, 2026 PST): Chutes currently returns `Subscription usage cap exceeded` for this workspace/account. Treat Chutes rows below as historical evidence, not currently reproducible baselines.
+
 ## How to update
 
 ```bash

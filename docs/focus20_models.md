@@ -4,6 +4,8 @@ Selection intent:
 - Models that reliably beat MixBot, or
 - Models with failure/timeout issues that are still interesting (reasoning/hybrid/thinking and/or high latency).
 
+> Operational note (March 4, 2026 PST): Chutes currently returns `Subscription usage cap exceeded` for this workspace/account. Chutes entries in this file are historical references, not currently runnable options for us.
+
 ## Focus list
 
 | provider | model | config | why | key evidence |
