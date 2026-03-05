@@ -115,3 +115,41 @@
   - `src/cli/sweepOssModels.ts` (including `startedAt` metadata)
 - Verified formatter output sample: `2026-03-04T15-41-02-123PST` and `2026-03-04T15:41:02.123-08:00`.
 - Validation: `npm run -s typecheck` passed.
+
+## 2026-03-04 16:20 PST — v07 objective shift + MiniMax qualification checks
+- Recorded new v07 objective in docs: prioritize behavior experiments in the current simple setup (harness/prompt/context) and model qualification by reliability/latency/telemetry (not leaderboard-first).
+- Checkpoint commit created: `12b0ebd` (`agent08: checkpoint(runner): v07 behavior objective + pacific timestamps`).
+
+MiniMax qualification runs (provider `minimax`, model `MiniMax-M2.5`, endpoint `https://api.minimax.io/v1`, opponent `greedy`, `turn-cap-plies=10`):
+- Batch A (`reasoning-split=true`, seed=10, planned 2 games, `--stop-after-errors 1`):
+  - `runs/minimax_validation/20260305T000749Z_batchA/summary.json`
+  - replay dir: `replays/model_evals/2026-03-04T16-07-50-059PST`
+  - early-stopped after first game due provider error.
+- Batch B (`reasoning-split=true`, seeds=11..12, `--stop-after-errors 0`):
+  - `runs/minimax_validation/20260305T000945Z_batchB/summary.json`
+  - replay dir: `replays/model_evals/2026-03-04T16-09-45-634PST`
+- Batch C control (`reasoning-split=true`, seed=13, `timeout-ms=70000`):
+  - `runs/minimax_validation/20260305T001423Z_batchC_timeout70/summary.json`
+  - replay dir: `replays/model_evals/2026-03-04T16-14-23-367PST`
+- Batch D control (`reasoning-effort=low`, `reasoning-split=true`, seed=15, `timeout-ms=45000`):
+  - `runs/minimax_validation/20260305T001800Z_batchD_effortLow/summary.json`
+  - replay dir: `replays/model_evals/2026-03-04T16-18-00-502PST`
+
+Aggregate (A+B+C+D):
+- games=5, agentTurns=23, estimated model calls=28 (sum of per-turn attempt counts; under 30-call budget)
+- providerErrorTurns=6, passTurns=6, invalidActionEvents=0
+- latency (agent turns): avg=28594 ms, p50=21691 ms, p90=46013 ms, p95=46014 ms, max=71012 ms
+- error causes: `timeout_budget_exhausted` (5), `This operation was aborted` (1)
+- importantly: no 429/insufficient-balance or auth/rate-limit errors in this batch (errors look latency/time-budget driven, not quota-driven)
+
+Token telemetry (server I/O logs across A+B+C+D):
+- logged agent turns=23; successful raw responses=17; usage rows=17
+- totals: prompt_tokens=34003, completion_tokens=11529, reasoning_tokens=9334
+- per-success averages: prompt=2000.18, completion=678.18, reasoning=549.06
+- p95: prompt=2075, completion=773, reasoning=630
+
+Conclusion for model suitability (current harness):
+- Operational telemetry is good when requests succeed, but reliability under current timeout budget is weak (26% provider-error turns in this sample).
+- Increasing timeout to 70s did not eliminate provider errors and increased latency tail.
+- Lowering reasoning effort to `low` reduced average latency but still produced an aborted turn.
+- Model is usable for targeted experiments, but not yet a clean “high-uptime, not-too-slow” primary candidate without additional harness tuning and/or provider-side latency improvements.
