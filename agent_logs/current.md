@@ -84,3 +84,34 @@
 - Outcome: draw, 9 plies, 5 agent turns, 1 provider error turn (`timeout_budget_exhausted` at ply 8), early stop due `--stop-after-errors 1`.
 - Request/call budget note: replay diagnostics show estimated 6 model calls total (sum of per-turn attempt counts), which is below the 30-call cap.
 - Replay: `replays/model_evals/2026-03-01T23-01-32-930Z/scenario_01_seed3_agent_vs_greedy_minimax_minimax_m2_5.json`.
+
+## 2026-03-04 15:48 PST — MiniMax M2.5 suitability validation (post-checkpoint)
+- Checkpoint commit created first: `1e342de` (`agent08: checkpoint(runner): add minimax reasoning_split toggle and eval notes`).
+- Main batch (reasoning_split=true):
+  - Command: `npm run -s agent:eval-vs-mix -- --provider-name minimax --keys-name minimax --base-url https://api.minimax.io/v1 --keys-file secrets/provider_apis.txt --models MiniMax-M2.5 --opponent greedy --games 3 --seed 3 --turn-cap-plies 10 --timeout-ms 45000 --agent-timeout-ms 55000 --temperature 0.2 --max-tokens 800 --use-tools false --tools-mode off --stream off --reasoning-split true --stop-after-errors 1 --server-log-dir runs/minimax_validation/20260304T234102Z/server_io --out runs/minimax_validation/20260304T234102Z/summary.json`
+  - Result: 0 wins / 3 draws / 0 losses; one provider-error turn (timeout_budget_exhausted) on seed 5, with early stop due `--stop-after-errors 1`.
+  - Replay dir: `replays/model_evals/2026-03-04T23-41-03-014Z`.
+  - Calls: estimated 13 model calls (sum of replay `diagnostics.attempts`).
+- Control (reasoning_split=false, 1 game):
+  - Command used same settings with `--games 1 --seed 6 --reasoning-split false`.
+  - Result: draw, no provider errors, no pass turns.
+  - Replay dir: `replays/model_evals/2026-03-04T23-47-09-007Z`.
+  - Calls: estimated 5 model calls.
+- Combined budget used in this validation cycle: estimated 18 model calls (17 agent turns, 1 retried turn), below the 30-call cap.
+- Token telemetry check from server I/O logs:
+  - `upstreamRaw.body` contains provider `usage` with `prompt_tokens`, `completion_tokens`, and `completion_tokens_details.reasoning_tokens` on successful responses.
+  - reasoning_split=true batch: 11/12 logged turns had parseable raw usage objects (1 timeout turn had no successful usage payload).
+  - reasoning_split=false control: 5/5 had usage objects including reasoning tokens.
+- Suitability note: uptime/latency are workable for small-batch experiments, but quality in this stateless harness remains weak vs known baselines (all draws in this batch; no clear rapid-win behavior).
+
+## 2026-03-04 15:56 PST — Pacific timestamp standardization
+- Added shared Pacific time helpers: `src/utils/pacificTime.ts` (`pacificFileStamp`, `pacificIsoString`).
+- Switched runtime timestamp emitters from UTC `toISOString()` to Pacific helpers in:
+  - `src/game/match.ts` (`replay.createdAt` now ISO with Pacific offset)
+  - `src/cli/runBatch.ts`
+  - `src/cli/reportBatch.ts`
+  - `src/cli/evalModelsVsMix.ts`
+  - `src/cli/evalGrokVsGreedy.ts`
+  - `src/cli/sweepOssModels.ts` (including `startedAt` metadata)
+- Verified formatter output sample: `2026-03-04T15-41-02-123PST` and `2026-03-04T15:41:02.123-08:00`.
+- Validation: `npm run -s typecheck` passed.

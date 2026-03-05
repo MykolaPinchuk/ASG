@@ -5,13 +5,13 @@ MVP v0 is implemented end-to-end (engine → replays → viewer → agent server
 
 Branching:
 - `master` is now the default branch.
-- Ongoing work should land on `v06` (pre-v1 hardening).
+- Ongoing work should land on `v07`.
 
 Latest focus:
-- Snapshot OSS and paid model performance vs MixBot (30 plies), with strict replay + latency persistence.
-- Add Cerebras as an OpenAI-compatible provider and begin evaluating `gpt-oss-120b` variants.
-- Maintain a focus shortlist of 20 models: `docs/focus20_models.md`.
-- v06: experiment scaffolding + evaluation protocol for agent behavior interventions (repair loop, warmup/memory), with results recorded in diagnostics (see below).
+- Shift from “increase game complexity first” to “deeply study agent behavior in the current simple setup”.
+- Select one operationally reliable reasoning model and use it as the primary subject for harness/prompt/context experiments.
+- Keep strict observability for every experiment: replay persistence, per-ply latency, and token-usage evidence from provider responses.
+- Keep v0/v0.x guardrails by default (`turnCapPlies<=30`, `games<=5`) unless explicitly overridden.
 
 ## v06 conclusion (baseline shortlist)
 For v07 we will focus on comparing how these models behave under a more complex game setup (new mechanics / rules), rather than continuing v06 harness/provider experiments:
@@ -31,9 +31,11 @@ Evidence:
 - Retry + structured-baseline changes: commit `7aeb7e3`
 - Latest “latency constraints” note: commit `8dfd77d`
 
-## v07 next slice (complexity)
+## v07 next slice (behavior-focused, current setup)
 - Plan: `docs/planning/V07_COMPLEXITY_EXPERIMENT.md`
-- Objective: increase game-mechanics complexity step-by-step and measure the 3 baselines above under the same eval protocol (MixBot, `turnCapPlies=30`, small fixed seeds, saved replays, update `performance.md`).
+- Objective: understand *why* agents behave as they do under the current mechanics by varying harness/prompt/context in controlled A/B runs.
+- Model-selection objective (for v07 and likely next versions): prioritize provider reliability + latency stability + telemetry completeness over immediate win-rate.
+- Current candidate under qualification: MiniMax `MiniMax-M2.5` (endpoint: `https://api.minimax.io/v1`).
 
 ## OSS baselines (default for testing)
 These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):

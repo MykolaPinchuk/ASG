@@ -6,6 +6,7 @@ import { GreedyBot } from "../controllers/greedyBot.js";
 import { RandomBot } from "../controllers/randomBot.js";
 import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import type { Controller } from "../controllers/controller.js";
+import { pacificFileStamp } from "../utils/pacificTime.js";
 
 type ControllerName = "greedy" | "random";
 
@@ -36,10 +37,6 @@ function controllerFromName(params: {
   return new GreedyBot({ adjacency: params.adjacency, scenario: params.scenario });
 }
 
-function nowStamp(): string {
-  return new Date().toISOString().replace(/[:.]/g, "-");
-}
-
 async function main() {
   const args = parseArgs(process.argv);
   const scenarioPath = path.resolve(args.get("--scenario") ?? "scenarios/scenario_01.json");
@@ -50,7 +47,7 @@ async function main() {
   const turnCapPlies = Number.parseInt(args.get("--turn-cap-plies") ?? "30", 10);
   const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
   const unsafeAllowMany = (args.get("--unsafe-allow-many") ?? "false").toLowerCase() === "true";
-  const outDir = args.get("--out-dir") ?? path.join("replays", "batch", nowStamp());
+  const outDir = args.get("--out-dir") ?? path.join("replays", "batch", pacificFileStamp());
 
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");
   if (!Number.isInteger(count) || count < 1 || count > 500) throw new Error("--count must be an integer in [1, 500]");

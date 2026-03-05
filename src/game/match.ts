@@ -2,6 +2,7 @@ import { PRNG } from "./prng.js";
 import { applyTurn, createInitialState, deriveObservation, type EngineContext } from "./engine.js";
 import type { Controller } from "../controllers/controller.js";
 import type { GameResult, Replay, TurnRecord } from "./types.js";
+import { pacificIsoString } from "../utils/pacificTime.js";
 
 export interface RunMatchParams {
   ctx: EngineContext;
@@ -69,7 +70,7 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
 
   return {
     version: "0.1.0",
-    createdAt: new Date().toISOString(),
+    createdAt: pacificIsoString(),
     seed,
     scenario: ctx.scenario,
     turns,

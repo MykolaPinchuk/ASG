@@ -9,6 +9,7 @@ import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { MixBot } from "../controllers/mixBot.js";
 import { GreedyBot } from "../controllers/greedyBot.js";
 import { fetchOpenAiCompatModelIds, getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
+import { pacificFileStamp } from "../utils/pacificTime.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 
@@ -136,10 +137,6 @@ type Row = {
 function formatPct(x: number): string {
   if (!Number.isFinite(x)) return "—";
   return `${(x * 100).toFixed(0)}%`;
-}
-
-function nowStamp(): string {
-  return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
 async function evalOneModel(params: {
@@ -535,7 +532,7 @@ async function main() {
   const scenario = await loadScenarioFromFile(scenarioPath);
   scenario.settings.turnCapPlies = turnCapPlies;
   const adjacency = createAdjacency(scenario);
-  const replaysDir = replaysDirArg ?? path.join("replays", "model_evals", nowStamp());
+  const replaysDir = replaysDirArg ?? path.join("replays", "model_evals", pacificFileStamp());
 
   const rows: Row[] = [];
 

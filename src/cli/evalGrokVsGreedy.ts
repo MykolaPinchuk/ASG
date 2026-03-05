@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { pacificFileStamp } from "../utils/pacificTime.js";
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -17,11 +18,6 @@ function parseArgs(argv: string[]) {
   return args;
 }
 
-function nowStampPacific(): string {
-  // Good enough; avoid depending on system TZ config.
-  return new Date().toISOString().replace(/[:.]/g, "-");
-}
-
 async function main() {
   const args = parseArgs(process.argv);
 
@@ -32,7 +28,7 @@ async function main() {
   const agentSide = args.get("--agent-side") ?? "P1";
   const keysFile = args.get("--keys-file") ?? "secrets/provider_apis.txt";
   const baseUrl = args.get("--base-url") ?? "https://openrouter.ai/api/v1";
-  const outDir = args.get("--out-dir") ?? path.join("replays", "model_evals", `grok_vs_greedy_${nowStampPacific()}`);
+  const outDir = args.get("--out-dir") ?? path.join("replays", "model_evals", `grok_vs_greedy_${pacificFileStamp()}`);
   const dryRun = (args.get("--dry-run") ?? "false").toLowerCase() === "true";
 
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");

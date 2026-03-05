@@ -7,6 +7,7 @@ import { RandomBot } from "../controllers/randomBot.js";
 import { loadScenarioFromFile } from "../scenario/loadScenario.js";
 import type { Controller } from "../controllers/controller.js";
 import type { Replay } from "../game/types.js";
+import { pacificFileStamp } from "../utils/pacificTime.js";
 
 type ControllerName = "greedy" | "random";
 type OutputFormat = "text" | "json" | "md";
@@ -281,10 +282,6 @@ function aggregate(perMatch: PerMatch[]) {
   };
 }
 
-function nowStamp(): string {
-  return new Date().toISOString().replace(/[:.]/g, "-");
-}
-
 async function main() {
   const args = parseArgs(process.argv);
   const scenarioPath = path.resolve(args.get("--scenario") ?? "scenarios/scenario_01.json");
@@ -304,7 +301,7 @@ async function main() {
     console.log("WARN --save-replays=false ignored (always saving replays).");
     saveReplays = true;
   }
-  const replaysDir = args.get("--replays-dir") ?? path.join("replays", "reports", nowStamp());
+  const replaysDir = args.get("--replays-dir") ?? path.join("replays", "reports", pacificFileStamp());
 
   if (!Number.isInteger(start) || start < 0) throw new Error("--start must be an integer >= 0");
   if (!Number.isInteger(count) || count < 1 || count > 500) throw new Error("--count must be an integer in [1, 500]");

@@ -10,6 +10,7 @@ import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 import { openAiCompatAct } from "../providers/openaiCompat.js";
 import { getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
+import { pacificFileStamp, pacificIsoString } from "../utils/pacificTime.js";
 
 type ProviderName = "nanogpt" | "chutes" | "openrouter" | "cerebras";
 type Opponent = "greedy" | "random" | "mix";
@@ -46,11 +47,6 @@ function parseKeysFile(text: string): Map<string, string> {
     out.set(k, v);
   }
   return out;
-}
-
-function nowStampPacific(): string {
-  // Good enough; avoid depending on system TZ config.
-  return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -330,7 +326,7 @@ async function main() {
   const keys = parseKeysFile(await (await import("node:fs/promises")).readFile(keysFilePath, "utf8"));
 
   const scenarioPath = args.get("--scenario") ?? "scenarios/scenario_01.json";
-  const outRoot = args.get("--out-dir") ?? path.join("runs", "model_sweeps", nowStampPacific());
+  const outRoot = args.get("--out-dir") ?? path.join("runs", "model_sweeps", pacificFileStamp());
   const replaysDir = args.get("--replays-dir") ?? "replays";
   const baseScenario = await loadScenarioFromFile(scenarioPath);
   const adjacency = createAdjacency(baseScenario);
@@ -382,7 +378,7 @@ async function main() {
   await mkdir(outRoot, { recursive: true });
 
   const runSummary: any = {
-    startedAt: new Date().toISOString(),
+    startedAt: pacificIsoString(),
     scenarioPath,
     mode,
     replaysDir,
