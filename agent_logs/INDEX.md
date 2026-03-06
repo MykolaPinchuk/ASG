@@ -15,3 +15,4 @@ Format:
 - 2026-01-31_agent07.md — v06: perf leaderboard + gpt-oss-120b provider sweep + baseline shortlist (commit e86bbc5)
 - 2026-01-31_agent08.md — v07 setup: complexity experiment plan + next-agent pointers (commit 62209f2)
 - 2026-01-31_agent09.md — Cerebras case-B debug + per-turn retry + structured/tools-forced baseline
+- 2026-03-05_agent00.md — v07 model qualification pivot: OpenRouter Gemini medium primary + Grok low secondary; AI Studio fallback only

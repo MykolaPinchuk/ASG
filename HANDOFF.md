@@ -15,13 +15,13 @@ Latest focus:
 - Operational constraint (March 4, 2026 PST): Chutes currently returns `Subscription usage cap exceeded` for this workspace/account, so Chutes baselines are historical-only until quota/billing changes.
 - Operational constraint (March 4, 2026 PST): Google AI Studio free tier for `gemini-3.1-flash-lite` is currently budgeted at `15 RPM` and `500 RPD` for this workspace/account; keep runs short and paced.
 
-## v06 conclusion (baseline shortlist)
-For v07 we will focus on comparing how these models behave under a more complex game setup (new mechanics / rules), rather than continuing v06 harness/provider experiments:
+## Historical v06 shortlist (for reference)
+This was the v06 shortlist before the v07 objective shift:
 - Cerebras: `gpt-oss-120b` (fast + strong; stabilized via structured/tools-forced + per-turn retry to medium)
 - Chutes: `tngtech/DeepSeek-R1T-Chimera` (backup baseline: strong + very reliable)
 - OpenRouter: `x-ai/grok-4.1-fast` (strong but very slow in this harness)
 
-## Current conclusion (2026-02-01)
+## Historical conclusion (2026-02-01 snapshot)
 We have ~3 models that are “reasonably good” vs MixBot, but **none are suitable for rapid iteration on more complex game setups** right now:
 - OpenRouter `x-ai/grok-4.1-fast` appears to be the only one that consistently applies rules well and plays close to optimal, but its latency is high and often exceeds the current ~70s per-turn budget (leading to provider-error turns / passes).
 - Cerebras `gpt-oss-120b` and Chutes Chimera are good enough for baseline comparisons, but they do not reliably match Grok’s rule utilization/optimality; for Cerebras we now rely on structured/tools-forced + retry-to-medium to keep it stable.
@@ -37,7 +37,25 @@ Evidence:
 - Plan: `docs/planning/V07_COMPLEXITY_EXPERIMENT.md`
 - Objective: understand *why* agents behave as they do under the current mechanics by varying harness/prompt/context in controlled A/B runs.
 - Model-selection objective (for v07 and likely next versions): prioritize provider reliability + latency stability + telemetry completeness over immediate win-rate.
-- Current candidate under qualification: MiniMax `MiniMax-M2.5` (endpoint: `https://api.minimax.io/v1`).
+- Primary experimentation model: OpenRouter `google/gemini-3.1-flash-lite-preview` with `--reasoning-effort medium`.
+- Secondary validation model: OpenRouter `x-ai/grok-4.1-fast` with `--reasoning-effort low`.
+
+## Latest qualification snapshot (2026-03-05 PST)
+- OpenRouter qualification aggregate (`runs/openrouter_qualification/**/summary.json`):
+  - 41 games total, 20 wins / 21 draws / 0 losses, 0 provider-error turns.
+  - `google/gemini-3.1-flash-lite-preview`: 16 games, 7 wins / 9 draws / 0 losses, 0 provider-error turns.
+  - `x-ai/grok-4.1-fast`: 25 games, 13 wins / 12 draws / 0 losses, 0 provider-error turns.
+- Primary model confirmation run:
+  - `runs/openrouter_qualification/20260306T023836Z_gemini31flashlite_medium_3games/summary.json`
+  - Result: 3/3 wins vs `greedy` (seeds 97/98/99), 0 provider-error turns.
+  - Replay dir: `replays/model_evals/2026-03-05T18-38-36-862PST`
+- Secondary model reference run (chosen setting `--reasoning-effort low`):
+  - `runs/openrouter_qualification/20260305T024905Z_grok41fast_reasoning_abcd/low/summary.json`
+  - Result: 2/2 wins vs `greedy` (seeds 71/72), 0 provider-error turns.
+  - Replay dir: `replays/model_evals/2026-03-04T19-00-24-800PST`
+- Google AI Studio backup status (`gemini-3.1-flash-lite` only on current free tier):
+  - Aggregated runs: 8 games, 0 wins / 8 draws / 0 losses, 4 provider-error turns (`runs/gemini_studio_validation/**/summary.json`).
+  - Keep as fallback provider only; current evidence suggests weaker/less predictable behavior in this harness than OpenRouter.
 
 ## OSS baselines (default for testing)
 These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):
@@ -58,7 +76,8 @@ Smoke (1 game each vs GreedyBot, seed=3):
 
 ## Known-good models (fallback shortlist)
 If provider/model availability changes, these OpenRouter models have recently worked well end-to-end in this repo:
-- Primary: `x-ai/grok-4.1-fast`
+- Primary: `google/gemini-3.1-flash-lite-preview` (`--reasoning-effort medium`)
+- Secondary: `x-ai/grok-4.1-fast` (`--reasoning-effort low`)
 
 Notes:
 - `openai/gpt-5-mini` is currently unreliable in this harness (frequent empty/partial outputs leading to passes).
@@ -177,6 +196,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Provider flakiness: capacity/rate-limit errors can cause many agent passes (esp. some Chutes models); these are surfaced as `openai_compat failed: ...` in rationale.
 - Some models produce malformed JSON/tool output; `openai_compat` retries once but can still fail and fall back to `pass`.
 - Cerebras `gpt-oss-120b` with `reasoning-effort=high` can be fast/strong but still shows frequent output/parse failures (often `Unexpected non-whitespace character after JSON ...`), even on paid keys; treat it as “strong but not yet clean”.
+- MiniMax `MiniMax-M2.5` currently shows materially higher timeout/abort error rates in this harness than OpenRouter front-runners (see `runs/minimax_validation/20260305T000749Z_batchA/summary.json`, `runs/minimax_validation/20260305T000945Z_batchB/summary.json`, `runs/minimax_validation/20260305T001423Z_batchC_timeout70/summary.json`, `runs/minimax_validation/20260305T001800Z_batchD_effortLow/summary.json`).
 - Important: earlier “big win-rate” OSS results were shown to be driven by prompt strategy hints; after removing hints, re-runs produced 0 wins in the same one-ply micro-sweep setup (see `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`).
 - Some providers/models emit the primary text in `message.reasoning` and may omit `message.content`; `openai_compat` has best-effort parsing for this but is not universally reliable (notably for `zai-glm-4.7` on Cerebras).
 - v06 experiments (repair loop / warmup + memory) are currently not recommended as defaults; keep them opt-in. See `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`.
