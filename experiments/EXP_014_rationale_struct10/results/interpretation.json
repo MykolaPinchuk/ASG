@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-03-05T20:31:07.449-08:00",
+  "experimentId": "EXP_014_rationale_struct10",
+  "controlId": "control",
+  "variantId": "variant_struct10",
+  "decision": "promising",
+  "confidence": "low",
+  "controlRerunEveryVariants": 5,
+  "controlRerunDue": false,
+  "summary": {
+    "winsDelta": 0,
+    "pliesToWinDelta": -3.333333333333332,
+    "avgLatencyMsDelta": -2467.74,
+    "avgTokensPerTurnDelta": 206.44000000000005,
+    "strictSuboptimalTurnsDelta": 0
+  }
+}

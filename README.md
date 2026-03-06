@@ -15,8 +15,11 @@ Start here (in order):
 - `docs/planning/MVP_SPEC.md` — normative rules/spec (source of truth)
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestones and deliverables
 - `docs/planning/ROADMAP.md` — post-MVP direction
+- `docs/planning/EXPERIMENT_LOGGING_SPEC.md` — run logging contract for ablation experiments
+- `docs/planning/EXPERIMENT_PACK_SPEC.md` — committed experiment-pack structure for baseline vs variant state
 - `scenarios/scenario_01.json` — Scenario 01 data
 - `schemas/replay.schema.json` — replay validation schema
+- `schemas/experiment_run.schema.json` — experiment manifest schema
 - `schemas/agent_api.schema.json` — agent HTTP wire schema (future)
 
 ## Quickstart (run + watch)
@@ -75,6 +78,39 @@ Runs a small sweep (starts a local agent server automatically) and prints win/dr
 ### Baseline check: Grok vs Greedy (cost-capped)
 Runs Grok (`x-ai/grok-4.1-fast`) vs `greedy` and always saves replays (hard cap: max 3 games per run):
 - `npm run eval:grok-vs-greedy`
+
+### Experiment logging (ablation workflow)
+`agent:eval-vs-mix` can now emit full run logs:
+- `summary.json` (aggregate)
+- `manifest.json` (full reproducibility state)
+- `game_metrics.jsonl` (per game)
+- `turn_metrics.jsonl` (per turn)
+
+Useful flags:
+- `--experiment-id`, `--condition-id`, `--baseline-condition-id`, `--ablation-key`, `--hypothesis`, `--notes`
+- `--manifest-out`, `--game-metrics-out`, `--turn-metrics-out`
+- `--experiment-log-dir` (or rely on default `runs/experiment_logs/<run_id>_...`)
+- `--seed-profile <name>` (defaults from `experiments/POLICY.json`; default profile is `smoke3 = [301,302,303]`)
+
+Default experiment policy:
+- `experiments/POLICY.json` sets default paired seeds/profile and control-rerun cadence.
+- Current default: `smoke3` for any experiment run without explicit seed args.
+
+### Experiment packs (committed baseline vs variant state)
+Build a committed experiment folder from two run manifests:
+- `npm run exp:pack -- --exp-id EXP_014_memory_last2states --title \"Memory: append last 2 states\" --control-manifest runs/experiment_logs/<control>/manifest.json --variant-manifest runs/experiment_logs/<variant>/manifest.json --allow-diff-paths runtime.memory`
+
+This writes:
+- `experiments/EXP_014_memory_last2states/conditions/*.json`
+- `experiments/EXP_014_memory_last2states/artifacts/*` (prompt snapshots + rules snapshot)
+- `experiments/EXP_014_memory_last2states/results/*` (state diff, latest links, replay index)
+
+Generate comprehensive comparison metrics for an experiment pack:
+- `npm run exp:report -- --exp-id EXP_014_memory_last2states --variant-id variant`
+  - writes `experiments/EXP_014_memory_last2states/results/comparison.md` + `comparison.json`
+  - writes `experiments/EXP_014_memory_last2states/results/interpretation.md` + `interpretation.json`
+  - includes outcomes, turns-to-win, latency deltas, token usage (when server logs exist), and strict suboptimal reinforce counts
+  - refreshes `experiments/INDEX.md` + `experiments/INDEX.csv` (one row per experiment, with key deltas + decision)
 
 ### Debug: summarize agent I/O logs (local)
 Summarizes `runs/agent_io/` into per-match counts: pass turns, provider-error turns (from rationale), timeouts, HTTP/parse errors, and latency percentiles:

@@ -1,0 +1,50 @@
+{
+  "conditionId": "variant",
+  "links": {
+    "gameMetricsPath": "runs/.tmp_pack_variant/game_metrics.jsonl",
+    "replaysDir": "replays/model_evals/2026-03-05T19-34-18-250PST",
+    "summaryPath": "runs/.tmp_pack_variant/summary.json",
+    "turnMetricsPath": "runs/.tmp_pack_variant/turn_metrics.jsonl"
+  },
+  "schemaVersion": "asg.experiment_condition.v1",
+  "source": {
+    "commit": "e0ba5d2252250a1600a19be8a780295af2689dca",
+    "createdAt": "2026-03-05T19:34:18.214-08:00",
+    "finishedAt": "2026-03-05T19:34:18.766-08:00",
+    "manifestPath": "runs/.tmp_pack_variant/manifest.json",
+    "runId": "2026-03-05T19-34-18-214PST"
+  },
+  "state": {
+    "matchup": {
+      "opponent": "greedy",
+      "plannedGames": 1,
+      "seeds": [
+        11
+      ],
+      "stopAfterErrors": 2,
+      "turnCapPlies": 2
+    },
+    "model": {
+      "models": [
+        "fake-model"
+      ],
+      "modelsConfig": "configs/oss_baselines.json",
+      "modelsSource": "arg",
+      "providerName": "stub"
+    },
+    "runtime": {
+      "agentTimeoutMs": 95000,
+      "maxTokens": "600",
+      "openAiTimeoutMs": "70000",
+      "promptMode": "full",
+      "temperature": "0",
+      "useTools": true,
+      "validateModels": false
+    },
+    "scenario": {
+      "id": "scenario_01",
+      "path": "scenarios/scenario_01.json",
+      "sha256": "d163646f6ec09a7aae353b480c2a672a72d7369c1efbaf1fbe6f95ec41e22c18"
+    }
+  }
+}

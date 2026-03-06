@@ -13,6 +13,7 @@ Lock these for the entire experiment batch:
 - Opponent: prefer `greedy` (lower variance); use `mix` only if needed later.
 - Horizon: `turnCapPlies = 30` (or a shorter fixed cap for pilot runs; keep fixed).
 - Seeds: fixed set; run the **same seeds** for all conditions (paired comparison).
+  - Default policy profile: `experiments/POLICY.json` -> `smoke3 = [301,302,303]`.
 - Agent side: fixed (e.g. agent is `P1`).
 - Model config: provider + model + baseUrl + timeout + max_tokens + temperature + prompt mode/tools flags (all fixed).
 - Always save replays; require per-ply `latencyMs` (already a repo invariant).
@@ -78,3 +79,25 @@ For each condition:
 - Table: metrics (mean over games) + per-seed deltas vs control.
 - Link to the replay directory used for analysis.
 
+## 6) Logging contract (v07+)
+
+Every run should emit a complete artifact set:
+- `summary.json` (aggregate rollup)
+- `manifest.json` (full reproducibility metadata)
+- `game_metrics.jsonl` (1 row per game)
+- `turn_metrics.jsonl` (1 row per agent turn)
+- replay files
+
+Recommended flags on `npm run agent:eval-vs-mix -- ...`:
+- `--experiment-id <id>`
+- `--condition-id <id>`
+- `--baseline-condition-id <id>` (for variants)
+- `--ablation-key <name_of_single_changed_variable>`
+- `--hypothesis "<pre-registered expectation>"`
+- `--manifest-out ... --game-metrics-out ... --turn-metrics-out ...`
+
+Reference:
+- Logging spec: `docs/planning/EXPERIMENT_LOGGING_SPEC.md`
+- Manifest schema: `schemas/experiment_run.schema.json`
+- Experiment packs: `docs/planning/EXPERIMENT_PACK_SPEC.md`
+- Policy: `experiments/POLICY.json` (seed profile defaults, control rerun cadence; current cadence = every 5 variants)

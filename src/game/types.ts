@@ -164,6 +164,7 @@ export interface Replay {
         modelMode?: "auto" | "explicit";
         config?: {
           reasoningEffort?: "low" | "medium" | "high";
+          rationaleStyle?: "concise" | "structured10";
           promptMode?: "compact" | "full";
           timeoutMs?: number;
           maxTokens?: number;

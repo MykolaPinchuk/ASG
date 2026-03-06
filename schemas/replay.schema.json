@@ -68,6 +68,7 @@
               "additionalProperties": false,
               "properties": {
                 "reasoningEffort": { "type": "string", "enum": ["low", "medium", "high"] },
+                "rationaleStyle": { "type": "string", "enum": ["concise", "structured10"] },
                 "promptMode": { "type": "string", "enum": ["compact", "full"] },
                 "timeoutMs": { "type": "integer", "minimum": 0 },
                 "maxTokens": { "type": "integer", "minimum": 0 },

@@ -24,6 +24,7 @@ type AgentResponse = {
     modelMode?: "auto" | "explicit";
     config?: {
       reasoningEffort?: "low" | "medium" | "high";
+      rationaleStyle?: "concise" | "structured10";
       promptMode?: "compact" | "full";
       timeoutMs?: number;
       maxTokens?: number;
@@ -116,6 +117,7 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
     if (isObject(cfgRaw)) {
       const reasoningEffortRaw = (cfgRaw as any).reasoningEffort;
       const promptModeRaw = (cfgRaw as any).promptMode;
+      const rationaleStyleRaw = (cfgRaw as any).rationaleStyle;
       const toolsModeRaw = (cfgRaw as any).toolsMode;
       const streamRaw = (cfgRaw as any).stream;
       const thinkHintRaw = (cfgRaw as any).thinkHint;
@@ -126,6 +128,7 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
           ? reasoningEffortRaw
           : undefined;
       const promptMode = promptModeRaw === "compact" || promptModeRaw === "full" ? promptModeRaw : undefined;
+      const rationaleStyle = rationaleStyleRaw === "concise" || rationaleStyleRaw === "structured10" ? rationaleStyleRaw : undefined;
       const toolsMode = toolsModeRaw === "auto" || toolsModeRaw === "force" || toolsModeRaw === "off" ? toolsModeRaw : undefined;
       const stream = streamRaw === "auto" || streamRaw === "on" || streamRaw === "off" ? streamRaw : undefined;
       const thinkHint = thinkHintRaw === "on" || thinkHintRaw === "off" ? thinkHintRaw : undefined;
@@ -150,6 +153,7 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
 
       if (
         reasoningEffort !== undefined ||
+        rationaleStyle !== undefined ||
         promptMode !== undefined ||
         timeoutMs !== undefined ||
         maxTokens !== undefined ||
@@ -163,6 +167,7 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
       ) {
         config = {
           reasoningEffort,
+          rationaleStyle,
           promptMode,
           timeoutMs,
           maxTokens,

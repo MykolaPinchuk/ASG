@@ -1,0 +1,7 @@
+{
+  "createdAt": "2026-03-05T19:40:34.408-08:00",
+  "experimentId": "EXP_000_prompt_mode_smoke",
+  "schemaVersion": "asg.experiment_pack.v1",
+  "title": "Prompt mode smoke (control vs full)",
+  "updatedAt": "2026-03-05T19:40:34.408-08:00"
+}

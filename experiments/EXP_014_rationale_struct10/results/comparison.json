@@ -1,0 +1,92 @@
+{
+  "generatedAt": "2026-03-05T20:31:07.449-08:00",
+  "experimentId": "EXP_014_rationale_struct10",
+  "controlId": "control",
+  "variantId": "variant_struct10",
+  "outcomes": {
+    "control": {
+      "games": 3,
+      "wins": 3,
+      "draws": 0,
+      "losses": 0,
+      "pliesToWin": [
+        25,
+        11,
+        11
+      ]
+    },
+    "variant": {
+      "games": 3,
+      "wins": 3,
+      "draws": 0,
+      "losses": 0,
+      "pliesToWin": [
+        17,
+        9,
+        11
+      ]
+    },
+    "controlPliesToWin": {
+      "count": 3,
+      "avg": 15.666666666666666,
+      "p50": 11,
+      "p95": 11
+    },
+    "variantPliesToWin": {
+      "count": 3,
+      "avg": 12.333333333333334,
+      "p50": 11,
+      "p95": 11
+    }
+  },
+  "latency": {
+    "control": {
+      "count": 25,
+      "avg": 11575.84,
+      "p50": 10188,
+      "p95": 15805
+    },
+    "variant": {
+      "count": 20,
+      "avg": 9108.1,
+      "p50": 9706,
+      "p95": 10991
+    }
+  },
+  "tokenUsage": {
+    "control": {
+      "promptTokens": 54897,
+      "completionTokens": 22882,
+      "reasoningTokens": 0,
+      "totalTokens": 77779,
+      "rowsWithUsage": 25,
+      "rowsWithoutUsage": 0
+    },
+    "variant": {
+      "promptTokens": 44733,
+      "completionTokens": 21619,
+      "reasoningTokens": 0,
+      "totalTokens": 66352,
+      "rowsWithUsage": 20,
+      "rowsWithoutUsage": 0
+    },
+    "controlAvgTotalPerTurn": 3111.16,
+    "variantAvgTotalPerTurn": 3317.6
+  },
+  "strictSuboptimal": {
+    "control": {
+      "agentTurns": 25,
+      "turnsWithReinforceCapacity": 25,
+      "strictSuboptimalTurns": 0,
+      "missedReinforceStrengthTotal": 0
+    },
+    "variant": {
+      "agentTurns": 20,
+      "turnsWithReinforceCapacity": 20,
+      "strictSuboptimalTurns": 0,
+      "missedReinforceStrengthTotal": 0
+    },
+    "controlRate": 0,
+    "variantRate": 0
+  }
+}

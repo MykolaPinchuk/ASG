@@ -13,6 +13,8 @@ Keep this file short. Update it only when something important changes.
 - `agent_logs/current.md` — live execution log for this cycle.
 - `docs/planning/MVP_SPEC.md` — normative MVP rules/spec (source of truth).
 - `docs/planning/EXPERIMENT_EVAL_PROTOCOL.md` — how to run comparable experiment A/Bs (baselines, metrics, success criteria).
+- `docs/planning/EXPERIMENT_LOGGING_SPEC.md` — required logging artifacts/fields for iterative ablation workflows.
+- `docs/planning/EXPERIMENT_PACK_SPEC.md` — committed experiment-pack layout for baseline vs variant state + artifacts.
 - `docs/planning/V06_EXPERIMENTS.md` — v06 backlog of agent-improvement experiments (warmup/memory/repair loops).
 - `docs/planning/V07_COMPLEXITY_EXPERIMENT.md` — v07 plan: behavior-focused experiments in current setup (harness/prompt/context), with model qualification by reliability/latency/telemetry.
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.
@@ -26,7 +28,10 @@ Keep this file short. Update it only when something important changes.
 - `viewer/index.html` — replay viewer (load `replays/*.json`).
 - `scenarios/scenario_01.json` — initial scenario data.
 - `schemas/replay.schema.json` — replay JSON schema.
+- `schemas/experiment_run.schema.json` — experiment manifest schema (`manifest.json` from eval runs).
 - `schemas/agent_api.schema.json` — agent API schema (`src/controllers/httpAgentController.ts` ↔ `src/cli/agentServer.ts`).
+- `experiments/` — committed experiment packs (state snapshots + links to run artifacts).
+- `experiments/POLICY.json` — default experiment seed profile and control rerun cadence.
 
 ## Where results live (ignored by default)
 - `agent_logs/` — per-cycle logs and index.
@@ -57,6 +62,9 @@ Keep this file short. Update it only when something important changes.
 ## Utility scripts
 - `src/cli/reportBatch.ts` — batch metrics report (`npm run report`).
 - `src/cli/analyzeReplays.ts` — summarize replay folders + paired A/B deltas (`npm run analyze:replays`).
+- `src/cli/experimentPack.ts` — materialize experiment pack from control/variant manifests (`npm run exp:pack`).
+- `src/cli/reportExperiment.ts` — comprehensive experiment report + interpretation (`npm run exp:report`).
+- `src/experiments/indexRegistry.ts` — maintains `experiments/INDEX.md` + `INDEX.csv` with one row per experiment.
 
 ## Local-only directories (ignored)
 - `secrets/` — local credentials (see `secrets/README.md`).
@@ -69,3 +77,10 @@ Keep this file short. Update it only when something important changes.
 ## New important files since last cycle
 - `configs/oss_models.json` — OSS model allowlist/priority list (derived from TML-bench).
 - `src/llm/models.ts` — shared helpers for OSS allowlist + OpenAI-compatible `/models`.
+- `docs/planning/EXPERIMENT_LOGGING_SPEC.md` — v07+ experiment logging contract.
+- `schemas/experiment_run.schema.json` — schema for reproducible run manifests.
+- `docs/planning/EXPERIMENT_PACK_SPEC.md` — minimal committed experiment-pack specification.
+- `experiments/POLICY.json` — default `smoke3` seeds and control rerun cadence.
+- `src/cli/experimentPack.ts` — experiment pack generator with one-key ablation guard.
+- `src/cli/reportExperiment.ts` — experiment comparison + interpretation report generator.
+- `src/experiments/indexRegistry.ts` — shared experiment registry updater.

@@ -1,0 +1,55 @@
+{
+  "conditionId": "control",
+  "links": {
+    "gameMetricsPath": "runs/experiment_logs/EXP_014_rationale_struct10/control/game_metrics.jsonl",
+    "replaysDir": "replays/model_evals/2026-03-05T20-03-49-032PST",
+    "summaryPath": "runs/experiment_logs/EXP_014_rationale_struct10/control/summary.json",
+    "turnMetricsPath": "runs/experiment_logs/EXP_014_rationale_struct10/control/turn_metrics.jsonl"
+  },
+  "schemaVersion": "asg.experiment_condition.v1",
+  "source": {
+    "commit": "e0ba5d2252250a1600a19be8a780295af2689dca",
+    "createdAt": "2026-03-05T20:03:48.996-08:00",
+    "finishedAt": "2026-03-05T20:08:38.947-08:00",
+    "manifestPath": "runs/experiment_logs/EXP_014_rationale_struct10/control/manifest.json",
+    "runId": "2026-03-05T20-03-48-997PST"
+  },
+  "state": {
+    "matchup": {
+      "opponent": "greedy",
+      "plannedGames": 3,
+      "seeds": [
+        301,
+        302,
+        303
+      ],
+      "stopAfterErrors": 2,
+      "turnCapPlies": 30
+    },
+    "model": {
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "models": [
+        "google/gemini-3.1-flash-lite-preview"
+      ],
+      "modelsConfig": "configs/oss_baselines.json",
+      "modelsSource": "arg",
+      "providerName": "openrouter"
+    },
+    "runtime": {
+      "agentTimeoutMs": 95000,
+      "maxTokens": "600",
+      "openAiTimeoutMs": "70000",
+      "reasoningEffort": "medium",
+      "stream": "off",
+      "temperature": "0",
+      "toolsMode": "off",
+      "useTools": false,
+      "validateModels": false
+    },
+    "scenario": {
+      "id": "scenario_01",
+      "path": "scenarios/scenario_01.json",
+      "sha256": "d163646f6ec09a7aae353b480c2a672a72d7369c1efbaf1fbe6f95ec41e22c18"
+    }
+  }
+}

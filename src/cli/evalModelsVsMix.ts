@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import net from "node:net";
@@ -9,12 +10,37 @@ import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { MixBot } from "../controllers/mixBot.js";
 import { GreedyBot } from "../controllers/greedyBot.js";
 import { fetchOpenAiCompatModelIds, getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
-import { pacificFileStamp } from "../utils/pacificTime.js";
+import { pacificFileStamp, pacificIsoString } from "../utils/pacificTime.js";
+import { loadExperimentPolicy } from "../experiments/policy.js";
 import type { Controller } from "../controllers/controller.js";
 import type { PlayerId, Replay } from "../game/types.js";
 
 type ProviderName = "nanogpt" | "chutes" | "openrouter" | string;
 type Opponent = "mix" | "greedy";
+type TurnErrorTag =
+  | "timeout"
+  | "rate_limit"
+  | "provider_5xx"
+  | "provider_4xx"
+  | "empty_output"
+  | "json_parse_error"
+  | "invalid_action"
+  | "fallback_used"
+  | "controller_error";
+
+type ExperimentMeta = {
+  runId: string;
+  experimentId: string;
+  conditionId: string;
+  baselineConditionId?: string;
+  ablationKey?: string;
+};
+
+type GitMeta = {
+  branch?: string;
+  commit?: string;
+  dirty?: boolean;
+};
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -139,7 +165,75 @@ function formatPct(x: number): string {
   return `${(x * 100).toFixed(0)}%`;
 }
 
+function sha256Hex(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function runGit(args: string[]): string | undefined {
+  const out = spawnSync("git", args, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    timeout: 1500,
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (out.status !== 0) return undefined;
+  const text = (out.stdout ?? "").trim();
+  return text.length > 0 ? text : undefined;
+}
+
+function getGitMeta(): GitMeta {
+  const commit = runGit(["rev-parse", "HEAD"]);
+  const branch = runGit(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const status = runGit(["status", "--porcelain"]);
+  return {
+    branch,
+    commit,
+    dirty: typeof status === "string" ? status.length > 0 : undefined,
+  };
+}
+
+function getTurnErrorTags(turn: Replay["turns"][number]): TurnErrorTag[] {
+  const tags = new Set<TurnErrorTag>();
+  const diagnostics = turn.diagnostics;
+  const status = diagnostics?.upstreamStatus ?? diagnostics?.httpStatus;
+  const combined = `${diagnostics?.error ?? ""} ${diagnostics?.upstreamError ?? ""} ${turn.rationaleText ?? ""}`.toLowerCase();
+
+  const hasInvalidAction = (turn.events ?? []).some((e) => e.type === "invalid_action");
+  if (hasInvalidAction) tags.add("invalid_action");
+  if (diagnostics?.usedFallback) tags.add("fallback_used");
+  if (status === 429 || combined.includes("rate limit") || combined.includes("rate_limit")) tags.add("rate_limit");
+  if (typeof status === "number" && status >= 500) tags.add("provider_5xx");
+  else if (typeof status === "number" && status >= 400) tags.add("provider_4xx");
+  if (combined.includes("timeout") || combined.includes("timed out") || combined.includes("aborted") || combined.includes("aborterror")) {
+    tags.add("timeout");
+  }
+  if (combined.includes("empty_response") || combined.includes("empty_output") || combined.includes("no message.content")) {
+    tags.add("empty_output");
+  }
+  if (combined.includes("json") || combined.includes("unexpected token") || combined.includes("parse")) {
+    tags.add("json_parse_error");
+  }
+  const hasControllerError = !!diagnostics?.error || !!diagnostics?.upstreamError;
+  if (hasControllerError) {
+    const taggedProviderError =
+      tags.has("timeout") ||
+      tags.has("rate_limit") ||
+      tags.has("provider_5xx") ||
+      tags.has("provider_4xx") ||
+      tags.has("empty_output") ||
+      tags.has("json_parse_error");
+    if (!taggedProviderError) tags.add("controller_error");
+  }
+
+  return Array.from(tags);
+}
+
+function hasProviderErrorFromTags(tags: TurnErrorTag[]): boolean {
+  return tags.some((tag) => tag !== "invalid_action" && tag !== "fallback_used");
+}
+
 async function evalOneModel(params: {
+  experiment: ExperimentMeta;
   providerName: ProviderName;
   keysFile: string;
   keysName?: string;
@@ -156,11 +250,26 @@ async function evalOneModel(params: {
   maxTokens: string;
   temperature: string;
   useTools: boolean;
+  fallback?: string;
   toolsMode?: string;
   stream?: string;
   thinkHint?: string;
   reasoningEffort?: string;
+  rationaleStyle?: string;
   reasoningSplit?: string;
+  memory?: string;
+  memoryMaxChars?: string;
+  warmup?: string;
+  warmupTimeoutMs?: string;
+  warmupMaxTokens?: string;
+  repair?: string;
+  repairMaxRounds?: string;
+  retryOnFailure?: string;
+  retryReasoningEffort?: string;
+  selectMode?: string;
+  selectK?: string;
+  selectCandidateTemperature?: string;
+  selectUntilPly?: string;
   promptMode?: string;
   stopAfterErrors?: number;
   saveReplays: boolean;
@@ -168,6 +277,8 @@ async function evalOneModel(params: {
   liveOut?: string;
   agentLogDir?: string;
   serverLogDir?: string;
+  gameMetricsRows?: Array<Record<string, unknown>>;
+  turnMetricsRows?: Array<Record<string, unknown>>;
 }) {
   // Clone per model so any early-stop turn-cap tweaks do not leak across models.
   const scenario = structuredClone(params.scenario);
@@ -201,7 +312,7 @@ async function evalOneModel(params: {
     "--use-tools",
     params.useTools ? "true" : "false",
     "--fallback",
-    "pass",
+    params.fallback ?? "pass",
   ];
   if (params.keysName) serverArgs.push("--keys-name", params.keysName);
   if (params.promptMode) serverArgs.push("--prompt-mode", params.promptMode);
@@ -209,7 +320,21 @@ async function evalOneModel(params: {
   if (params.stream) serverArgs.push("--stream", params.stream);
   if (params.thinkHint) serverArgs.push("--think-hint", params.thinkHint);
   if (params.reasoningEffort) serverArgs.push("--reasoning-effort", params.reasoningEffort);
+  if (params.rationaleStyle) serverArgs.push("--rationale-style", params.rationaleStyle);
   if (params.reasoningSplit) serverArgs.push("--reasoning-split", params.reasoningSplit);
+  if (params.memory) serverArgs.push("--memory", params.memory);
+  if (params.memoryMaxChars) serverArgs.push("--memory-max-chars", params.memoryMaxChars);
+  if (params.warmup) serverArgs.push("--warmup", params.warmup);
+  if (params.warmupTimeoutMs) serverArgs.push("--warmup-timeout-ms", params.warmupTimeoutMs);
+  if (params.warmupMaxTokens) serverArgs.push("--warmup-max-tokens", params.warmupMaxTokens);
+  if (params.repair) serverArgs.push("--repair", params.repair);
+  if (params.repairMaxRounds) serverArgs.push("--repair-max-rounds", params.repairMaxRounds);
+  if (params.retryOnFailure) serverArgs.push("--retry-on-failure", params.retryOnFailure);
+  if (params.retryReasoningEffort) serverArgs.push("--retry-reasoning-effort", params.retryReasoningEffort);
+  if (params.selectMode) serverArgs.push("--select-mode", params.selectMode);
+  if (params.selectK) serverArgs.push("--select-k", params.selectK);
+  if (params.selectCandidateTemperature) serverArgs.push("--select-candidate-temperature", params.selectCandidateTemperature);
+  if (params.selectUntilPly) serverArgs.push("--select-until-ply", params.selectUntilPly);
   if (params.baseUrl) serverArgs.push("--base-url", params.baseUrl);
   if (params.serverLogDir) serverArgs.push("--log-dir", params.serverLogDir);
 
@@ -328,6 +453,9 @@ async function evalOneModel(params: {
       const agentPassTurns = agentTurns.filter(
         (t) => (t.actions ?? []).length === 0 || (t.actions ?? []).every((a) => a.type === "pass"),
       ).length;
+      const invalidActionTurns = agentTurns.filter((t) => (t.events ?? []).some((e) => e.type === "invalid_action")).length;
+      const fallbackTurns = agentTurns.filter((t) => t.diagnostics?.usedFallback === true).length;
+      const retryTurns = agentTurns.filter((t) => t.diagnostics?.usedRetry === true).length;
       const providerErrors = agentTurns.filter((t) => (t.rationaleText ?? "").includes("server: openai_compat error")).length;
       providerErrorTurnsTotal += providerErrors;
 
@@ -337,7 +465,26 @@ async function evalOneModel(params: {
       const tStatsOk = summarizeAgentTelemetry(telemetryOk);
       const agentErrors = agentController.telemetry.filter((t) => !!t.error).length;
       const resultShort = replay.result.type === "draw" ? "draw" : replay.result.winner === "P1" ? "win" : "loss";
+
+      let agentCaptures = 0;
+      let firstCapturePly: number | null = null;
+      let providerErrorTurnsDerived = 0;
+      for (const t of agentTurns) {
+        const turnCaptures = (t.events ?? []).filter((e) => e.type === "capture" && (e as any).newOwner === "P1").length;
+        if (turnCaptures > 0 && firstCapturePly === null) firstCapturePly = t.ply;
+        agentCaptures += turnCaptures;
+        const tags = getTurnErrorTags(t);
+        if (hasProviderErrorFromTags(tags)) providerErrorTurnsDerived += 1;
+      }
+
+      const finalState = replay.turns[replay.turns.length - 1]?.stateAfter;
+      const supplyYieldOwnedAtEnd = Object.values(finalState?.nodes ?? {}).reduce((sum, n) => {
+        if (n.owner !== "P1") return sum;
+        return sum + (Number.isFinite(n.supplyYield) ? n.supplyYield : 0);
+      }, 0);
+
       const gameRow = {
+        ...params.experiment,
         provider: String(params.providerName),
         model: params.model,
         opponent: params.opponent,
@@ -346,8 +493,15 @@ async function evalOneModel(params: {
         plies,
         agentTurns: agentTurns.length,
         agentPassTurns,
+        invalidActionTurns,
+        fallbackTurns,
+        retryTurns,
         agentErrorTurns: agentErrors,
         providerErrorTurns: providerErrors,
+        providerErrorTurnsDerived,
+        captures: agentCaptures,
+        firstCapturePly,
+        supplyYieldOwnedAtEnd,
         stopAfterErrors: stopAfterErrors || undefined,
         errorTurns: stopAfterErrors ? errorTurns : undefined,
         earlyStop: stopAfterErrors ? earlyStopTriggered : undefined,
@@ -367,12 +521,75 @@ async function evalOneModel(params: {
         await writeFile(params.liveOut, JSON.stringify(gameRow) + "\n", { flag: "a" });
       }
 
-      let agentCaptures = 0;
-      for (const t of agentTurns) {
-        for (const e of t.events ?? []) {
-          if (e.type === "capture" && (e as any).newOwner === "P1") agentCaptures += 1;
+      if (params.gameMetricsRows) {
+        params.gameMetricsRows.push({
+          ...params.experiment,
+          provider: String(params.providerName),
+          model: params.model,
+          opponent: params.opponent,
+          seed,
+          result: resultShort,
+          replayPath: replayPaths[replayPaths.length - 1],
+          plies,
+          agentTurns: agentTurns.length,
+          passTurns: agentPassTurns,
+          invalidActionTurns,
+          fallbackTurns,
+          retryTurns,
+          agentErrorTurns: agentErrors,
+          providerErrorTurns: providerErrors,
+          providerErrorTurnsDerived,
+          captures: agentCaptures,
+          firstCapturePly,
+          supplyYieldOwnedAtEnd,
+          avgLatencyMs: tStatsAll.avg,
+          p50LatencyMs: tStatsAll.p50,
+          p95LatencyMs: tStatsAll.p95,
+          avgLatencyOkMs: tStatsOk.avg,
+          p50LatencyOkMs: tStatsOk.p50,
+          p95LatencyOkMs: tStatsOk.p95,
+          stopAfterErrors: stopAfterErrors || undefined,
+          errorTurns: stopAfterErrors ? errorTurns : undefined,
+          earlyStop: stopAfterErrors ? earlyStopTriggered : undefined,
+        });
+      }
+
+      if (params.turnMetricsRows) {
+        for (const t of agentTurns) {
+          const actionTypes = (t.actions ?? []).map((a) => a.type);
+          const isPassTurn = actionTypes.length === 0 || actionTypes.every((type) => type === "pass");
+          const invalidActionCount = (t.events ?? []).filter((e) => e.type === "invalid_action").length;
+          const captureCount = (t.events ?? []).filter((e) => e.type === "capture" && (e as any).newOwner === "P1").length;
+          const tags = getTurnErrorTags(t);
+          const attempts = t.diagnostics?.attempts ?? [];
+          params.turnMetricsRows.push({
+            ...params.experiment,
+            provider: String(params.providerName),
+            model: params.model,
+            opponent: params.opponent,
+            seed,
+            ply: t.ply,
+            actionsCount: actionTypes.length,
+            actionTypes,
+            isPassTurn,
+            invalidActionCount,
+            captureCount,
+            latencyMs: t.latencyMs,
+            httpStatus: t.diagnostics?.httpStatus,
+            upstreamStatus: t.diagnostics?.upstreamStatus,
+            usedFallback: t.diagnostics?.usedFallback ?? false,
+            usedRetry: t.diagnostics?.usedRetry ?? false,
+            retryFromReasoningEffort: t.diagnostics?.retry?.fromReasoningEffort,
+            retryToReasoningEffort: t.diagnostics?.retry?.toReasoningEffort,
+            attemptsCount: attempts.length,
+            attemptErrorCount: attempts.filter((a) => !!a.error).length,
+            attemptStatuses: attempts.map((a) => a.upstreamStatus).filter((x) => typeof x === "number"),
+            errorTags: tags,
+            hasProviderError: hasProviderErrorFromTags(tags),
+          });
         }
       }
+
       agentCapturesTotal += agentCaptures;
       if (agentCaptures > 0) trialsWithAnyCapture += 1;
 
@@ -414,6 +631,7 @@ async function evalOneModel(params: {
 
 async function main() {
   const args = parseArgs(process.argv);
+  const { policy: experimentPolicy, path: experimentPolicyPath } = await loadExperimentPolicy(process.cwd());
 
   const unsafeAllowLong = (args.get("--unsafe-allow-long") ?? "false").toLowerCase() === "true";
   const unsafeAllowMany = (args.get("--unsafe-allow-many") ?? "false").toLowerCase() === "true";
@@ -429,9 +647,12 @@ async function main() {
     (providerName === "cerebras" ? "https://api.cerebras.ai/v1" : undefined);
   const modelsConfig = args.get("--models-config") ?? process.env.ASG_MODELS_CONFIG ?? "configs/oss_baselines.json";
 
-  const seedStart = Number.parseInt(args.get("--seed-start") ?? args.get("--seed") ?? "3", 10);
-  const games = Number.parseInt(args.get("--games") ?? args.get("--trials") ?? "3", 10);
+  const seedStartRaw = args.get("--seed-start") ?? args.get("--seed");
+  const gamesRaw = args.get("--games") ?? args.get("--trials");
+  const hasExplicitSeedRange = args.has("--seed-start") || args.has("--seed") || args.has("--games") || args.has("--trials");
   const seedsRaw = args.get("--seeds");
+  const seedProfileArg = args.get("--seed-profile");
+  const seedProfile = seedProfileArg ?? (!seedsRaw && !hasExplicitSeedRange ? experimentPolicy.defaultSeedProfile : undefined);
   const turnCapRaw = args.get("--turn-cap-plies");
   const turnCapPlies = turnCapRaw ? Number.parseInt(turnCapRaw, 10) : 30;
   const opponentRaw = (args.get("--opponent") ?? "mix").toLowerCase();
@@ -447,7 +668,21 @@ async function main() {
   const useToolsDefault = providerName !== "chutes";
   const useToolsRaw = (args.get("--use-tools") ?? (useToolsDefault ? "true" : "false")).toLowerCase();
   const useTools = useToolsRaw !== "false";
+  const fallback = args.get("--fallback") ?? undefined;
   const promptMode = args.get("--prompt-mode") ?? undefined;
+  const memory = args.get("--memory") ?? undefined;
+  const memoryMaxChars = args.get("--memory-max-chars") ?? undefined;
+  const warmup = args.get("--warmup") ?? undefined;
+  const warmupTimeoutMs = args.get("--warmup-timeout-ms") ?? undefined;
+  const warmupMaxTokens = args.get("--warmup-max-tokens") ?? undefined;
+  const repair = args.get("--repair") ?? undefined;
+  const repairMaxRounds = args.get("--repair-max-rounds") ?? undefined;
+  const retryOnFailure = args.get("--retry-on-failure") ?? undefined;
+  const retryReasoningEffort = args.get("--retry-reasoning-effort") ?? undefined;
+  const selectMode = args.get("--select-mode") ?? undefined;
+  const selectK = args.get("--select-k") ?? undefined;
+  const selectCandidateTemperature = args.get("--select-candidate-temperature") ?? undefined;
+  const selectUntilPly = args.get("--select-until-ply") ?? undefined;
   const stopAfterErrorsRaw = args.get("--stop-after-errors") ?? "2";
   const stopAfterErrors = Number.parseInt(stopAfterErrorsRaw, 10);
 
@@ -465,11 +700,30 @@ async function main() {
   const stream = args.get("--stream") ?? undefined;
   const thinkHint = args.get("--think-hint") ?? undefined;
   const reasoningEffort = args.get("--reasoning-effort") ?? undefined;
+  const rationaleStyle = args.get("--rationale-style") ?? undefined;
   const reasoningSplit = args.get("--reasoning-split") ?? undefined;
 
   const modelsRaw = args.get("--models") ?? "";
   const modelsFile = args.get("--models-file");
   const outPath = args.get("--out");
+  const runStartedAtMs = Date.now();
+  const runStartedAt = pacificIsoString();
+  const runId = pacificFileStamp();
+  const experimentId = args.get("--experiment-id") ?? `exp_${runId}`;
+  const conditionId = args.get("--condition-id") ?? "control";
+  const baselineConditionId = args.get("--baseline-condition-id") ?? undefined;
+  const ablationKey = args.get("--ablation-key") ?? undefined;
+  const hypothesis = args.get("--hypothesis") ?? undefined;
+  const notes = args.get("--notes") ?? undefined;
+  const experimentLogEnabled = (args.get("--experiment-log") ?? "true").toLowerCase() !== "false";
+  const defaultExperimentLogDir =
+    args.get("--experiment-log-dir") ?? path.join("runs", "experiment_logs", `${runId}_${slugify(String(providerName))}_${slugify(opponent)}`);
+  const summaryOutPath = outPath ?? (experimentLogEnabled ? path.join(defaultExperimentLogDir, "summary.json") : undefined);
+  const manifestOutPath = args.get("--manifest-out") ?? (experimentLogEnabled ? path.join(defaultExperimentLogDir, "manifest.json") : undefined);
+  const gameMetricsOutPath =
+    args.get("--game-metrics-out") ?? (experimentLogEnabled ? path.join(defaultExperimentLogDir, "game_metrics.jsonl") : undefined);
+  const turnMetricsOutPath =
+    args.get("--turn-metrics-out") ?? (experimentLogEnabled ? path.join(defaultExperimentLogDir, "turn_metrics.jsonl") : undefined);
 
   let models: string[] = [];
   if (modelsRaw) models = parseModelsArg(modelsRaw);
@@ -500,41 +754,83 @@ async function main() {
   if (models.length === 0) {
     throw new Error("Provide --models a,b,c or --models-file path/to/models.txt (or set --models-config to a config with provider priority baselines)");
   }
-  if (!Number.isInteger(seedStart) || seedStart < 0) throw new Error("--seed-start/--seed must be an integer >= 0");
-  if (!Number.isInteger(games) || games < 1 || games > 50) throw new Error("--games/--trials must be an integer in [1,50]");
   if (!Number.isInteger(turnCapPlies) || turnCapPlies < 1) throw new Error("--turn-cap-plies must be >=1");
   if (!Number.isFinite(mixGreedyProb) || mixGreedyProb < 0 || mixGreedyProb > 1) throw new Error("--mix-greedy-prob must be in [0,1]");
   if (!Number.isInteger(stopAfterErrors) || stopAfterErrors < 0 || stopAfterErrors > 100) {
     throw new Error("--stop-after-errors must be an integer in [0, 100]");
   }
+  const idPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{1,119}$/;
+  if (!idPattern.test(experimentId)) {
+    throw new Error("--experiment-id must match [A-Za-z0-9][A-Za-z0-9._-]{1,119}");
+  }
+  if (!idPattern.test(conditionId)) {
+    throw new Error("--condition-id must match [A-Za-z0-9][A-Za-z0-9._-]{1,119}");
+  }
+  if (baselineConditionId && !idPattern.test(baselineConditionId)) {
+    throw new Error("--baseline-condition-id must match [A-Za-z0-9][A-Za-z0-9._-]{1,119}");
+  }
+  if (ablationKey && ablationKey.length > 200) throw new Error("--ablation-key must be <= 200 chars");
   if (turnCapPlies > 30 && !unsafeAllowLong) {
     throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v0.x (pass --unsafe-allow-long true to override).");
   }
-  if (games > 5 && !unsafeAllowMany) {
-    throw new Error("Policy: --games/--trials must be <= 5 on v0/v0.x (pass --unsafe-allow-many true to override).");
-  }
 
   let seeds: number[] = [];
+  let usedSeedProfile: string | undefined = undefined;
   if (seedsRaw) {
+    if (seedProfileArg) console.log("WARN --seed-profile ignored because --seeds was provided.");
     seeds = seedsRaw
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean)
       .map((s) => Number.parseInt(s, 10));
     if (seeds.some((s) => !Number.isInteger(s) || s < 0)) throw new Error("--seeds must be a comma-separated list of integers >=0");
-  } else {
+  } else if (hasExplicitSeedRange) {
+    if (seedProfileArg) console.log("WARN --seed-profile ignored because --seed-start/--seed/--games/--trials were provided.");
+    const seedStart = Number.parseInt(seedStartRaw ?? "3", 10);
+    const games = Number.parseInt(gamesRaw ?? "3", 10);
+    if (!Number.isInteger(seedStart) || seedStart < 0) throw new Error("--seed-start/--seed must be an integer >= 0");
+    if (!Number.isInteger(games) || games < 1 || games > 50) throw new Error("--games/--trials must be an integer in [1,50]");
+    if (games > 5 && !unsafeAllowMany) {
+      throw new Error("Policy: --games/--trials must be <= 5 on v0/v0.x (pass --unsafe-allow-many true to override).");
+    }
     seeds = Array.from({ length: games }, (_, i) => seedStart + i);
+  } else {
+    const profileName = seedProfile ?? experimentPolicy.defaultSeedProfile;
+    const profileSeeds = experimentPolicy.seedProfiles[profileName];
+    if (!profileSeeds || profileSeeds.length === 0) {
+      throw new Error(
+        `Unknown or empty --seed-profile '${profileName}'. Available profiles: ${Object.keys(experimentPolicy.seedProfiles)
+          .sort()
+          .join(", ")}`,
+      );
+    }
+    seeds = profileSeeds.slice();
+    usedSeedProfile = profileName;
+    console.log(`Using seed profile '${profileName}': ${seeds.join(",")}`);
   }
   if (seeds.length > 5 && !unsafeAllowMany) {
     throw new Error("Policy: number of seeds/games must be <= 5 on v0/v0.x (pass --unsafe-allow-many true to override).");
   }
 
   const scenario = await loadScenarioFromFile(scenarioPath);
+  const scenarioSource = await readFile(scenarioPath, "utf8");
+  const scenarioSha256 = sha256Hex(scenarioSource);
   scenario.settings.turnCapPlies = turnCapPlies;
   const adjacency = createAdjacency(scenario);
   const replaysDir = replaysDirArg ?? path.join("replays", "model_evals", pacificFileStamp());
+  const git = getGitMeta();
+
+  const experimentMeta: ExperimentMeta = {
+    runId,
+    experimentId,
+    conditionId,
+    baselineConditionId,
+    ablationKey,
+  };
 
   const rows: Row[] = [];
+  const gameMetricsRows: Array<Record<string, unknown>> = [];
+  const turnMetricsRows: Array<Record<string, unknown>> = [];
 
   const validateModelsDefault = providerName === "chutes" || providerName === "nanogpt";
   const validateModelsRaw = (args.get("--validate-models") ?? (validateModelsDefault ? "true" : "false")).toLowerCase();
@@ -567,6 +863,7 @@ async function main() {
     console.log(`=== provider=${providerName} opponent=${opponent} model=${model} ===`);
     try {
       const row = await evalOneModel({
+        experiment: experimentMeta,
         providerName,
         keysFile,
         keysName,
@@ -583,11 +880,26 @@ async function main() {
         maxTokens,
         temperature,
         useTools,
+        fallback,
         toolsMode,
         stream,
         thinkHint,
         reasoningEffort,
+        rationaleStyle,
         reasoningSplit,
+        memory,
+        memoryMaxChars,
+        warmup,
+        warmupTimeoutMs,
+        warmupMaxTokens,
+        repair,
+        repairMaxRounds,
+        retryOnFailure,
+        retryReasoningEffort,
+        selectMode,
+        selectK,
+        selectCandidateTemperature,
+        selectUntilPly,
         promptMode,
         stopAfterErrors,
         saveReplays: true,
@@ -595,6 +907,8 @@ async function main() {
         liveOut,
         agentLogDir,
         serverLogDir,
+        gameMetricsRows,
+        turnMetricsRows,
       });
       rows.push(row);
       const nonLossRate = (row.wins + row.draws) / Math.max(1, row.games);
@@ -644,32 +958,165 @@ async function main() {
   console.log("\n" + table + "\n");
   if (saveReplays) console.log(`Replays saved under: ${replaysDir}`);
 
-  if (outPath) {
-    await mkdir(path.dirname(outPath), { recursive: true });
-    await writeFile(
-      outPath,
-      JSON.stringify(
-        {
-          seeds,
-          plannedGames: seeds.length,
-          provider: providerName,
-          opponent,
-          mixGreedyProb: opponent === "mix" ? mixGreedyProb : undefined,
-          useTools,
-          toolsMode,
-          stream,
-          reasoningEffort,
-          reasoningSplit,
-          saveReplays,
-          replaysDir,
-          rows,
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-    console.log(`Wrote: ${outPath}`);
+  const summaryPayload = {
+    runId,
+    createdAt: runStartedAt,
+    experimentId,
+    conditionId,
+    baselineConditionId,
+    ablationKey,
+    hypothesis,
+    notes,
+    seedProfile: usedSeedProfile,
+    controlRerunEveryVariants: experimentPolicy.controlRerunEveryVariants,
+    seeds,
+    plannedGames: seeds.length,
+    provider: providerName,
+    opponent,
+    mixGreedyProb: opponent === "mix" ? mixGreedyProb : undefined,
+    useTools,
+    fallback,
+    toolsMode,
+    stream,
+    reasoningEffort,
+    rationaleStyle,
+    reasoningSplit,
+    promptMode,
+    memory,
+    memoryMaxChars,
+    warmup,
+    warmupTimeoutMs,
+    warmupMaxTokens,
+    repair,
+    repairMaxRounds,
+    retryOnFailure,
+    retryReasoningEffort,
+    selectMode,
+    selectK,
+    selectCandidateTemperature,
+    selectUntilPly,
+    saveReplays,
+    replaysDir,
+    rows,
+  };
+
+  if (summaryOutPath) {
+    await mkdir(path.dirname(summaryOutPath), { recursive: true });
+    await writeFile(summaryOutPath, JSON.stringify(summaryPayload, null, 2), "utf8");
+    console.log(`Wrote: ${summaryOutPath}`);
+  }
+
+  if (gameMetricsOutPath) {
+    await mkdir(path.dirname(gameMetricsOutPath), { recursive: true });
+    const text = gameMetricsRows.map((r) => JSON.stringify(r)).join("\n");
+    await writeFile(gameMetricsOutPath, text.length > 0 ? `${text}\n` : "", "utf8");
+    console.log(`Wrote: ${gameMetricsOutPath}`);
+  }
+
+  if (turnMetricsOutPath) {
+    await mkdir(path.dirname(turnMetricsOutPath), { recursive: true });
+    const text = turnMetricsRows.map((r) => JSON.stringify(r)).join("\n");
+    await writeFile(turnMetricsOutPath, text.length > 0 ? `${text}\n` : "", "utf8");
+    console.log(`Wrote: ${turnMetricsOutPath}`);
+  }
+
+  if (manifestOutPath) {
+    const finishedAt = pacificIsoString();
+    const runDurationMs = Date.now() - runStartedAtMs;
+    const modelsSource = modelsRaw ? "arg" : modelsFile ? "file" : "allowlist_baseline";
+    const manifest = {
+      schemaVersion: "asg.experiment_run.v1",
+      runId,
+      createdAt: runStartedAt,
+      finishedAt,
+      durationMs: runDurationMs,
+      experiment: {
+        experimentId,
+        conditionId,
+        baselineConditionId,
+        ablationKey,
+        hypothesis,
+        notes,
+      },
+      git,
+      command: {
+        argv: process.argv.slice(2),
+        cwd: process.cwd(),
+      },
+      scenario: {
+        path: scenarioPath,
+        sha256: scenarioSha256,
+        id: scenario.id,
+      },
+      setup: {
+        providerName,
+        baseUrl,
+        keysFile,
+        keysName,
+        seedPolicyPath: path.relative(process.cwd(), experimentPolicyPath),
+        seedProfile: usedSeedProfile,
+        controlRerunEveryVariants: experimentPolicy.controlRerunEveryVariants,
+        models,
+        modelsSource,
+        modelsConfig,
+        opponent,
+        mixGreedyProb: opponent === "mix" ? mixGreedyProb : undefined,
+        seeds,
+        plannedGames: seeds.length,
+        turnCapPlies,
+        stopAfterErrors,
+      },
+      runtime: {
+        openAiTimeoutMs: openAiTimeoutMsArg ?? "70000",
+        agentTimeoutMs,
+        maxTokens,
+        temperature,
+        useTools,
+        fallback,
+        toolsMode,
+        stream,
+        thinkHint,
+        reasoningEffort,
+        rationaleStyle,
+        reasoningSplit,
+        promptMode,
+        memory,
+        memoryMaxChars,
+        warmup,
+        warmupTimeoutMs,
+        warmupMaxTokens,
+        repair,
+        repairMaxRounds,
+        retryOnFailure,
+        retryReasoningEffort,
+        selectMode,
+        selectK,
+        selectCandidateTemperature,
+        selectUntilPly,
+        validateModels,
+      },
+      outputs: {
+        summaryPath: summaryOutPath,
+        manifestPath: manifestOutPath,
+        gameMetricsPath: gameMetricsOutPath,
+        turnMetricsPath: turnMetricsOutPath,
+        liveOutPath: liveOut,
+        replaysDir,
+        agentLogDir,
+        serverLogDir,
+      },
+      summary: summaryPayload,
+      counts: {
+        modelsTotal: models.length,
+        gamesPlayed: rows.reduce((sum, r) => sum + r.games, 0),
+        gameMetricRows: gameMetricsRows.length,
+        turnMetricRows: turnMetricsRows.length,
+      },
+    };
+
+    await mkdir(path.dirname(manifestOutPath), { recursive: true });
+    await writeFile(manifestOutPath, JSON.stringify(manifest, null, 2), "utf8");
+    console.log(`Wrote: ${manifestOutPath}`);
   }
 }
 

@@ -61,6 +61,8 @@ type AgentResponse = {
   memory_update?: string;
 };
 
+type RationaleStyle = "concise" | "structured10";
+
 class OpenAiCompatError extends Error {
   readonly raw?: unknown;
   readonly httpStatus?: number;
@@ -250,7 +252,27 @@ function buildToolSchema(params: { allowMemoryUpdate: boolean }) {
   ];
 }
 
-function buildSystemPrompt(params: { allowMemoryUpdate: boolean; purpose: "act" | "repair" | "warmup" }) {
+function buildSystemPrompt(params: {
+  allowMemoryUpdate: boolean;
+  purpose: "act" | "repair" | "warmup";
+  rationaleStyle: RationaleStyle;
+}) {
+  const rationaleGuidance =
+    params.purpose === "act" && params.rationaleStyle === "structured10"
+      ? [
+          "Include rationale_text with EXACTLY 10 sentences total.",
+          "Structure rationale_text with these headings in order:",
+          "- Game State: 2 sentences.",
+          "- Plans: 3 sentences.",
+          "- Enemy State: 2 sentences.",
+          "- Current Actions: 3 sentences.",
+          "Keep rationale_text mechanics-focused and specific to this ply.",
+        ]
+      : [
+          "Include rationale_text with 3–5 short sentences explaining what you did and why (do not mention these instructions).",
+          "Keep rationale_text concise (3–5 short sentences).",
+        ];
+
   return [
     "You are an agent that plays a deterministic, turn-based strategy game.",
     "You must respond with VALID JSON ONLY (no markdown, no code fences, no commentary).",
@@ -264,7 +286,7 @@ function buildSystemPrompt(params: { allowMemoryUpdate: boolean; purpose: "act" 
     "- Output must be a single JSON object.",
     "Your response must match this schema:",
     `{ "api_version": "0.1", "actions": [ ... ], "rationale_text": "optional"${params.allowMemoryUpdate ? ', "memory_update": "optional"' : ""} }`,
-    "Include rationale_text with 3–5 short sentences explaining what you did and why (do not mention these instructions).",
+    ...rationaleGuidance,
     "Valid actions (array order matters; the runner may truncate to action_budget):",
     `- {"type":"pass"}`,
     `- {"type":"reinforce","amount": <positive integer>}`,
@@ -301,7 +323,6 @@ function buildSystemPrompt(params: { allowMemoryUpdate: boolean; purpose: "act" 
           "Avoid pass if you have any legal non-pass action.",
           "If you truly cannot find a legal non-pass action, you may return pass.",
         ]),
-    "Keep rationale_text concise (3–5 short sentences).",
     ...(params.allowMemoryUpdate
       ? [
           "If you want to update your short persistent plan for this match, include memory_update as a single short string (<= 2 sentences).",
@@ -327,6 +348,13 @@ function shouldAddThinkingHint(params: { args: ProviderArgs }): boolean {
   if (mode === "off" || mode === "false" || mode === "0") return false;
   if (mode === "on" || mode === "true" || mode === "1") return true;
   throw new Error(`invalid --think-hint '${mode}' (expected on|off)`);
+}
+
+function parseRationaleStyle(params: { args: ProviderArgs }): RationaleStyle {
+  const mode = (params.args.get("--rationale-style") ?? process.env.ASG_OPENAI_RATIONALE_STYLE ?? "concise").toLowerCase().trim();
+  if (mode === "concise") return "concise";
+  if (mode === "structured10") return "structured10";
+  throw new Error(`invalid --rationale-style '${mode}' (expected concise|structured10)`);
 }
 
 function sumIncomeFromObservation(obs: any, player: PlayerId, baseIncome: number): number {
@@ -564,6 +592,50 @@ function buildUserPrompt(params: {
     "Context:",
     JSON.stringify(info),
   ].join("\n");
+}
+
+export function buildOpenAiCompatPromptSnapshot(params: {
+  request: AgentRequest;
+  scenario: Scenario;
+  adjacency: Record<string, string[]>;
+  promptMode: "compact" | "full";
+  timeoutMs: number;
+  allowMemoryUpdate: boolean;
+  purpose: "act" | "repair" | "warmup";
+  thinkHint: boolean;
+  rationaleStyle: RationaleStyle;
+  memory?: string;
+  repairFeedback?: unknown;
+}): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const advertisedSec = Math.min(40, Math.max(1, Math.floor(params.timeoutMs / 1000)));
+  const softSec = Math.max(1, advertisedSec - 2);
+  const systemPrompt = [
+    buildSystemPrompt({ allowMemoryUpdate: params.allowMemoryUpdate, purpose: params.purpose, rationaleStyle: params.rationaleStyle }),
+    `Time limit: you must output the JSON within ${advertisedSec} seconds (prefer within ${softSec} seconds). If you fail to respond within ${advertisedSec} seconds, you will likely lose the game.`,
+    ...(params.thinkHint ? ["Think silently and choose legal actions."] : []),
+  ].join("\n");
+
+  const userPrompt =
+    params.promptMode === "compact"
+      ? buildUserPromptCompact({
+          request: params.request,
+          scenario: params.scenario,
+          adjacency: params.adjacency,
+          memory: params.memory,
+          repairFeedback: params.repairFeedback,
+        })
+      : buildUserPrompt({
+          request: params.request,
+          scenario: params.scenario,
+          adjacency: params.adjacency,
+          memory: params.memory,
+          repairFeedback: params.repairFeedback,
+        });
+
+  return { systemPrompt, userPrompt };
 }
 
 const resolvedModelCache = new Map<string, string>();
@@ -882,7 +954,11 @@ export async function openAiCompatAct(params: {
   const advertisedSec = Math.min(40, Math.max(1, Math.floor(timeoutMs / 1000)));
   const softSec = Math.max(1, advertisedSec - 2);
   const system = [
-    buildSystemPrompt({ allowMemoryUpdate: !!params.allowMemoryUpdate, purpose: params.purpose ?? "act" }),
+    buildSystemPrompt({
+      allowMemoryUpdate: !!params.allowMemoryUpdate,
+      purpose: params.purpose ?? "act",
+      rationaleStyle: parseRationaleStyle({ args }),
+    }),
     `Time limit: you must output the JSON within ${advertisedSec} seconds (prefer within ${softSec} seconds). If you fail to respond within ${advertisedSec} seconds, you will likely lose the game.`,
     ...(shouldAddThinkingHint({ args }) ? ["Think silently and choose legal actions."] : []),
   ].join("\n");

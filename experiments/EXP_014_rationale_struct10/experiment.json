@@ -1,0 +1,9 @@
+{
+  "createdAt": "2026-03-05T19:54:18.329-08:00",
+  "experimentId": "EXP_014_rationale_struct10",
+  "hypothesis": "Structured 10-sentence rationale preserves outcome/reliability while changing explanation format.",
+  "objective": "Evaluate whether structured 10-sentence rationale format affects behavior vs baseline concise rationale.",
+  "schemaVersion": "asg.experiment_pack.v1",
+  "title": "Rationale style: structured 10 sentences",
+  "updatedAt": "2026-03-05T20:11:59.531-08:00"
+}

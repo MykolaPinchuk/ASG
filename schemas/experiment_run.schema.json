@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "experiment_run.schema.json",
+  "title": "ASG Experiment Run Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "createdAt",
+    "durationMs",
+    "experiment",
+    "command",
+    "scenario",
+    "setup",
+    "runtime",
+    "outputs",
+    "summary",
+    "counts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "asg.experiment_run.v1"
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "finishedAt": {
+      "type": "string"
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "experiment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["experimentId", "conditionId"],
+      "properties": {
+        "experimentId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{1,119}$"
+        },
+        "conditionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{1,119}$"
+        },
+        "baselineConditionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{1,119}$"
+        },
+        "ablationKey": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "hypothesis": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branch": { "type": "string" },
+        "commit": { "type": "string" },
+        "dirty": { "type": "boolean" }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "cwd"],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "cwd": {
+          "type": "string"
+        }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "id"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "id": { "type": "string" }
+      }
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providerName", "models", "modelsSource", "opponent", "seeds", "plannedGames", "turnCapPlies", "stopAfterErrors"],
+      "properties": {
+        "providerName": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "keysFile": { "type": "string" },
+        "keysName": { "type": "string" },
+        "seedPolicyPath": { "type": "string" },
+        "seedProfile": { "type": "string" },
+        "controlRerunEveryVariants": { "type": "integer", "minimum": 1 },
+        "models": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "modelsSource": {
+          "type": "string",
+          "enum": ["arg", "file", "allowlist_baseline"]
+        },
+        "modelsConfig": { "type": "string" },
+        "opponent": {
+          "type": "string",
+          "enum": ["mix", "greedy"]
+        },
+        "mixGreedyProb": { "type": "number", "minimum": 0, "maximum": 1 },
+        "seeds": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "plannedGames": { "type": "integer", "minimum": 0 },
+        "turnCapPlies": { "type": "integer", "minimum": 1 },
+        "stopAfterErrors": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["openAiTimeoutMs", "agentTimeoutMs", "maxTokens", "temperature", "useTools", "validateModels"],
+      "properties": {
+        "openAiTimeoutMs": { "type": "string" },
+        "agentTimeoutMs": { "type": "integer", "minimum": 0 },
+        "maxTokens": { "type": "string" },
+        "temperature": { "type": "string" },
+        "useTools": { "type": "boolean" },
+        "toolsMode": { "type": "string" },
+        "stream": { "type": "string" },
+        "thinkHint": { "type": "string" },
+        "reasoningEffort": { "type": "string" },
+        "rationaleStyle": { "type": "string", "enum": ["concise", "structured10"] },
+        "reasoningSplit": { "type": "string" },
+        "promptMode": { "type": "string" },
+        "validateModels": { "type": "boolean" }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replaysDir"],
+      "properties": {
+        "summaryPath": { "type": "string" },
+        "manifestPath": { "type": "string" },
+        "gameMetricsPath": { "type": "string" },
+        "turnMetricsPath": { "type": "string" },
+        "liveOutPath": { "type": "string" },
+        "replaysDir": { "type": "string" },
+        "agentLogDir": { "type": "string" },
+        "serverLogDir": { "type": "string" }
+      }
+    },
+    "summary": {
+      "type": "object"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modelsTotal", "gamesPlayed", "gameMetricRows", "turnMetricRows"],
+      "properties": {
+        "modelsTotal": { "type": "integer", "minimum": 0 },
+        "gamesPlayed": { "type": "integer", "minimum": 0 },
+        "gameMetricRows": { "type": "integer", "minimum": 0 },
+        "turnMetricRows": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

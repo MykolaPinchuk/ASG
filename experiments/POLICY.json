@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "asg.experiment_policy.v1",
+  "defaultSeedProfile": "smoke3",
+  "seedProfiles": {
+    "smoke3": [301, 302, 303]
+  },
+  "controlRerunEveryVariants": 5
+}

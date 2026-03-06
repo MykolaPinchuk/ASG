@@ -34,6 +34,7 @@ type AgentResponse = {
     modelMode?: "auto" | "explicit";
     config?: {
       reasoningEffort?: "low" | "medium" | "high";
+      rationaleStyle?: "concise" | "structured10";
       promptMode?: "compact" | "full";
       timeoutMs?: number;
       maxTokens?: number;
@@ -415,6 +416,13 @@ function parsePromptMode(value: string | undefined): "compact" | "full" | undefi
   return undefined;
 }
 
+function parseRationaleStyleMode(value: string | undefined): "concise" | "structured10" | undefined {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return undefined;
+  if (raw === "concise" || raw === "structured10") return raw;
+  return undefined;
+}
+
 function parseToolsMode(value: string | undefined): "auto" | "force" | "off" | undefined {
   const raw = (value ?? "").trim().toLowerCase();
   if (!raw) return undefined;
@@ -462,6 +470,7 @@ function buildAgentConfigFromArgs(args: Map<string, string>): NonNullable<NonNul
 
   return {
     reasoningEffort: parseReasoningEffort(args.get("--reasoning-effort")),
+    rationaleStyle: parseRationaleStyleMode(args.get("--rationale-style")),
     promptMode: parsePromptMode(args.get("--prompt-mode")),
     timeoutMs,
     maxTokens,

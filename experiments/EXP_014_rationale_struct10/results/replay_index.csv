@@ -1,0 +1,7 @@
+condition,seed,result,replayPath
+control,301,win,replays/model_evals/2026-03-05T20-03-49-032PST/scenario_01_seed301_agent_vs_greedy_openrouter_google_gemini_3_1_flash_lite_preview.json
+control,302,win,replays/model_evals/2026-03-05T20-03-49-032PST/scenario_01_seed302_agent_vs_greedy_openrouter_google_gemini_3_1_flash_lite_preview.json
+control,303,win,replays/model_evals/2026-03-05T20-03-49-032PST/scenario_01_seed303_agent_vs_greedy_openrouter_google_gemini_3_1_flash_lite_preview.json
+variant_struct10,301,win,replays/model_evals/2026-03-05T20-08-45-128PST/scenario_01_seed301_agent_vs_greedy_openrouter_google_gemini_3_1_flash_lite_preview.json
+variant_struct10,302,win,replays/model_evals/2026-03-05T20-08-45-128PST/scenario_01_seed302_agent_vs_greedy_openrouter_google_gemini_3_1_flash_lite_preview.json
+variant_struct10,303,win,replays/model_evals/2026-03-05T20-08-45-128PST/scenario_01_seed303_agent_vs_greedy_openrouter_google_gemini_3_1_flash_lite_preview.json
