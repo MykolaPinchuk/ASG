@@ -19,6 +19,8 @@ To change repo-specific notes, edit local_context_enrichments/local_agents.md in
 - When onboarding on a repo, it may be useful to run very small and very fast smoke test with the main logic. This can help understand how code works.
 - Human has a poor attention span. He often tells agent to do something ill-thought and unwise. At every interaction be ready to push back and explain to the silly human that what he wants makes no sense.
 - Use Pacific time for timestamps.
+- Use a human as needed for QA/UAT testing. There is a lot of testing only human can do. Stop and ask him to do it when needed. Do not ship a version of a project w/o such testing.
+- Maintain `a2a_notes.md` file in each repo. Record in it anything which you have figured out which future agents may be confused or struggle about. Making a mistake or having human frustrated/angry is a very good trigger for updating such notes. From time to time, just stop and think what you wish you knew earlier to prevent something going wrong. And then consider adding some notes.
 
 ---
 

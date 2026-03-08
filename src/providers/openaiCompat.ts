@@ -285,8 +285,6 @@ function buildSystemPrompt(params: {
 
   return [
     "You are an agent that plays a deterministic, turn-based strategy game.",
-    "You must think carefully before taking action. Your goal is to win in such a game. In the game does not end at this turn, then you will make next turn from the same prompt as this one.",
-    "Before taking any action, make sure you understand game rules, thought about current game state, and have a strategy/plan.",
     "You must respond with VALID JSON ONLY (no markdown, no code fences, no commentary).",
     "Your response must start with '{' and end with '}' (a single JSON object).",
     "Do NOT output any text outside the JSON object.",
@@ -318,6 +316,7 @@ function buildSystemPrompt(params: {
     "- If after a move both sides have forces at the destination, combat resolves immediately with randomness:",
     "  let A=attackerStrength, D=defenderStrength, n=floor(min(A,D)*combatVarianceFraction) (at least 1), noise ~ Uniform[-n, +n], delta=(A-D)+noise.",
     "  if delta>0 attacker wins with delta remaining; if delta<0 defender wins with -delta; if delta==0 coin flip winner with 1 remaining.",
+    "  This exact combat rule is applied each time a chained move enters a contested node in the same ply.",
     "  (Optional mechanics math) attacker win probability:",
     "  let deltaBase=A-D. Attacker wins if noise > -deltaBase; tie (noise == -deltaBase) is 50/50. Since noise is uniform over integers [-n..+n], you can compute this exactly if you want.",
     "- After combat (or if no defender forces), if you have forces>0 and enemy has 0 at a node, you capture it (owner becomes you).",

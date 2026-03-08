@@ -10,6 +10,7 @@ import { HttpAgentController } from "../controllers/httpAgentController.js";
 import { MixBot } from "../controllers/mixBot.js";
 import { GreedyBot } from "../controllers/greedyBot.js";
 import { fetchOpenAiCompatModelIds, getProviderAllowlist, loadOssModelsConfig } from "../llm/models.js";
+import { buildOpenAiCompatPromptSnapshot } from "../providers/openaiCompat.js";
 import { pacificFileStamp, pacificIsoString } from "../utils/pacificTime.js";
 import { loadExperimentPolicy } from "../experiments/policy.js";
 import type { Controller } from "../controllers/controller.js";
@@ -167,6 +168,85 @@ function formatPct(x: number): string {
 
 function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function parseOnOff(raw: string | undefined, fallback: boolean): boolean {
+  if (!raw) return fallback;
+  const v = raw.toLowerCase().trim();
+  if (v === "on" || v === "true" || v === "1" || v === "yes") return true;
+  if (v === "off" || v === "false" || v === "0" || v === "no") return false;
+  return fallback;
+}
+
+function parsePositiveInt(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
+}
+
+function toObservationFromScenario(scenario: {
+  map: { nodes: Array<{ id: string; x: number; y: number; owner: string; supplyYield: number }> };
+  initialState: { playerSupply: Record<PlayerId, number>; nodeForces: Record<string, Record<PlayerId, number>> };
+}) {
+  const nodes: Record<
+    string,
+    { id: string; x: number; y: number; owner: string; supplyYield: number; forces: Record<PlayerId, number> }
+  > = {};
+  for (const node of scenario.map.nodes) {
+    const f = scenario.initialState.nodeForces[node.id] ?? { P1: 0, P2: 0 };
+    nodes[node.id] = {
+      id: node.id,
+      x: node.x,
+      y: node.y,
+      owner: node.owner,
+      supplyYield: node.supplyYield,
+      forces: {
+        P1: Number.isFinite(f.P1) ? Math.max(0, Math.floor(f.P1)) : 0,
+        P2: Number.isFinite(f.P2) ? Math.max(0, Math.floor(f.P2)) : 0,
+      },
+    };
+  }
+  return {
+    player: "P1" as const,
+    ply: 0,
+    activePlayer: "P1" as const,
+    supplies: {
+      P1: Number.isFinite(scenario.initialState.playerSupply.P1) ? Math.max(0, Math.floor(scenario.initialState.playerSupply.P1)) : 0,
+      P2: Number.isFinite(scenario.initialState.playerSupply.P2) ? Math.max(0, Math.floor(scenario.initialState.playerSupply.P2)) : 0,
+    },
+    nodes,
+  };
+}
+
+function lcsLength(a: string[], b: string[]): number {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array<number>(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (a[i - 1] === b[j - 1]) dp[i]![j] = (dp[i - 1]![j - 1] ?? 0) + 1;
+      else dp[i]![j] = Math.max(dp[i - 1]![j] ?? 0, dp[i]![j - 1] ?? 0);
+    }
+  }
+  return dp[m]![n] ?? 0;
+}
+
+function lineDiffCount(aText: string, bText: string): number {
+  const a = aText.split(/\r?\n/);
+  const b = bText.split(/\r?\n/);
+  const lcs = lcsLength(a, b);
+  return (a.length - lcs) + (b.length - lcs);
+}
+
+function parseRationaleStyle(
+  raw: string | undefined,
+): "concise" | "structured10" | "structured10_exp015" {
+  const mode = (raw ?? "concise").toLowerCase().trim();
+  if (mode === "concise") return "concise";
+  if (mode === "structured10") return "structured10";
+  if (mode === "structured10_exp015" || mode === "structured10-exp015" || mode === "exp015") return "structured10_exp015";
+  return "concise";
 }
 
 function runGit(args: string[]): string | undefined {
@@ -718,6 +798,10 @@ async function main() {
   const conditionId = args.get("--condition-id") ?? "control";
   const baselineConditionId = args.get("--baseline-condition-id") ?? undefined;
   const ablationKey = args.get("--ablation-key") ?? undefined;
+  const baselineSystemPromptFile = args.get("--baseline-system-prompt-file") ?? undefined;
+  const expectedSystemPromptDiffLinesRaw = args.get("--expected-system-prompt-diff-lines");
+  const expectedSystemPromptDiffLines =
+    expectedSystemPromptDiffLinesRaw !== undefined ? Number.parseInt(expectedSystemPromptDiffLinesRaw, 10) : undefined;
   const hypothesis = args.get("--hypothesis") ?? undefined;
   const notes = args.get("--notes") ?? undefined;
   const experimentLogEnabled = (args.get("--experiment-log") ?? "true").toLowerCase() !== "false";
@@ -775,6 +859,27 @@ async function main() {
     throw new Error("--baseline-condition-id must match [A-Za-z0-9][A-Za-z0-9._-]{1,119}");
   }
   if (ablationKey && ablationKey.length > 200) throw new Error("--ablation-key must be <= 200 chars");
+  if (expectedSystemPromptDiffLinesRaw !== undefined) {
+    if (!Number.isInteger(expectedSystemPromptDiffLines) || (expectedSystemPromptDiffLines ?? -1) < 0) {
+      throw new Error("--expected-system-prompt-diff-lines must be an integer >= 0");
+    }
+    if (!baselineSystemPromptFile) {
+      throw new Error("--expected-system-prompt-diff-lines requires --baseline-system-prompt-file");
+    }
+  }
+  const isPromptAblation = (ablationKey ?? "").toLowerCase().startsWith("prompt.");
+  if (isPromptAblation) {
+    if (!baselineSystemPromptFile) {
+      throw new Error(
+        "Prompt ablation guard: --baseline-system-prompt-file is required for prompt.* experiments to prevent stacked prompt changes.",
+      );
+    }
+    if (expectedSystemPromptDiffLines === undefined) {
+      throw new Error(
+        "Prompt ablation guard: --expected-system-prompt-diff-lines is required for prompt.* experiments.",
+      );
+    }
+  }
   if (turnCapPlies > 30 && !unsafeAllowLong) {
     throw new Error("Policy: --turn-cap-plies must be <= 30 on v0/v0.x (pass --unsafe-allow-long true to override).");
   }
@@ -822,6 +927,51 @@ async function main() {
   const scenarioSha256 = sha256Hex(scenarioSource);
   scenario.settings.turnCapPlies = turnCapPlies;
   const adjacency = createAdjacency(scenario);
+  const observation = toObservationFromScenario(scenario as any);
+  const promptModeResolved = promptMode === "full" ? "full" : "compact";
+  const timeoutMsResolved = parsePositiveInt(openAiTimeoutMsArg, 70000);
+  const thinkHintResolved = parseOnOff(thinkHint, true);
+  const memoryEnabled = parseOnOff(memory, false);
+  const warmupMode = (warmup ?? "off").toLowerCase();
+  const rationaleStyleResolved = parseRationaleStyle(rationaleStyle);
+  const promptSnapshot = buildOpenAiCompatPromptSnapshot({
+    request: {
+      api_version: "0.1",
+      match_id: `${scenario.id}_snapshot_${conditionId}`,
+      player: "P1",
+      scenario_id: scenario.id,
+      ply: 0,
+      action_budget: scenario.settings.actionBudget,
+      observation,
+    },
+    scenario: scenario as any,
+    adjacency,
+    promptMode: promptModeResolved,
+    timeoutMs: timeoutMsResolved,
+    allowMemoryUpdate: memoryEnabled && warmupMode === "inline",
+    purpose: "act",
+    thinkHint: thinkHintResolved,
+    rationaleStyle: rationaleStyleResolved,
+  });
+  const systemPromptSha256 = sha256Hex(promptSnapshot.systemPrompt);
+  let baselineSystemPromptSha256: string | undefined = undefined;
+  let systemPromptLineDiffVsBaseline: number | undefined = undefined;
+  if (baselineSystemPromptFile) {
+    const baselinePrompt = await readFile(baselineSystemPromptFile, "utf8");
+    baselineSystemPromptSha256 = sha256Hex(baselinePrompt);
+    systemPromptLineDiffVsBaseline = lineDiffCount(baselinePrompt, promptSnapshot.systemPrompt);
+    console.log(
+      `Prompt guard: currentSha=${systemPromptSha256} baselineSha=${baselineSystemPromptSha256} diffLines=${systemPromptLineDiffVsBaseline}`,
+    );
+    if (
+      expectedSystemPromptDiffLines !== undefined &&
+      systemPromptLineDiffVsBaseline !== expectedSystemPromptDiffLines
+    ) {
+      throw new Error(
+        `Prompt ablation guard failed: diffLines=${systemPromptLineDiffVsBaseline}, expected=${expectedSystemPromptDiffLines}.`,
+      );
+    }
+  }
   const replaysDir = replaysDirArg ?? path.join("replays", "model_evals", pacificFileStamp());
   const git = getGitMeta();
 
@@ -985,6 +1135,11 @@ async function main() {
     stream,
     reasoningEffort,
     rationaleStyle,
+    systemPromptSha256,
+    baselineSystemPromptFile,
+    baselineSystemPromptSha256,
+    systemPromptLineDiffVsBaseline,
+    expectedSystemPromptDiffLines,
     reasoningSplit,
     promptMode,
     memory,
@@ -1083,6 +1238,11 @@ async function main() {
         thinkHint,
         reasoningEffort,
         rationaleStyle,
+        systemPromptSha256,
+        baselineSystemPromptFile,
+        baselineSystemPromptSha256,
+        systemPromptLineDiffVsBaseline,
+        expectedSystemPromptDiffLines,
         reasoningSplit,
         promptMode,
         memory,

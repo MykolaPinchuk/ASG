@@ -92,6 +92,9 @@ Useful flags:
 - `--manifest-out`, `--game-metrics-out`, `--turn-metrics-out`
 - `--experiment-log-dir` (or rely on default `runs/experiment_logs/<run_id>_...`)
 - `--seed-profile <name>` (defaults from `experiments/POLICY.json`; default profile is `smoke3 = [301,302,303]`)
+- Prompt-ablation guard (required when `--ablation-key` starts with `prompt.`):
+  - `--baseline-system-prompt-file <path>` (usually the control prompt artifact)
+  - `--expected-system-prompt-diff-lines <N>` (run fails fast if current prompt differs by any other amount)
 
 Default experiment policy:
 - `experiments/POLICY.json` sets default paired seeds/profile and control-rerun cadence.
