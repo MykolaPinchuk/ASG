@@ -3,6 +3,10 @@
 ## Current Slice
 Work is on branch `v07`, focused on behavior experiments in the current simple setup.
 
+## Rule Epoch Notice (Critical)
+- As of 2026-03-08 (PDT), combat tie semantics changed: `delta==0` now resolves as **defender wins with 1**.
+- Because this changes engine outcomes for identical seeds/actions, pre-change experiment results are **not directly comparable** to post-change runs and should not be treated as the active baseline.
+
 Primary model/setup used in recent runs:
 - Provider/model: OpenRouter `google/gemini-3.1-flash-lite-preview`
 - Opponent: `greedy`
@@ -34,11 +38,15 @@ Operational note:
 - Baseline file was verified to match the active runtime EXP023 prompt generation exactly (zero diff in local check).
 
 ## Latest Experiment Snapshot
+- `EXP_024_rules_delta0_defender_baseline` (6 seeds): 6W/0D/0L, AvgCaptures=7.667, AvgProvErr=0.000, Plies/Win=12.333.
 - `EXP_021_chain_combat_sentence` (clean, 6 seeds): labeled `promising` after updated rubric.
 - `EXP_022_chain_fast_wins_sentence` (6 seeds): labeled `regression` (provider error delta regression).
 - `EXP_023_chain_directions_sentence` (6 seeds): labeled `promising` under updated rubric.
 - Earlier stacked run preserved separately as:
   - `EXP_021_chain_combat_sentence_contaminated`
+
+Applicability note:
+- EXP021/EXP022/EXP023 and earlier rows were collected before the 2026-03-08 combat tie rule change and are historical only for directional context.
 
 Source of truth:
 - `runs/experiment_logs/EXPERIMENTS_SUMMARY.md`

@@ -375,6 +375,11 @@ function isControlLikeCondition(conditionId: string): boolean {
   return c === "control" || c.startsWith("control_") || c.startsWith("control-");
 }
 
+function isBaselineLikeCondition(conditionId: string): boolean {
+  const c = conditionId.toLowerCase();
+  return c === "baseline" || c.startsWith("baseline_") || c.startsWith("baseline-");
+}
+
 function resolveBaseline(variant: RunRow, allRows: RunRow[]): BaselineMatch | null {
   const variantTs = parseTs(variant.createdAt);
   const baselineId = variant.baselineConditionId;
@@ -592,6 +597,70 @@ function buildExperimentSummary(experimentId: string, rows: RunRow[], allRows: R
   };
 }
 
+function buildBaselineUpdateSummaries(rows: RunRow[]): ExperimentSummary[] {
+  const baselineRows = rows.filter((r) => isBaselineLikeCondition(r.conditionId));
+  const byRun = new Map<string, RunRow[]>();
+  for (const row of baselineRows) {
+    const key = `${row.runId}||${row.conditionId}||${row.model}||${row.opponent}`;
+    const arr = byRun.get(key) ?? [];
+    arr.push(row);
+    byRun.set(key, arr);
+  }
+
+  const out: ExperimentSummary[] = [];
+  for (const expRows of byRun.values()) {
+    const sorted = expRows.slice().sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const latest = sorted[0];
+    if (!latest) continue;
+
+    const runCount = new Set(expRows.map((r) => r.runId)).size;
+    const seedsSet = new Set<string>();
+    for (const r of expRows) {
+      for (const s of r.seedsKey.split(",")) {
+        const t = s.trim();
+        if (t && t !== "-") seedsSet.add(t);
+      }
+    }
+    const seeds = Array.from(seedsSet).sort((a, b) => Number(a) - Number(b)).join(",");
+
+    const totalGames = expRows.reduce((acc, r) => acc + r.games, 0);
+    const wins = expRows.reduce((acc, r) => acc + r.wins, 0);
+    const draws = expRows.reduce((acc, r) => acc + r.draws, 0);
+    const losses = expRows.reduce((acc, r) => acc + r.losses, 0);
+    const winRate = totalGames > 0 ? wins / totalGames : 0;
+
+    out.push({
+      experimentId: `BASELINE_UPDATE:${latest.conditionId}:${latest.runId}`,
+      runCount,
+      conditionCount: 1,
+      conditions: latest.conditionId,
+      seeds: seeds || "-",
+      totalGames,
+      wins,
+      draws,
+      losses,
+      winRate,
+      avgCaptures: weightedAverage(expRows, "avgAgentCaptures"),
+      avgProviderErrorTurns: weightedAverage(expRows, "avgProviderErrorTurns"),
+      avgLatencyMs: weightedAverage(expRows, "avgLatencyMs"),
+      avgPliesPerWin: weightedAverage(expRows, "avgPliesWhenWin"),
+      avgTokensPerTurn: weightedAverage(expRows, "avgTokensPerTurn"),
+      pairedGames: 0,
+      pairedWinRateDelta: null,
+      pairedCapturesDelta: null,
+      pairedProviderErrorDelta: null,
+      pairedPliesPerWinDelta: null,
+      pairedLatencyMsDelta: null,
+      pairedTokensPerTurnDelta: null,
+      conclusion: "baseline_update",
+      explanation: `Synthetic baseline marker row for ${latest.model} vs ${latest.opponent} from ${latest.experimentId} (${latest.conditionId}).`,
+      latestRun: latest.createdAt,
+    });
+  }
+
+  return out;
+}
+
 export async function generateExperimentsHighLevelSummary(params?: {
   repoRoot?: string;
   runsRoot?: string;
@@ -618,15 +687,18 @@ export async function generateExperimentsHighLevelSummary(params?: {
   const summaries = Array.from(byExperiment.entries())
     .map(([experimentId, expRows]) => buildExperimentSummary(experimentId, expRows, rows))
     .sort((a, b) => Date.parse(b.latestRun) - Date.parse(a.latestRun));
+  const baselineSummaries = buildBaselineUpdateSummaries(rows);
+  const allSummaries = [...baselineSummaries, ...summaries].sort((a, b) => Date.parse(b.latestRun) - Date.parse(a.latestRun));
 
   const md = [
     "# Experiments Summary",
     "",
-    "One row per experiment (`experimentId`), aggregated from `runs/experiment_logs/**/summary.json`.",
+    "Rows are aggregated from `runs/experiment_logs/**/summary.json`.",
+    "Includes one row per experiment (`experimentId`) plus synthetic `BASELINE_UPDATE:*` rows for baseline-marked runs (`conditionId=baseline*`).",
     "",
     "| Experiment | Runs | Conditions | Seeds | Games | W | D | L | WinRate | AvgCaptures | AvgProvErr | Plies/Win | AvgLatencyMs | AvgTokens/Turn | PairedGames | WinRateΔ | CapturesΔ | ProvErrΔ | Plies/WinΔ | LatencyΔms | TokensΔ/Turn | Conclusion | Why |",
     "|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
-    ...summaries.map(
+    ...allSummaries.map(
       (s) =>
         `| ${s.experimentId} | ${s.runCount} | ${s.conditionCount} (${s.conditions}) | ${s.seeds} | ${s.totalGames} | ${s.wins} | ${s.draws} | ${s.losses} | ${fmt(s.winRate, 3)} | ${fmt(s.avgCaptures, 3)} | ${fmt(s.avgProviderErrorTurns, 3)} | ${fmt(s.avgPliesPerWin, 3)} | ${fmt(s.avgLatencyMs, 1)} | ${fmt(s.avgTokensPerTurn, 1)} | ${s.pairedGames} | ${fmt(s.pairedWinRateDelta, 3)} | ${fmt(s.pairedCapturesDelta, 3)} | ${fmt(s.pairedProviderErrorDelta, 3)} | ${fmt(s.pairedPliesPerWinDelta, 3)} | ${fmt(s.pairedLatencyMsDelta, 1)} | ${fmt(s.pairedTokensPerTurnDelta, 1)} | ${s.conclusion} | ${s.explanation} |`,
     ),
@@ -661,7 +733,7 @@ export async function generateExperimentsHighLevelSummary(params?: {
       "explanation",
       "latest_run_created_at",
     ],
-    ...summaries.map((s) => [
+    ...allSummaries.map((s) => [
       s.experimentId,
       String(s.runCount),
       String(s.conditionCount),
