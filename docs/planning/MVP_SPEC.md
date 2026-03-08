@@ -105,7 +105,7 @@ Steps:
 6. Outcome:
    - If `delta > 0`: attacker wins; attacker remaining strength becomes `delta`; defender becomes 0.
    - If `delta < 0`: defender wins; defender remaining strength becomes `-delta`; attacker becomes 0.
-   - If `delta == 0`: pick winner by PRNG coin flip; winner remaining strength becomes 1; loser becomes 0.
+   - If `delta == 0`: defender wins; defender remaining strength becomes 1; attacker becomes 0.
 
 Notes:
 - Combat MUST be fully explainable in logs by emitting inputs, `variance_bound`, `noise`, and final strengths.

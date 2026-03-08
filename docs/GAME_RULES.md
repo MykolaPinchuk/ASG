@@ -141,10 +141,9 @@ Combat occurs automatically when a move places both players' forces on the same 
    - If `delta < 0`: **Defender wins**
      - Defender remaining strength = `-delta`
      - Attacker remaining strength = `0`
-   - If `delta == 0`: **Coin flip**
-     - PRNG randomly picks winner
-     - Winner remaining strength = `1`
-     - Loser remaining strength = `0`
+   - If `delta == 0`: **Defender wins**
+     - Defender remaining strength = `1`
+     - Attacker remaining strength = `0`
 
 ### Combat Example
 

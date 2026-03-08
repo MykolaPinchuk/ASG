@@ -69,7 +69,7 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
   }
 
   return {
-    version: "0.1.0",
+    version: "1.0.0",
     createdAt: pacificIsoString(),
     seed,
     scenario: ctx.scenario,

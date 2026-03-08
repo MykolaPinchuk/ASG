@@ -148,7 +148,7 @@ function resolveCombat(
     winner = defender;
     winnerStrengthAfter = -delta;
   } else {
-    winner = rng.bool() ? attacker : defender;
+    winner = defender;
     winnerStrengthAfter = 1;
   }
 
@@ -323,4 +323,3 @@ export function applyTurn(
 
   return { state: nextState, events, result };
 }
-
