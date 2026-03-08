@@ -41,6 +41,12 @@ type AgentResponse = {
     provider?: string;
     upstreamStatus?: number;
     upstreamError?: string;
+    tokenUsage?: {
+      promptTokens?: number;
+      completionTokens?: number;
+      reasoningTokens?: number;
+      totalTokens?: number;
+    };
     usedFallback?: boolean;
     usedRetry?: boolean;
     retry?: {
@@ -55,6 +61,12 @@ type AgentResponse = {
       latencyMs?: number;
       upstreamStatus?: number;
       error?: string;
+      tokenUsage?: {
+        promptTokens?: number;
+        completionTokens?: number;
+        reasoningTokens?: number;
+        totalTokens?: number;
+      };
     }>;
   };
 };
@@ -75,6 +87,37 @@ function ensureActUrl(url: string): string {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function parseTokenUsage(value: unknown):
+  | {
+      promptTokens?: number;
+      completionTokens?: number;
+      reasoningTokens?: number;
+      totalTokens?: number;
+    }
+  | undefined {
+  if (!isObject(value)) return undefined;
+  const promptTokens =
+    typeof (value as any).promptTokens === "number" && Number.isFinite((value as any).promptTokens)
+      ? Math.max(0, Math.floor((value as any).promptTokens))
+      : undefined;
+  const completionTokens =
+    typeof (value as any).completionTokens === "number" && Number.isFinite((value as any).completionTokens)
+      ? Math.max(0, Math.floor((value as any).completionTokens))
+      : undefined;
+  const reasoningTokens =
+    typeof (value as any).reasoningTokens === "number" && Number.isFinite((value as any).reasoningTokens)
+      ? Math.max(0, Math.floor((value as any).reasoningTokens))
+      : undefined;
+  const totalTokens =
+    typeof (value as any).totalTokens === "number" && Number.isFinite((value as any).totalTokens)
+      ? Math.max(0, Math.floor((value as any).totalTokens))
+      : undefined;
+  if (promptTokens === undefined && completionTokens === undefined && reasoningTokens === undefined && totalTokens === undefined) {
+    return undefined;
+  }
+  return { promptTokens, completionTokens, reasoningTokens, totalTokens };
 }
 
 function isAction(value: unknown): value is Action {
@@ -201,6 +244,7 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
     const usedFallback = typeof (diagRaw as any).usedFallback === "boolean" ? (diagRaw as any).usedFallback : undefined;
     const usedRetry = typeof (diagRaw as any).usedRetry === "boolean" ? (diagRaw as any).usedRetry : undefined;
     const provider = typeof (diagRaw as any).provider === "string" ? (diagRaw as any).provider : undefined;
+    const tokenUsage = parseTokenUsage((diagRaw as any).tokenUsage);
 
     const retryRaw = (diagRaw as any).retry;
     let retry: NonNullable<AgentResponse["server_diagnostics"]>["retry"] | undefined;
@@ -246,15 +290,16 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
             ? Math.floor((a as any).upstreamStatus)
             : undefined;
         const error = typeof (a as any).error === "string" ? (a as any).error : undefined;
-        if (attempt !== undefined || reasoningEffort || latencyMs !== undefined || upstreamStatus !== undefined || error) {
-          parsedAttempts.push({ attempt, reasoningEffort, latencyMs, upstreamStatus, error });
+        const tokenUsage = parseTokenUsage((a as any).tokenUsage);
+        if (attempt !== undefined || reasoningEffort || latencyMs !== undefined || upstreamStatus !== undefined || error || tokenUsage) {
+          parsedAttempts.push({ attempt, reasoningEffort, latencyMs, upstreamStatus, error, tokenUsage });
         }
       }
       if (parsedAttempts.length) attempts = parsedAttempts;
     }
 
-    if (provider || upstreamStatus !== undefined || upstreamError || usedFallback !== undefined || usedRetry !== undefined || retry || attempts) {
-      server_diagnostics = { provider, upstreamStatus, upstreamError, usedFallback, usedRetry, retry, attempts };
+    if (provider || upstreamStatus !== undefined || upstreamError || tokenUsage || usedFallback !== undefined || usedRetry !== undefined || retry || attempts) {
+      server_diagnostics = { provider, upstreamStatus, upstreamError, tokenUsage, usedFallback, usedRetry, retry, attempts };
     }
   }
 
@@ -395,6 +440,7 @@ export class HttpAgentController implements Controller {
         error,
         upstreamStatus: parsedResponse.server_diagnostics?.upstreamStatus,
         upstreamError: parsedResponse.server_diagnostics?.upstreamError,
+        tokenUsage: parsedResponse.server_diagnostics?.tokenUsage,
         usedFallback: parsedResponse.server_diagnostics?.usedFallback,
         usedRetry: parsedResponse.server_diagnostics?.usedRetry,
         retry: parsedResponse.server_diagnostics?.retry,

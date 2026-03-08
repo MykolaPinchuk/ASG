@@ -562,6 +562,7 @@ async function evalOneModel(params: {
           const captureCount = (t.events ?? []).filter((e) => e.type === "capture" && (e as any).newOwner === "P1").length;
           const tags = getTurnErrorTags(t);
           const attempts = t.diagnostics?.attempts ?? [];
+          const tokenUsage = t.diagnostics?.tokenUsage;
           params.turnMetricsRows.push({
             ...params.experiment,
             provider: String(params.providerName),
@@ -584,6 +585,10 @@ async function evalOneModel(params: {
             attemptsCount: attempts.length,
             attemptErrorCount: attempts.filter((a) => !!a.error).length,
             attemptStatuses: attempts.map((a) => a.upstreamStatus).filter((x) => typeof x === "number"),
+            promptTokens: tokenUsage?.promptTokens,
+            completionTokens: tokenUsage?.completionTokens,
+            reasoningTokens: tokenUsage?.reasoningTokens,
+            totalTokens: tokenUsage?.totalTokens,
             errorTags: tags,
             hasProviderError: hasProviderErrorFromTags(tags),
           });

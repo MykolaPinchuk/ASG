@@ -51,6 +51,12 @@ type AgentResponse = {
     provider: Provider;
     upstreamStatus?: number;
     upstreamError?: string;
+    tokenUsage?: {
+      promptTokens: number;
+      completionTokens: number;
+      reasoningTokens: number;
+      totalTokens: number;
+    };
     usedFallback?: boolean;
     usedRetry?: boolean;
     retry?: {
@@ -65,6 +71,12 @@ type AgentResponse = {
       latencyMs: number;
       upstreamStatus?: number;
       error?: string;
+      tokenUsage?: {
+        promptTokens: number;
+        completionTokens: number;
+        reasoningTokens: number;
+        totalTokens: number;
+      };
     }>;
   };
 };
@@ -102,6 +114,92 @@ function parseArgs(argv: string[]) {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+type TokenUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+};
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function extractTokenUsageFromUpstreamRaw(raw: unknown): TokenUsage | undefined {
+  if (!isObject(raw)) return undefined;
+  const body = (raw as any).body;
+  if (typeof body !== "string" || body.length === 0) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  if (!isObject(parsed)) return undefined;
+  const usage = (parsed as any).usage;
+  if (!isObject(usage)) return undefined;
+
+  const prompt =
+    toFiniteNumber((usage as any).prompt_tokens) ??
+    toFiniteNumber((usage as any).input_tokens) ??
+    toFiniteNumber((usage as any).promptTokens) ??
+    0;
+  const completion =
+    toFiniteNumber((usage as any).completion_tokens) ??
+    toFiniteNumber((usage as any).output_tokens) ??
+    toFiniteNumber((usage as any).completionTokens) ??
+    0;
+  let reasoning =
+    toFiniteNumber((usage as any).reasoning_tokens) ??
+    toFiniteNumber((usage as any).reasoningTokens) ??
+    0;
+  if (reasoning === 0 && isObject((usage as any).output_tokens_details)) {
+    reasoning = toFiniteNumber(((usage as any).output_tokens_details as any).reasoning_tokens) ?? 0;
+  }
+  const total =
+    toFiniteNumber((usage as any).total_tokens) ??
+    toFiniteNumber((usage as any).totalTokens) ??
+    (prompt + completion);
+
+  return {
+    promptTokens: Math.max(0, Math.floor(prompt)),
+    completionTokens: Math.max(0, Math.floor(completion)),
+    reasoningTokens: Math.max(0, Math.floor(reasoning)),
+    totalTokens: Math.max(0, Math.floor(total)),
+  };
+}
+
+function sumTokenUsage(attempts: Array<{ tokenUsage?: TokenUsage }> | undefined, fallbackRaw: unknown): TokenUsage | undefined {
+  if (!Array.isArray(attempts) || attempts.length === 0) return extractTokenUsageFromUpstreamRaw(fallbackRaw);
+  let found = 0;
+  let prompt = 0;
+  let completion = 0;
+  let reasoning = 0;
+  let total = 0;
+  for (const a of attempts) {
+    if (!a.tokenUsage) continue;
+    found += 1;
+    prompt += a.tokenUsage.promptTokens;
+    completion += a.tokenUsage.completionTokens;
+    reasoning += a.tokenUsage.reasoningTokens;
+    total += a.tokenUsage.totalTokens;
+  }
+  if (found > 0) {
+    return {
+      promptTokens: prompt,
+      completionTokens: completion,
+      reasoningTokens: reasoning,
+      totalTokens: total,
+    };
+  }
+  return extractTokenUsageFromUpstreamRaw(fallbackRaw);
 }
 
 function otherPlayer(player: PlayerId): PlayerId {
@@ -805,6 +903,7 @@ async function main() {
           latencyMs: number;
           upstreamStatus?: number;
           error?: string;
+          tokenUsage?: TokenUsage;
         }>
       | undefined;
 
@@ -894,6 +993,7 @@ async function main() {
               reasoningEffort: params.reasoningEffort,
               latencyMs: Date.now() - started,
               upstreamStatus: out.httpStatus,
+              tokenUsage: extractTokenUsageFromUpstreamRaw(out.raw),
             });
             return out;
           } catch (e) {
@@ -909,6 +1009,7 @@ async function main() {
               latencyMs: Date.now() - started,
               upstreamStatus: httpStatus,
               error: errMsg,
+              tokenUsage: extractTokenUsageFromUpstreamRaw(anyE?.raw),
             });
             throw e;
           }
@@ -1155,10 +1256,12 @@ async function main() {
       const prev = response.rationale_text ? `${response.rationale_text}; ` : "";
       response.rationale_text = `${prev}fallback=stub`;
     }
+    const tokenUsage = sumTokenUsage(attemptDiagnostics, upstreamRaw);
     response.server_diagnostics = {
       provider,
       upstreamStatus,
       upstreamError: error,
+      tokenUsage,
       usedFallback: sanitized.usedFallback,
       usedRetry: !!retryDiagnostics,
       retry: retryDiagnostics,

@@ -921,6 +921,7 @@
         if (usedRetry) badgeBits.push("RETRY");
         const badgesLine = `Badges: ${badgeBits.length ? badgeBits.join(", ") : "—"}`;
         let diagLine = "";
+        let tokensLine = "";
         if (diag) {
           const httpStatus =
             typeof diag.httpStatus === "number" && Number.isFinite(diag.httpStatus) ? Math.floor(diag.httpStatus) : null;
@@ -928,13 +929,42 @@
           if (httpStatus !== null) bits.push(`http=${httpStatus}`);
           if (upstreamStatus !== null) bits.push(`upstream=${upstreamStatus}`);
           if (bits.length) diagLine = `Diag: ${bits.join(" ")}`;
+
+          const tokenUsage = diag.tokenUsage && typeof diag.tokenUsage === "object" ? diag.tokenUsage : null;
+          const prompt =
+            tokenUsage && typeof tokenUsage.promptTokens === "number" && Number.isFinite(tokenUsage.promptTokens)
+              ? Math.max(0, Math.floor(tokenUsage.promptTokens))
+              : null;
+          const completion =
+            tokenUsage && typeof tokenUsage.completionTokens === "number" && Number.isFinite(tokenUsage.completionTokens)
+              ? Math.max(0, Math.floor(tokenUsage.completionTokens))
+              : null;
+          const reasoning =
+            tokenUsage && typeof tokenUsage.reasoningTokens === "number" && Number.isFinite(tokenUsage.reasoningTokens)
+              ? Math.max(0, Math.floor(tokenUsage.reasoningTokens))
+              : null;
+          const total =
+            tokenUsage && typeof tokenUsage.totalTokens === "number" && Number.isFinite(tokenUsage.totalTokens)
+              ? Math.max(0, Math.floor(tokenUsage.totalTokens))
+              : null;
+          const hasAnyTokens = prompt !== null || completion !== null || reasoning !== null || total !== null;
+          if (hasAnyTokens) {
+            const tokenBits = [];
+            if (total !== null) tokenBits.push(`total=${total}`);
+            if (prompt !== null) tokenBits.push(`prompt=${prompt}`);
+            if (completion !== null) tokenBits.push(`completion=${completion}`);
+            if (reasoning !== null) tokenBits.push(`reasoning=${reasoning}`);
+            tokensLine = `Tokens: ${tokenBits.join(" ")}`;
+          }
         }
         const resultLine = `Result: ${replay.result.type === "win" ? `WIN ${replay.result.winner}` : "DRAW"}`;
         const note =
           timeMode.value === "after" && viewMode.value !== "Omni"
             ? "Note: After uses omniscient stateAfter (future POV-after not modeled yet)."
             : "";
-        turnInfo.textContent = [turnLabel.textContent, badgesLine, diagLine, supplyLine, latencyLine, resultLine, note].filter(Boolean).join("\n");
+        turnInfo.textContent = [turnLabel.textContent, badgesLine, diagLine, tokensLine, supplyLine, latencyLine, resultLine, note]
+          .filter(Boolean)
+          .join("\n");
 
         rationale.textContent = t.rationaleText ?? "—";
         actions.textContent =

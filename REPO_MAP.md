@@ -15,6 +15,7 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/EXPERIMENT_EVAL_PROTOCOL.md` — how to run comparable experiment A/Bs (baselines, metrics, success criteria).
 - `docs/planning/EXPERIMENT_LOGGING_SPEC.md` — required logging artifacts/fields for iterative ablation workflows.
 - `docs/planning/EXPERIMENT_PACK_SPEC.md` — committed experiment-pack layout for baseline vs variant state + artifacts.
+- `docs/planning/PROMPT_CONTEXT_TOKEN_BASELINE.md` — measured prompt/context token budget baseline and representation cost breakdown.
 - `docs/planning/V06_EXPERIMENTS.md` — v06 backlog of agent-improvement experiments (warmup/memory/repair loops).
 - `docs/planning/V07_COMPLEXITY_EXPERIMENT.md` — v07 plan: behavior-focused experiments in current setup (harness/prompt/context), with model qualification by reliability/latency/telemetry.
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.

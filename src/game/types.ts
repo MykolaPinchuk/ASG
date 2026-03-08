@@ -104,6 +104,15 @@ export interface DecisionDiagnostics {
    */
   upstreamError?: string;
   /**
+   * Best-effort token usage attributed to this turn (sum across retries when available).
+   */
+  tokenUsage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    reasoningTokens?: number;
+    totalTokens?: number;
+  };
+  /**
    * Whether the controller (or agent server) used a configured fallback.
    */
   usedFallback?: boolean;
@@ -129,6 +138,12 @@ export interface DecisionDiagnostics {
     latencyMs?: number;
     upstreamStatus?: number;
     error?: string;
+    tokenUsage?: {
+      promptTokens?: number;
+      completionTokens?: number;
+      reasoningTokens?: number;
+      totalTokens?: number;
+    };
   }>;
 }
 

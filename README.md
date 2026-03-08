@@ -17,6 +17,7 @@ Start here (in order):
 - `docs/planning/ROADMAP.md` — post-MVP direction
 - `docs/planning/EXPERIMENT_LOGGING_SPEC.md` — run logging contract for ablation experiments
 - `docs/planning/EXPERIMENT_PACK_SPEC.md` — committed experiment-pack structure for baseline vs variant state
+- `docs/planning/PROMPT_CONTEXT_TOKEN_BASELINE.md` — measured prompt/context token baseline (useful when evolving game representation complexity)
 - `scenarios/scenario_01.json` — Scenario 01 data
 - `schemas/replay.schema.json` — replay validation schema
 - `schemas/experiment_run.schema.json` — experiment manifest schema
@@ -42,7 +43,7 @@ The match runner can call an external agent over HTTP (`POST /act`) per `docs/pl
   - Optional: log raw request/response per ply under `runs/`: add `--agent-log-dir runs/agent_io`
   - If using a real LLM and you see timeouts, increase the client timeout: add `--agent-timeout-ms 70000` (default is 70000).
 
-The replay viewer shows controller/model metadata (when present) in the **Players** panel.
+The replay viewer shows controller/model metadata (when present) in the **Players** panel, and per-turn token usage in **Turn** when diagnostics include it.
 
 ### Real LLM (OpenAI-compatible providers)
 Run the agent server with `openai_compat` and point it at an OpenAI-compatible endpoint (e.g. OpenRouter).

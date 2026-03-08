@@ -65,6 +65,9 @@ Budget-aware default:
 - Token usage: prompt/completion/reasoning token stats where provided
 - Outcome summary: W-D-L (secondary in v07)
 
+Prompt budget anchor:
+- See `docs/planning/PROMPT_CONTEXT_TOKEN_BASELINE.md` for current measured split of system instructions vs game/context payload.
+
 ## Where to record results
 
 - `docs/diagnostics/YYYY-MM-DD_<topic>.md` — short experiment writeups
