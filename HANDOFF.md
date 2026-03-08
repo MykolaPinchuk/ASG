@@ -1,236 +1,82 @@
 # HANDOFF
 
-## Current slice
-MVP v0 is implemented end-to-end (engine → replays → viewer → agent server/provider plumbing). Recent work focused on OSS model integration and sweeps across providers, plus evaluation tooling + viewer observability.
+## Current Slice
+Work is on branch `v07`, focused on behavior experiments in the current simple setup.
 
-Branching:
-- `master` is now the default branch.
-- Ongoing work should land on `v07`.
+Primary model/setup used in recent runs:
+- Provider/model: OpenRouter `google/gemini-3.1-flash-lite-preview`
+- Opponent: `greedy`
+- Runtime defaults used in experiments: `reasoning-effort=medium`, `rationale-style=concise`, tools off, stream off.
 
-Latest focus:
-- Shift from “increase game complexity first” to “deeply study agent behavior in the current simple setup”.
-- Select one operationally reliable reasoning model and use it as the primary subject for harness/prompt/context experiments.
-- Keep strict observability for every experiment: replay persistence, per-ply latency, and token-usage evidence from provider responses.
-- Latest checkpoint on this slice: `f6977e6` (`agent08: checkpoint(runner): add per-turn token diagnostics and prompt token baseline`).
-- Keep v0/v0.x guardrails by default (`turnCapPlies<=30`, `games<=5`) unless explicitly overridden.
-- Operational constraint (March 4, 2026 PST): Chutes currently returns `Subscription usage cap exceeded` for this workspace/account, so Chutes baselines are historical-only until quota/billing changes.
-- Operational constraint (March 4, 2026 PST): Google AI Studio free tier for `gemini-3.1-flash-lite` is currently budgeted at `15 RPM` and `500 RPD` for this workspace/account; keep runs short and paced.
+## What Changed This Cycle
+- Adopted EXP023 prompt as the practical baseline for future prompt-ablation experiments.
+- Added explicit prompt-ablation isolation guard in eval CLI (required baseline prompt file + expected line diff).
+- Re-ran EXP021 cleanly (after earlier contaminated run), ran EXP022 and EXP023 on matched seed batches.
+- Updated high-level experiment conclusion logic to prioritize outcome/reliability over capture count.
 
-## Historical v06 shortlist (for reference)
-This was the v06 shortlist before the v07 objective shift:
-- Cerebras: `gpt-oss-120b` (fast + strong; stabilized via structured/tools-forced + per-turn retry to medium)
-- Chutes: `tngtech/DeepSeek-R1T-Chimera` (backup baseline: strong + very reliable)
-- OpenRouter: `x-ai/grok-4.1-fast` (strong but very slow in this harness)
+Evidence (commits):
+- `43a6334` — `agent12: checkpoint(workflow): adopt EXP023 prompt baseline + labeling logic`
+- `9742788` — `agent12: checkpoint(misc): record EXP021/EXP022 outcomes and notes`
+- `3bddbd6` — `agent12: checkpoint(workflow): enforce prompt-ablation isolation guard`
 
-## Historical conclusion (2026-02-01 snapshot)
-We have ~3 models that are “reasonably good” vs MixBot, but **none are suitable for rapid iteration on more complex game setups** right now:
-- OpenRouter `x-ai/grok-4.1-fast` appears to be the only one that consistently applies rules well and plays close to optimal, but its latency is high and often exceeds the current ~70s per-turn budget (leading to provider-error turns / passes).
-- Cerebras `gpt-oss-120b` and Chutes Chimera are good enough for baseline comparisons, but they do not reliably match Grok’s rule utilization/optimality; for Cerebras we now rely on structured/tools-forced + retry-to-medium to keep it stable.
-- Practical expectation: for “good, cheap, fast” at higher complexity, we likely need to wait ~2–3 months for the next generation of models/providers.
+Evidence (files):
+- Prompt baseline file: `experiments/baselines/system_prompt_act_exp023.txt`
+- Runtime prompt source: `src/providers/openaiCompat.ts`
+- Prompt guard + labeling logic: `src/cli/evalModelsVsMix.ts`, `src/cli/indexExperimentsHighLevel.ts`
+- Aggregated experiment table: `runs/experiment_logs/EXPERIMENTS_SUMMARY.md`
+- Run-level registry: `runs/experiment_logs/INDEX.md`
 
-Evidence:
-- Always-updated local performance snapshot: `performance.md` (generated via `npm run -s perf:top20`)
-- `gpt-oss-120b` provider/effort sweep: `docs/diagnostics/2026-01-30_gpt_oss_120b_reasoning_effort_sweep.md` (commit `ea6b1aa`)
-- Retry + structured-baseline changes: commit `7aeb7e3`
-- Latest “latency constraints” note: commit `8dfd77d`
+## Baseline Decision
+Adopted baseline for future prompt ablations:
+- `--baseline-system-prompt-file experiments/baselines/system_prompt_act_exp023.txt`
 
-## v07 next slice (behavior-focused, current setup)
-- Plan: `docs/planning/V07_COMPLEXITY_EXPERIMENT.md`
-- Objective: understand *why* agents behave as they do under the current mechanics by varying harness/prompt/context in controlled A/B runs.
-- Model-selection objective (for v07 and likely next versions): prioritize provider reliability + latency stability + telemetry completeness over immediate win-rate.
-- Primary experimentation model: OpenRouter `google/gemini-3.1-flash-lite-preview` with `--reasoning-effort medium`.
-- Secondary validation model: OpenRouter `x-ai/grok-4.1-fast` with `--reasoning-effort low`.
-- Immediate next-agent task:
-  - Refine EXP_014 by changing the order of the 4 rationale sections (`Game State`, `Plans`, `Enemy State`, `Current Actions`) as single-variable ablations.
-  - Make rationale structure easier to read in viewer (clear headers/paragraph formatting in UI panel), while preserving existing diagnostics/replay invariants.
+Operational note:
+- Baseline file was verified to match the active runtime EXP023 prompt generation exactly (zero diff in local check).
 
-## Latest qualification snapshot (2026-03-05 PST)
-- OpenRouter qualification aggregate (`runs/openrouter_qualification/**/summary.json`):
-  - 41 games total, 20 wins / 21 draws / 0 losses, 0 provider-error turns.
-  - `google/gemini-3.1-flash-lite-preview`: 16 games, 7 wins / 9 draws / 0 losses, 0 provider-error turns.
-  - `x-ai/grok-4.1-fast`: 25 games, 13 wins / 12 draws / 0 losses, 0 provider-error turns.
-- Primary model confirmation run:
-  - `runs/openrouter_qualification/20260306T023836Z_gemini31flashlite_medium_3games/summary.json`
-  - Result: 3/3 wins vs `greedy` (seeds 97/98/99), 0 provider-error turns.
-  - Replay dir: `replays/model_evals/2026-03-05T18-38-36-862PST`
-- Secondary model reference run (chosen setting `--reasoning-effort low`):
-  - `runs/openrouter_qualification/20260305T024905Z_grok41fast_reasoning_abcd/low/summary.json`
-  - Result: 2/2 wins vs `greedy` (seeds 71/72), 0 provider-error turns.
-  - Replay dir: `replays/model_evals/2026-03-04T19-00-24-800PST`
-- Google AI Studio backup status (`gemini-3.1-flash-lite` only on current free tier):
-  - Aggregated runs: 8 games, 0 wins / 8 draws / 0 losses, 4 provider-error turns (`runs/gemini_studio_validation/**/summary.json`).
-  - Keep as fallback provider only; current evidence suggests weaker/less predictable behavior in this harness than OpenRouter.
+## Latest Experiment Snapshot
+- `EXP_021_chain_combat_sentence` (clean, 6 seeds): labeled `promising` after updated rubric.
+- `EXP_022_chain_fast_wins_sentence` (6 seeds): labeled `regression` (provider error delta regression).
+- `EXP_023_chain_directions_sentence` (6 seeds): labeled `promising` under updated rubric.
+- Earlier stacked run preserved separately as:
+  - `EXP_021_chain_combat_sentence_contaminated`
 
-## Latest experiment snapshot (2026-03-07 PST)
-- EXP_014 (`rationale_style: structured10`) was extended with paired +3 seeds (304/305/306):
-  - control: `runs/experiment_logs/EXP_014_rationale_struct10/control_plus3/summary.json`
-  - variant: `runs/experiment_logs/EXP_014_rationale_struct10/variant_struct10_plus3/summary.json`
-- Combined 6-seed readout (301-306 each) is still inconclusive on outcomes:
-  - control: 5W / 1D / 0L
-  - variant: 5W / 1D / 0L
-  - slight tempo edge for variant, not strong enough for a firm decision.
-- Replays with token diagnostics visible in viewer:
-  - control+3 replay dir: `replays/model_evals/2026-03-07T18-47-29-889PST`
-  - variant+3 replay dir: `replays/model_evals/2026-03-07T18-52-55-777PST`
+Source of truth:
+- `runs/experiment_logs/EXPERIMENTS_SUMMARY.md`
 
-## OSS baselines (default for testing)
-These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):
-- Chutes:
-  - `tngtech/DeepSeek-R1T-Chimera` (backup baseline)
-  - `chutesai/Mistral-Small-3.1-24B-Instruct-2503`
-  - `deepseek-ai/DeepSeek-V3-0324-TEE`
-- NanoGPT:
-  - `deepseek/deepseek-v3.2`
-  - `mistralai/devstral-2-123b-instruct-2512`
-- Cerebras (requires provider key):
-  - `gpt-oss-120b` (see `configs/cerebras_models.txt`; run with `--keys-name cerebras-paid` if keys are stored under that alias)
+## Human Direction To Carry Forward
+Human concern recorded:
+- Guidance may be becoming too explicit/instruction-heavy.
+- Keep EXP023 baseline for current model family.
+- When switching to stronger models, run A/B tests with reduced/removed explicit guidance to test whether similar behavior emerges without heavy hand-holding.
 
-Smoke (1 game each vs GreedyBot, seed=3):
-- Chutes: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
-- NanoGPT: `npm run agent:eval-vs-mix -- --provider-name nanogpt --opponent greedy --models-file configs/oss_baselines_nanogpt.txt --games 1 --seed 3`
-- Cerebras: `npm run agent:eval-vs-mix -- --provider-name cerebras --opponent greedy --models-file configs/cerebras_models.txt --base-url https://api.cerebras.ai/v1 --games 1 --seed 3`
+Recorded in:
+- `human_notes_future_experiemnts.md`
+- `a2a_notes.md`
 
-## Known-good models (fallback shortlist)
-If provider/model availability changes, these OpenRouter models have recently worked well end-to-end in this repo:
-- Primary: `google/gemini-3.1-flash-lite-preview` (`--reasoning-effort medium`)
-- Secondary: `x-ai/grok-4.1-fast` (`--reasoning-effort low`)
+## Next Agent Task (Immediate)
+Next agent should work on small game-setup changes, starting with draw-resolution logic.
 
-Notes:
-- `openai/gpt-5-mini` is currently unreliable in this harness (frequent empty/partial outputs leading to passes).
-- OpenRouter `openai/gpt-5.1` (reasoning-effort=low) was tried briefly and deemed not useful for this harness (aborted run); do not prioritize without a specific reason.
-- OpenRouter now defaults to `x-ai/grok-4.1-fast` when `--model` is omitted.
-- Recent OpenRouter runs showed `google/gemini-2.5-flash` and `google/gemini-3-flash-preview` producing mostly `pass` actions vs `GreedyBot` (losses), so they are not currently a recommended fallback.
-- Cerebras rejects `include_reasoning` (even when `false`), so `openai_compat` omits it for provider `cerebras`.
-- Cerebras `gpt-oss-120b` baseline config (stable): `--reasoning-effort high --max-tokens 8000 --stream off --use-tools true --tools-mode force --retry-on-failure on --retry-reasoning-effort medium` (retry is recorded per turn via `diagnostics.usedRetry` + `agent_retry` event in the replay).
+Suggested first slice:
+1. Define exact intended draw-resolution behavior change (single-variable).
+2. Implement minimally in engine/rules path.
+3. Run short paired evals with strict isolation and updated logging.
 
-## Regression spec (paid)
-When making harness changes, keep the paid regression check stable and cost-capped:
-- `npm run eval:grok-vs-greedy` (max 3 games; saves replays)
+Likely touchpoints:
+- `src/game/engine.ts`
+- `docs/planning/MVP_SPEC.md` (if rule semantics change)
+- `docs/GAME_RULES.md` (human-readable rule update)
 
-## Invariants (do not break)
-- Spec is source of truth: `docs/planning/MVP_SPEC.md`.
-- Deterministic replays: same seed + same actions ⇒ identical outcomes.
-- No secrets or bulky artifacts in git (see `.gitignore`).
-- `IA_HANDOFF/` is an immutable snapshot (do not edit).
-- v0 / v0.x eval guardrails: default to `turnCapPlies<=30` and `games/count<=5` unless explicitly overridden (see `extra_instructions_v0.md`).
+## Repro / Commands
+- Refresh summaries:
+  - `npm run -s exp:index-runs`
+  - `npm run -s exp:summary`
+- Run prompt ablation safely:
+  - `npm run -s agent:eval-vs-mix -- ... --ablation-key prompt.<...> --baseline-system-prompt-file experiments/baselines/system_prompt_act_exp023.txt --expected-system-prompt-diff-lines <N>`
 
-## State of work
+## Known Risks / Notes
+- Summary/table reads can look stale if generation and reading are run in parallel; run `exp:summary` sequentially before interpreting.
+- Keep artifacts out of git (`runs/`, `replays/`, `dist/`, `node_modules/`, secrets).
 
-### Done (with evidence)
-- Deterministic engine + match runner + replay schema:
-  - Engine/runner: `src/game/engine.ts`, `src/game/match.ts`, `src/game/types.ts`, `src/scenario/loadScenario.ts`
-  - Replay schema: `schemas/replay.schema.json`
-  - CLI: `npm run match` (`src/cli/runMatch.ts`)
-- Viewer that can load replay JSONs and shows timeline + events + agent rationale, with a Players panel showing agent provider/model when present:
-  - `viewer/index.html`
-  - Evidence: `96a05b8` (`agent01: checkpoint(viewer): show agent model`), `f1cf8fa` (`agent01: checkpoint(viewer): add in-app explanations + event highlighting`)
-- Viewer now shows per-ply agent latency (required for eval runs; do not regress it):
-  - `viewer/index.html` reads `turn.latencyMs`
-- Viewer now shows per-ply quick badges derived from replay diagnostics (PASS / INVALID_ACTION / ERROR / FALLBACK):
-  - Evidence: `592ccad` (`agent06: checkpoint(runner): replay diagnostics + v06 guardrails`)
-- Viewer now also shows per-turn token usage when available (`Tokens: total/prompt/completion/reasoning`):
-  - `viewer/index.html`
-  - Evidence: `f6977e6` (`agent08: checkpoint(runner): add per-turn token diagnostics and prompt token baseline`)
-- HTTP agent controller + agent server:
-  - Controller: `src/controllers/httpAgentController.ts`
-  - Server: `src/cli/agentServer.ts` (providers: `stub`, `openai_compat`)
-  - Evidence: `b5e1bb7` (`agent01: checkpoint(runner): add agent server (stub + openai compat)`)
-- OpenAI-compatible provider plumbing with robustness (parsing/tool-call retry, error surfacing into rationale):
-  - `src/providers/openaiCompat.ts`
-  - Evidence: `1277255` (`agent01: checkpoint(runner): tool-call + retry`), `e39f815` (`agent03: checkpoint(runner): OSS reliability retries + timeout buffer`), `c34d49c` (`agent03: checkpoint(runner): stricter JSON validation + better budget-empty retries`)
-- Mechanics-only prompt policy for fairness (remove strategy-like hints):
-  - `src/providers/openaiCompat.ts`
-  - Evidence: `cd39e17` (`agent03: checkpoint(runner): remove strategic guidance from prompts`), `e35fd22` (`agent03: checkpoint(runner): clarify sequential mechanics wording`)
-- v06 experiment tooling + analysis helpers (all opt-in; baseline unchanged unless flags are passed):
-  - `src/cli/agentServer.ts` flags: `--repair`, `--memory`, `--warmup` (plus related caps)
-  - `src/cli/analyzeReplays.ts` (`npm run analyze:replays`)
-  - Evidence: `46c6b72` (`agent06: checkpoint(runner): warmup/memory + repair loop flags`)
-- Results writeup for those experiments:
-  - `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`
-  - Evidence: `b4fe8e7` (`agent06: checkpoint(docs): document warmup/memory + repair results`)
-- OSS model allowlist/priority list (derived from TML-bench) + model listing:
-  - `configs/oss_models.json`, `src/llm/models.ts`, `npm run agent:list-models`
-  - Evidence: `f6daf7a` (`agent01: checkpoint(misc): OSS allowlist + model auto`)
-- OSS diagnostics writeup (tests + failure modes + lessons):
-  - `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`
-  - Evidence: `ed12392` (`agent03: checkpoint(docs): document OSS debugging + learnings`), `db8aa63` (`agent03: checkpoint(docs): add no-strategy sweep rerun results`)
-- Model evaluation tooling:
-  - Agent vs Random: `npm run agent:vs-random` (`src/cli/agentVsRandom.ts`)
-  - Model eval vs MixBot/GreedyBot (prints per-game metrics + optional JSONL live log): `npm run agent:eval-vs-mix` (`src/cli/evalModelsVsMix.ts`)
-  - OSS sweep (smoke + full seed run): `npm run agent:sweep-oss` (`src/cli/sweepOssModels.ts`)
-  - Evidence: `479cae7` (`agent01: checkpoint(runner): add OSS model sweep`), `2089ade` (`agent01: checkpoint(runner): unique replays per model`)
-- Experiment-pack workflow + registry/reporting upgrades:
-  - `src/cli/experimentPack.ts`, `src/cli/reportExperiment.ts`, `src/experiments/indexRegistry.ts`, `experiments/POLICY.json`
-  - Evidence: `6817c30` (`agent08: checkpoint(workflow): add experiment policy defaults and reporting registry`)
-- Prompt/context token budget baseline note:
-  - `docs/planning/PROMPT_CONTEXT_TOKEN_BASELINE.md`
-  - Evidence: `f6977e6` (`agent08: checkpoint(runner): add per-turn token diagnostics and prompt token baseline`)
-- Focus shortlist (20 models) with stats snapshot:
-  - `docs/focus20_models.md`
-  - Evidence: `5defea9` (`agent05: checkpoint(runner): cerebras provider + focus20`)
-- Cerebras provider support + model list:
-  - `configs/cerebras_models.txt`
-  - Evidence: `5defea9` (`agent05: checkpoint(runner): cerebras provider + focus20`)
-- Default upstream timeout now 70s while still advertising a 40s agent SLA in the prompt:
-  - Evidence: `d4f9bbe` (`agent05: checkpoint(runner): default timeout 70s (advertise 40s)`)
-- Local run outputs (gitignored) contain sweep + retest results:
-  - `runs/model_sweeps/2026-01-26T04-05-58-850Z/summary.md`
-  - `runs/model_retests/2026-01-26T05-13-32_seed5_rerun/seed5_results.json`
-  - More recent key runs:
-    - OSS full run (post-fixes): `runs/model_sweeps/oss_fullrun_2026-01-27T13-12-04Z/combined_summary.md`
-    - OSS winners vs Mix+Greedy (3 games each): `runs/model_sweeps/oss_winners_3x_mix_3x_greedy_2026-01-27T20-51-39Z/winners_eval_summary.md`
-    - OSS baseline smoke: `runs/model_sweeps/oss_baselines_smoke_2026-01-27T23-06-00Z/results.json`
-
-### v0.5 Next (pre-v1, ordered)
-1) Reduce draw rate via *tuning only* (no new mechanics):
-   - Add a small tuning sweep tool and promote tuned defaults into scenario settings.
-2) Improve viewer “debug speed”:
-   - Add a match summary panel (captures, pass/error counts, latency stats).
-   - Add per-turn badges for `pass` / `invalid_action` / provider errors. (Done; see `592ccad`.)
-3) Improve agent observability in replays:
-   - Persist additional per-turn diagnostics (e.g., http status / error string) so failures are visible in the viewer without opening logs. (Done; see `592ccad`.)
-4) Continue `openai_compat` robustness work (no strategic fallback):
-   - Focus on “thinking-only / no final JSON” behavior for some providers/models.
-
-### v0.6 Experiments backlog
-- See `docs/planning/V06_EXPERIMENTS.md` (warmup step + memory, validator-guided repair loop, and other optional experiments).
-
-### Agent05 suggestions (next experiments)
-1) Confirm whether Cerebras `gpt-oss-120b` strength is repeatable (not a one-off):
-   - Run 3+ seeds with the known-good “safe” config and compare `--reasoning-effort low|medium|high`.
-   - Example: `npm run -s agent:eval-vs-mix -- --provider-name cerebras --models gpt-oss-120b --games 3 --seed 3 --turn-cap-plies 30 --stop-after-errors 1 --max-tokens 8000 --stream off --tools-mode off --use-tools false --reasoning-effort high`
-2) Promote “decision-grade” numbers for the top contenders:
-   - Pick ~5 best performers from `docs/focus20_models.md` and run 5 games each (still 30 plies) to estimate variance (win-rate, ok-turn-rate, latency).
-3) Make future analysis easier:
-   - Persist run config into replay metadata (e.g. `reasoning_effort`, `tools_mode`, `use_tools`, `stream`, `max_tokens`, `timeout_ms`) so we don’t have to infer configs from folder names (esp. important for Cerebras).
-
-### Open questions
-- What “OSS-only” means per provider in practice (some providers mix OSS + closed models in `/models` lists; current allowlist approach is prefix-based + explicit config in `configs/oss_models.json`).
-
-## Repro / smoke check
-- From repo root:
-  - Deterministic match → replay: `npm run match -- --seed 1 --p1 greedy --p2 greedy`
-  - Validate replay JSON: `npm run validate:replay -- replays/<replay>.json`
-  - View replay: open `viewer/index.html` (file picker) and select the replay JSON.
-  - Agent vs Random (requires `secrets/provider_apis.txt`): `npm run agent:vs-random -- --provider-name nanogpt --model auto --count 3 --start 1 --save-replays true`
-  - Summarize a replay folder (paired A/B supported): `npm run analyze:replays -- --dir runs/<some_run>/replays`
-  - OSS baselines (Chutes) vs GreedyBot: `npm run agent:eval-vs-mix -- --provider-name chutes --base-url https://llm.chutes.ai/v1 --opponent greedy --models-file configs/oss_baselines_chutes.txt --games 1 --seed 3`
-  - OSS sweep (can take a while; requires provider keys): `npm run agent:sweep-oss -- --providers nanogpt,chutes --max-models 30 --full-seed 3 --full-turn-cap 30`
-
-## Known issues / current breakage
-- Provider flakiness: capacity/rate-limit errors can cause many agent passes (esp. some Chutes models); these are surfaced as `openai_compat failed: ...` in rationale.
-- Some models produce malformed JSON/tool output; `openai_compat` retries once but can still fail and fall back to `pass`.
-- Cerebras `gpt-oss-120b` with `reasoning-effort=high` can be fast/strong but still shows frequent output/parse failures (often `Unexpected non-whitespace character after JSON ...`), even on paid keys; treat it as “strong but not yet clean”.
-- MiniMax `MiniMax-M2.5` currently shows materially higher timeout/abort error rates in this harness than OpenRouter front-runners (see `runs/minimax_validation/20260305T000749Z_batchA/summary.json`, `runs/minimax_validation/20260305T000945Z_batchB/summary.json`, `runs/minimax_validation/20260305T001423Z_batchC_timeout70/summary.json`, `runs/minimax_validation/20260305T001800Z_batchD_effortLow/summary.json`).
-- Important: earlier “big win-rate” OSS results were shown to be driven by prompt strategy hints; after removing hints, re-runs produced 0 wins in the same one-ply micro-sweep setup (see `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`).
-- Some providers/models emit the primary text in `message.reasoning` and may omit `message.content`; `openai_compat` has best-effort parsing for this but is not universally reliable (notably for `zai-glm-4.7` on Cerebras).
-- v06 experiments (repair loop / warmup + memory) are currently not recommended as defaults; keep them opt-in. See `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`.
-- Token-usage line in viewer only appears for replays generated after `f6977e6`; older replays will still show only `Diag: http=... upstream=...`.
-
-## Git notes (handoff)
-- Intentionally uncommitted local-only data:
-  - `secrets/` (provider API keys)
-  - `runs/` (sweep outputs)
-  - `replays/` (generated match replays)
-  - `.trash/` (manual quarantine for misconfigured local experiment runs; safe to delete locally)
-  - `human_notes_future_experiemnts.md` (human scratch notes; currently untracked)
+## Git Notes
+- Intentionally untracked local-only folder remains:
+  - `human_experiment_notes/`
