@@ -51,6 +51,7 @@ Keep this file short. Update it only when something important changes.
 - `src/cli/agentServer.ts` — HTTP agent server (providers: `stub`, `openai_compat`).
 - `src/providers/openaiCompat.ts` — OpenAI-compatible client + parsing/tooling behavior.
   - Note: per-turn retry metadata is recorded in replay diagnostics (`usedRetry`) and also injected as an `agent_retry` event for visibility in the viewer.
+  - Note: per-turn token usage is now recorded in replay diagnostics (`diagnostics.tokenUsage`) when provider usage is available.
 
 ## Model tooling
 - `configs/oss_models.json` — OSS model allowlist / priority list (derived from TML-bench).

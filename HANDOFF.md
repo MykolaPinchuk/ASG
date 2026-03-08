@@ -11,6 +11,7 @@ Latest focus:
 - Shift from “increase game complexity first” to “deeply study agent behavior in the current simple setup”.
 - Select one operationally reliable reasoning model and use it as the primary subject for harness/prompt/context experiments.
 - Keep strict observability for every experiment: replay persistence, per-ply latency, and token-usage evidence from provider responses.
+- Latest checkpoint on this slice: `f6977e6` (`agent08: checkpoint(runner): add per-turn token diagnostics and prompt token baseline`).
 - Keep v0/v0.x guardrails by default (`turnCapPlies<=30`, `games<=5`) unless explicitly overridden.
 - Operational constraint (March 4, 2026 PST): Chutes currently returns `Subscription usage cap exceeded` for this workspace/account, so Chutes baselines are historical-only until quota/billing changes.
 - Operational constraint (March 4, 2026 PST): Google AI Studio free tier for `gemini-3.1-flash-lite` is currently budgeted at `15 RPM` and `500 RPD` for this workspace/account; keep runs short and paced.
@@ -39,6 +40,9 @@ Evidence:
 - Model-selection objective (for v07 and likely next versions): prioritize provider reliability + latency stability + telemetry completeness over immediate win-rate.
 - Primary experimentation model: OpenRouter `google/gemini-3.1-flash-lite-preview` with `--reasoning-effort medium`.
 - Secondary validation model: OpenRouter `x-ai/grok-4.1-fast` with `--reasoning-effort low`.
+- Immediate next-agent task:
+  - Refine EXP_014 by changing the order of the 4 rationale sections (`Game State`, `Plans`, `Enemy State`, `Current Actions`) as single-variable ablations.
+  - Make rationale structure easier to read in viewer (clear headers/paragraph formatting in UI panel), while preserving existing diagnostics/replay invariants.
 
 ## Latest qualification snapshot (2026-03-05 PST)
 - OpenRouter qualification aggregate (`runs/openrouter_qualification/**/summary.json`):
@@ -56,6 +60,18 @@ Evidence:
 - Google AI Studio backup status (`gemini-3.1-flash-lite` only on current free tier):
   - Aggregated runs: 8 games, 0 wins / 8 draws / 0 losses, 4 provider-error turns (`runs/gemini_studio_validation/**/summary.json`).
   - Keep as fallback provider only; current evidence suggests weaker/less predictable behavior in this harness than OpenRouter.
+
+## Latest experiment snapshot (2026-03-07 PST)
+- EXP_014 (`rationale_style: structured10`) was extended with paired +3 seeds (304/305/306):
+  - control: `runs/experiment_logs/EXP_014_rationale_struct10/control_plus3/summary.json`
+  - variant: `runs/experiment_logs/EXP_014_rationale_struct10/variant_struct10_plus3/summary.json`
+- Combined 6-seed readout (301-306 each) is still inconclusive on outcomes:
+  - control: 5W / 1D / 0L
+  - variant: 5W / 1D / 0L
+  - slight tempo edge for variant, not strong enough for a firm decision.
+- Replays with token diagnostics visible in viewer:
+  - control+3 replay dir: `replays/model_evals/2026-03-07T18-47-29-889PST`
+  - variant+3 replay dir: `replays/model_evals/2026-03-07T18-52-55-777PST`
 
 ## OSS baselines (default for testing)
 These are the current recommended OSS baselines for ongoing testing (stable/low provider errors; note that **prompts are mechanics-only** so win-rate can be lower than earlier “hinted” experiments):
@@ -112,6 +128,9 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - `viewer/index.html` reads `turn.latencyMs`
 - Viewer now shows per-ply quick badges derived from replay diagnostics (PASS / INVALID_ACTION / ERROR / FALLBACK):
   - Evidence: `592ccad` (`agent06: checkpoint(runner): replay diagnostics + v06 guardrails`)
+- Viewer now also shows per-turn token usage when available (`Tokens: total/prompt/completion/reasoning`):
+  - `viewer/index.html`
+  - Evidence: `f6977e6` (`agent08: checkpoint(runner): add per-turn token diagnostics and prompt token baseline`)
 - HTTP agent controller + agent server:
   - Controller: `src/controllers/httpAgentController.ts`
   - Server: `src/cli/agentServer.ts` (providers: `stub`, `openai_compat`)
@@ -140,6 +159,12 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - Model eval vs MixBot/GreedyBot (prints per-game metrics + optional JSONL live log): `npm run agent:eval-vs-mix` (`src/cli/evalModelsVsMix.ts`)
   - OSS sweep (smoke + full seed run): `npm run agent:sweep-oss` (`src/cli/sweepOssModels.ts`)
   - Evidence: `479cae7` (`agent01: checkpoint(runner): add OSS model sweep`), `2089ade` (`agent01: checkpoint(runner): unique replays per model`)
+- Experiment-pack workflow + registry/reporting upgrades:
+  - `src/cli/experimentPack.ts`, `src/cli/reportExperiment.ts`, `src/experiments/indexRegistry.ts`, `experiments/POLICY.json`
+  - Evidence: `6817c30` (`agent08: checkpoint(workflow): add experiment policy defaults and reporting registry`)
+- Prompt/context token budget baseline note:
+  - `docs/planning/PROMPT_CONTEXT_TOKEN_BASELINE.md`
+  - Evidence: `f6977e6` (`agent08: checkpoint(runner): add per-turn token diagnostics and prompt token baseline`)
 - Focus shortlist (20 models) with stats snapshot:
   - `docs/focus20_models.md`
   - Evidence: `5defea9` (`agent05: checkpoint(runner): cerebras provider + focus20`)
@@ -200,6 +225,7 @@ When making harness changes, keep the paid regression check stable and cost-capp
 - Important: earlier “big win-rate” OSS results were shown to be driven by prompt strategy hints; after removing hints, re-runs produced 0 wins in the same one-ply micro-sweep setup (see `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md`).
 - Some providers/models emit the primary text in `message.reasoning` and may omit `message.content`; `openai_compat` has best-effort parsing for this but is not universally reliable (notably for `zai-glm-4.7` on Cerebras).
 - v06 experiments (repair loop / warmup + memory) are currently not recommended as defaults; keep them opt-in. See `docs/diagnostics/2026-01-30_memory_warmup_repair_experiments.md`.
+- Token-usage line in viewer only appears for replays generated after `f6977e6`; older replays will still show only `Diag: http=... upstream=...`.
 
 ## Git notes (handoff)
 - Intentionally uncommitted local-only data:
@@ -207,3 +233,4 @@ When making harness changes, keep the paid regression check stable and cost-capp
   - `runs/` (sweep outputs)
   - `replays/` (generated match replays)
   - `.trash/` (manual quarantine for misconfigured local experiment runs; safe to delete locally)
+  - `human_notes_future_experiemnts.md` (human scratch notes; currently untracked)
