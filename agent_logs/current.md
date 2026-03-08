@@ -11,6 +11,12 @@
 - Immediate slice: refine EXP_014 (structured rationale) via single-variable ordering ablations, and improve rationale readability in viewer with clear section headers/paragraph formatting.
 
 ## Log
+- 2026-03-08 13:46:58 PDT — Completed EXP021 clean reruns + EXP022 follow-up and recorded outcome.
+  - Added prompt-ablation isolation guard in `src/cli/evalModelsVsMix.ts` (requires baseline prompt file + expected line diff for `prompt.*` ablations, with fail-fast mismatch).
+  - Re-ran clean EXP021 with isolation (`diffLines=1`): `variant_exp021_chain_sentence_s3_clean` vs `control` and `variant_exp021_chain_sentence_plus3_clean` vs `control_plus3` (both 3W/0D/0L).
+  - Ran EXP022 (`diffLines=2`) for seeds 301-303 and 304-306: `variant_exp022_chain_fastwins_s3`, `variant_exp022_chain_fastwins_plus3`.
+  - Re-labeled earlier stacked run as `EXP_021_chain_combat_sentence_contaminated` in run logs to keep high-level table truthful.
+  - User takeaway recorded in `human_notes_future_experiemnts.md`: EXP021 somewhat promising but not dramatic; EXP022 below expectation.
 - 2026-03-08 12:35:44 PDT — Extended high-level experiment dashboard with latency + token metrics.
   - Updated `src/cli/indexExperimentsHighLevel.ts` to derive `AvgLatencyMs` from `game_metrics.jsonl` (weighted by agent turns) and `AvgTokens/Turn` from `turn_metrics.jsonl`.
   - Added paired deltas `LatencyΔms` and `TokensΔ/Turn`.
