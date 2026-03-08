@@ -546,16 +546,21 @@ function buildExperimentSummary(experimentId: string, rows: RunRow[], allRows: R
     const dWin = pairedWinRateDelta ?? 0;
     const dCap = pairedCapturesDelta ?? 0;
     const dErr = pairedProviderErrorDelta ?? 0;
-    if (dWin > 0.05 && dErr <= 0 && dCap >= 0) {
+    const dPlies = pairedPliesPerWinDelta ?? 0;
+    // Labeling priority:
+    // 1) outcomes (win rate) and reliability (provider errors),
+    // 2) speed (plies to win),
+    // 3) captures as diagnostic context, not a hard gate.
+    if (dWin > 0.10 && dErr <= 0.05) {
       conclusion = "promising";
-    } else if (dWin < -0.05 || dErr > 0.05) {
+    } else if (dWin < -0.05 || dErr > 0.10) {
       conclusion = "regression";
-    } else if (Math.abs(dWin) <= 0.05 && Math.abs(dCap) <= 0.75 && Math.abs(dErr) <= 0.05) {
+    } else if (Math.abs(dWin) <= 0.05 && Math.abs(dErr) <= 0.05 && Math.abs(dPlies) <= 1.0) {
       conclusion = "inconclusive";
     } else {
       conclusion = "mixed";
     }
-    explanation = `Paired ${pairedGames} games (exact=${exactMatches}, alias=${aliasMatches}, unresolved=${unresolved}): winΔ=${fmt(dWin, 3)}, capturesΔ=${fmt(dCap, 3)}, providerErrΔ=${fmt(dErr, 3)}, plies/winΔ=${fmt(pairedPliesPerWinDelta, 3)}, latencyΔms=${fmt(pairedLatencyMsDelta, 1)}, tokens/turnΔ=${fmt(pairedTokensPerTurnDelta, 1)}.`;
+    explanation = `Paired ${pairedGames} games (exact=${exactMatches}, alias=${aliasMatches}, unresolved=${unresolved}): winΔ=${fmt(dWin, 3)}, providerErrΔ=${fmt(dErr, 3)}, plies/winΔ=${fmt(pairedPliesPerWinDelta, 3)}, capturesΔ=${fmt(dCap, 3)}, latencyΔms=${fmt(pairedLatencyMsDelta, 1)}, tokens/turnΔ=${fmt(pairedTokensPerTurnDelta, 1)}.`;
   }
 
   return {

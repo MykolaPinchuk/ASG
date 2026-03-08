@@ -34,6 +34,7 @@ Keep this file short. Update it only when something important changes.
 - `schemas/agent_api.schema.json` — agent API schema (`src/controllers/httpAgentController.ts` ↔ `src/cli/agentServer.ts`).
 - `experiments/` — committed experiment packs (state snapshots + links to run artifacts).
 - `experiments/POLICY.json` — default experiment seed profile and control rerun cadence.
+- `experiments/baselines/system_prompt_act_exp023.txt` — adopted prompt baseline after EXP023 (use for `--baseline-system-prompt-file` in future prompt ablations).
 
 ## Where results live (ignored by default)
 - `agent_logs/` — per-cycle logs and index.

@@ -22,3 +22,9 @@
 
 - A rejected experiment in tracking docs does not auto-revert runtime code.
 - Always verify runtime prompt/code state directly before launching the next experiment.
+
+## Current Prompt Baseline (as of 2026-03-08)
+
+- Adopted baseline prompt file for prompt-ablation guards:
+  - `experiments/baselines/system_prompt_act_exp023.txt`
+- When moving to stronger models, explicitly re-test whether high performance holds with less explicit guidance.

@@ -11,6 +11,10 @@
 - Immediate slice: refine EXP_014 (structured rationale) via single-variable ordering ablations, and improve rationale readability in viewer with clear section headers/paragraph formatting.
 
 ## Log
+- 2026-03-08 14:08:43 PDT — Adopted EXP023 as new prompt baseline for follow-up prompt ablations.
+  - Added canonical baseline file: `experiments/baselines/system_prompt_act_exp023.txt`.
+  - Updated docs pointers in `README.md` and `REPO_MAP.md` to use this file for `--baseline-system-prompt-file`.
+  - Recorded human concern: guidance may be near over-explicit; keep for current model but plan stronger-model A/B without such explicit instructions.
 - 2026-03-08 13:46:58 PDT — Completed EXP021 clean reruns + EXP022 follow-up and recorded outcome.
   - Added prompt-ablation isolation guard in `src/cli/evalModelsVsMix.ts` (requires baseline prompt file + expected line diff for `prompt.*` ablations, with fail-fast mismatch).
   - Re-ran clean EXP021 with isolation (`diffLines=1`): `variant_exp021_chain_sentence_s3_clean` vs `control` and `variant_exp021_chain_sentence_plus3_clean` vs `control_plus3` (both 3W/0D/0L).

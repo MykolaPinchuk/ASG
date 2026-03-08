@@ -318,6 +318,7 @@ function buildSystemPrompt(params: {
     "  if delta>0 attacker wins with delta remaining; if delta<0 defender wins with -delta; if delta==0 coin flip winner with 1 remaining.",
     "  This exact combat rule is applied each time a chained move enters a contested node in the same ply.",
     "  Chained moves can be used for very fast wins.",
+    "  You can move forces at any directions. This allows you to attack from any valid direction and bypass large enemy forces.",
     "  (Optional mechanics math) attacker win probability:",
     "  let deltaBase=A-D. Attacker wins if noise > -deltaBase; tie (noise == -deltaBase) is 50/50. Since noise is uniform over integers [-n..+n], you can compute this exactly if you want.",
     "- After combat (or if no defender forces), if you have forces>0 and enemy has 0 at a node, you capture it (owner becomes you).",

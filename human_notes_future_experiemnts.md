@@ -1,5 +1,9 @@
 ## some experiemnts to try:
 
+- [recorded 2026-03-08] Adopt EXP023 as new prompt baseline for this model family (faster wins + better win delta vs legacy baseline).
+- [concern, recorded 2026-03-08] Guidance may be becoming too explicit/instruction-heavy. Keep this as pragmatic baseline for now, but revisit when testing stronger models.
+- [future check] For stronger models, run A/B where explicit chain-direction guidance is removed/reduced to test whether similar performance can emerge without hand-holding.
+
 - [recorded 2026-03-08] EXP021 (chain combat clarification) looked somewhat promising: better win outcomes on matched 6 seeds, but not dramatic.
 - [recorded 2026-03-08] EXP022 (EXP021 + "chained moves can be used for very fast wins") did not meet expectation: wins stayed high, but captures dropped more and provider-error turns increased vs baseline.
 
