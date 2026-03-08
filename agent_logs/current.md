@@ -11,6 +11,35 @@
 - Immediate slice: refine EXP_014 (structured rationale) via single-variable ordering ablations, and improve rationale readability in viewer with clear section headers/paragraph formatting.
 
 ## Log
+- 2026-03-08 12:35:44 PDT — Extended high-level experiment dashboard with latency + token metrics.
+  - Updated `src/cli/indexExperimentsHighLevel.ts` to derive `AvgLatencyMs` from `game_metrics.jsonl` (weighted by agent turns) and `AvgTokens/Turn` from `turn_metrics.jsonl`.
+  - Added paired deltas `LatencyΔms` and `TokensΔ/Turn`.
+  - Regenerated `runs/experiment_logs/EXPERIMENTS_SUMMARY.md` and `.csv`.
+- 2026-03-08 12:32:49 PDT — Added `Plies/Win` metrics to high-level experiment dashboard.
+  - Updated `src/cli/indexExperimentsHighLevel.ts` to derive per-run `avgPliesWhenWin` from `game_metrics.jsonl`.
+  - Added columns in `runs/experiment_logs/EXPERIMENTS_SUMMARY.md` and `.csv`: `Plies/Win` and `Plies/WinΔ`.
+  - Regeneration command unchanged: `npm run exp:summary`.
+- 2026-03-08 12:29:05 PDT — Fixed high-level experiment summary baseline pairing.
+  - Updated `src/cli/indexExperimentsHighLevel.ts` to resolve baseline aliases across experiments (same model/opponent/seeds, with control-like fallback) instead of requiring exact condition id only.
+  - Regenerated `runs/experiment_logs/EXPERIMENTS_SUMMARY.md` and `.csv`; EXP015 and EXP020 now compare against existing control data rather than `needs_control`.
+- 2026-03-08 12:21:39 PDT — Added one-row-per-experiment dashboard (requested high-level source of truth).
+  - Implemented `src/cli/indexExperimentsHighLevel.ts` + npm script `exp:summary`.
+  - Generated `runs/experiment_logs/EXPERIMENTS_SUMMARY.md` and `.csv` from all `runs/experiment_logs/**/summary.json`.
+  - Dashboard includes one line per experiment with aggregate W/D/L, win rate, captures, provider errors, paired deltas, auto conclusion, and short explanation.
+  - Updated discoverability in `REPO_MAP.md` and `experiments/README.md`.
+- 2026-03-08 12:15:35 PDT — Added run-level experiment source-of-truth registry.
+  - Implemented `src/cli/indexExperimentRuns.ts` and npm script `exp:index-runs`.
+  - Generated `runs/experiment_logs/INDEX.md` + `INDEX.csv` from all `runs/experiment_logs/**/summary.json` files.
+  - Clarified docs: `experiments/README.md` and `REPO_MAP.md` now distinguish pack-level index (`experiments/INDEX.*`) vs run-level index (`runs/experiment_logs/INDEX.*`).
+- 2026-03-08 12:05:12 PDT — Ran EXP020 first batch after prompt-intro change.
+  - Command: `npm run -s agent:eval-vs-mix -- --provider-name openrouter --models google/gemini-3.1-flash-lite-preview --opponent greedy --seeds 301,302,303 --reasoning-effort medium --rationale-style concise --use-tools false --tools-mode off --stream off --experiment-id EXP_020_prompt_intro_lines --condition-id variant_exp020_intro2_s3 --baseline-condition-id control_prev_prompt_s3 --ablation-key prompt.system_intro_text`
+  - Result: 3W / 0D / 0L, 0 provider-error turns, captureRate=100%.
+  - Artifacts: `runs/experiment_logs/2026-03-08T12-00-00-841PDT_openrouter_greedy/{summary.json,manifest.json,game_metrics.jsonl,turn_metrics.jsonl}`
+  - Replays: `replays/model_evals/2026-03-08T12-00-00-874PDT/`
+- 2026-03-08 11:59:09 PDT — EXP020 prompt variant setup (queued run preparation).
+  - Verified `human_experiment_notes/EXP020_instructions.txt` differs from baseline `system_prompt_act.txt` only by 2 added top instruction lines (plus a blank separator).
+  - Applied those 2 lines to runtime system prompt construction in `src/providers/openaiCompat.ts` (at the top of `buildSystemPrompt`).
+  - `npm run -s typecheck` passed.
 - 2026-03-07 20:40:35 PST — Added queued future-experiment doc and recorded new idea for later run.
   - Created `docs/planning/FUTURE_EXPERIMENT_IDEAS.md` as a parking lot for planned-but-not-run experiments.
   - Added `EXP_016_enemy_supply_salience_sentence` (single sentence prompting explicit enemy supply-state evaluation) with suggested A/B setup and first 3 seeds.

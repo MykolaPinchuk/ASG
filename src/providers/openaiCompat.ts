@@ -285,6 +285,8 @@ function buildSystemPrompt(params: {
 
   return [
     "You are an agent that plays a deterministic, turn-based strategy game.",
+    "You must think carefully before taking action. Your goal is to win in such a game. In the game does not end at this turn, then you will make next turn from the same prompt as this one.",
+    "Before taking any action, make sure you understand game rules, thought about current game state, and have a strategy/plan.",
     "You must respond with VALID JSON ONLY (no markdown, no code fences, no commentary).",
     "Your response must start with '{' and end with '}' (a single JSON object).",
     "Do NOT output any text outside the JSON object.",

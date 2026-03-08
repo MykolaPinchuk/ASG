@@ -39,6 +39,8 @@ Keep this file short. Update it only when something important changes.
 - `agent_logs/` — per-cycle logs and index.
 - `replays/` — replay outputs (ignored; keep examples small if ever committed).
 - `runs/` — per-run outputs (ignored).
+- `runs/experiment_logs/INDEX.md` — run-level source-of-truth table for all logged experiment runs (`npm run exp:index-runs`).
+- `runs/experiment_logs/EXPERIMENTS_SUMMARY.md` — one-row-per-experiment high-level dashboard with aggregate metrics + conclusion (`npm run exp:summary`).
 
 ## Core runtime (engine → replay)
 - `src/game/engine.ts` — turn/ply resolution and state transitions.
@@ -67,6 +69,8 @@ Keep this file short. Update it only when something important changes.
 - `src/cli/analyzeReplays.ts` — summarize replay folders + paired A/B deltas (`npm run analyze:replays`).
 - `src/cli/experimentPack.ts` — materialize experiment pack from control/variant manifests (`npm run exp:pack`).
 - `src/cli/reportExperiment.ts` — comprehensive experiment report + interpretation (`npm run exp:report`).
+- `src/cli/indexExperimentRuns.ts` — build run-level registry from `runs/experiment_logs/**/summary.json` (`npm run exp:index-runs`).
+- `src/cli/indexExperimentsHighLevel.ts` — build one-row-per-experiment summary with conclusions (`npm run exp:summary`).
 - `src/experiments/indexRegistry.ts` — maintains `experiments/INDEX.md` + `INDEX.csv` with one row per experiment.
 
 ## Local-only directories (ignored)

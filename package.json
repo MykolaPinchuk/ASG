@@ -36,6 +36,10 @@
     "exp:pack": "tsx src/cli/experimentPack.ts"
     ,
     "exp:report": "tsx src/cli/reportExperiment.ts"
+    ,
+    "exp:index-runs": "tsx src/cli/indexExperimentRuns.ts"
+    ,
+    "exp:summary": "tsx src/cli/indexExperimentsHighLevel.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

@@ -20,3 +20,13 @@ Each ablation should have one folder:
 Top-level indexes:
 - `experiments/INDEX.md`
 - `experiments/INDEX.csv`
+
+Run-level index (all executed experiment logs, including runs not yet packed into `experiments/`):
+- `runs/experiment_logs/INDEX.md`
+- `runs/experiment_logs/INDEX.csv`
+- regenerate with: `npm run exp:index-runs`
+
+High-level one-row-per-experiment dashboard:
+- `runs/experiment_logs/EXPERIMENTS_SUMMARY.md`
+- `runs/experiment_logs/EXPERIMENTS_SUMMARY.csv`
+- regenerate with: `npm run exp:summary`

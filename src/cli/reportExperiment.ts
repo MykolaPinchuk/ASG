@@ -3,6 +3,8 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { pacificIsoString } from "../utils/pacificTime.js";
 import { isControlRerunDue, loadExperimentPolicy } from "../experiments/policy.js";
 import { updateExperimentsIndexRegistry } from "../experiments/indexRegistry.js";
+import { generateExperimentRunsIndex } from "./indexExperimentRuns.js";
+import { generateExperimentsHighLevelSummary } from "./indexExperimentsHighLevel.js";
 
 type JsonRow = Record<string, unknown>;
 
@@ -588,6 +590,8 @@ async function main() {
   }
 
   await updateExperimentsIndexRegistry(path.join(repoRoot, "experiments"));
+  await generateExperimentRunsIndex({ repoRoot });
+  await generateExperimentsHighLevelSummary({ repoRoot });
 
   console.log(`Wrote: ${path.relative(repoRoot, outMd)}`);
   console.log(`Wrote: ${path.relative(repoRoot, outJson)}`);
@@ -595,6 +599,10 @@ async function main() {
   console.log(`Wrote: ${path.relative(repoRoot, interpretationJsonPath)}`);
   console.log(`Updated: experiments/INDEX.md`);
   console.log(`Updated: experiments/INDEX.csv`);
+  console.log(`Updated: runs/experiment_logs/INDEX.md`);
+  console.log(`Updated: runs/experiment_logs/INDEX.csv`);
+  console.log(`Updated: runs/experiment_logs/EXPERIMENTS_SUMMARY.md`);
+  console.log(`Updated: runs/experiment_logs/EXPERIMENTS_SUMMARY.csv`);
 }
 
 main().catch((err) => {
