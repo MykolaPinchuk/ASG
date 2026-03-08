@@ -132,6 +132,37 @@
         font-size: 12px;
         line-height: 1.35;
       }
+      #rationale {
+        font-size: 12px;
+        line-height: 1.4;
+        color: rgba(232, 238, 252, 0.95);
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .rationaleSection {
+        margin: 0 0 10px 0;
+        padding: 8px 9px;
+        border: 1px solid rgba(232, 238, 252, 0.14);
+        border-radius: 8px;
+        background: rgba(232, 238, 252, 0.03);
+      }
+      .rationaleSection:last-child {
+        margin-bottom: 0;
+      }
+      .rationaleSectionTitle {
+        margin: 0 0 5px 0;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: rgba(232, 238, 252, 0.86);
+      }
+      .rationaleSectionBody {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: rgba(232, 238, 252, 0.96);
+      }
       .help {
         font-size: 12px;
         line-height: 1.35;
@@ -356,7 +387,7 @@
         </div>
         <div class="block">
           <h2>Rationale</h2>
-          <pre id="rationale">—</pre>
+          <div id="rationale">—</div>
         </div>
         <div class="block">
           <h2>Actions</h2>
@@ -727,6 +758,110 @@
         }
       }
 
+      const rationaleSectionOrder = [
+        { key: "current_game_state", title: "Current Game State" },
+        { key: "enemy_state", title: "Enemy State" },
+        { key: "agent_thoughts_plans", title: "Agent Thoughts and Plans" },
+        { key: "agent_actions", title: "Agent Actions" },
+      ];
+
+      const rationaleHeadingAliases = {
+        "current game state": "current_game_state",
+        "game state": "current_game_state",
+        "enemy state": "enemy_state",
+        enemy: "enemy_state",
+        "agent thoughts and plans": "agent_thoughts_plans",
+        "thoughts and plans": "agent_thoughts_plans",
+        plans: "agent_thoughts_plans",
+        "agent actions": "agent_actions",
+        "current actions": "agent_actions",
+        actions: "agent_actions",
+      };
+
+      function normalizeHeading(text) {
+        return String(text || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+      }
+
+      function parseRationaleSections(text) {
+        const sections = new Map();
+        const leadingLines = [];
+        let activeKey = null;
+        let activeLines = [];
+
+        function flushActive() {
+          if (!activeKey) return;
+          const content = activeLines.join("\n").trim();
+          if (!content) return;
+          const prev = sections.get(activeKey);
+          sections.set(activeKey, prev ? `${prev}\n\n${content}` : content);
+        }
+
+        const lines = String(text || "").split(/\r?\n/);
+        for (const line of lines) {
+          const headingMatch = line.match(/^\s*(?:[-*]\s*)?(?:#{1,6}\s*)?([A-Za-z][A-Za-z0-9 ]{1,80})\s*:\s*(.*)$/);
+          const heading = headingMatch ? normalizeHeading(headingMatch[1]) : "";
+          const key = heading ? rationaleHeadingAliases[heading] : undefined;
+          if (key) {
+            flushActive();
+            activeKey = key;
+            activeLines = [];
+            const inline = (headingMatch?.[2] ?? "").trim();
+            if (inline) activeLines.push(inline);
+            continue;
+          }
+          if (activeKey) activeLines.push(line);
+          else leadingLines.push(line);
+        }
+        flushActive();
+
+        return {
+          sections,
+          leadingText: leadingLines.join("\n").trim(),
+        };
+      }
+
+      function appendRationaleSection(title, content) {
+        const section = document.createElement("section");
+        section.className = "rationaleSection";
+        const header = document.createElement("div");
+        header.className = "rationaleSectionTitle";
+        header.textContent = title;
+        const body = document.createElement("div");
+        body.className = "rationaleSectionBody";
+        body.textContent = content;
+        section.appendChild(header);
+        section.appendChild(body);
+        rationale.appendChild(section);
+      }
+
+      function renderRationaleText(text) {
+        rationale.replaceChildren();
+        const raw = typeof text === "string" ? text.trim() : "";
+        if (!raw) {
+          rationale.textContent = "—";
+          return;
+        }
+
+        const parsed = parseRationaleSections(raw);
+        if (!parsed.sections.size) {
+          rationale.textContent = raw;
+          return;
+        }
+
+        let rendered = 0;
+        for (const spec of rationaleSectionOrder) {
+          const content = parsed.sections.get(spec.key);
+          if (!content) continue;
+          appendRationaleSection(spec.title, content);
+          rendered += 1;
+        }
+        if (parsed.leadingText) appendRationaleSection("Other Notes", parsed.leadingText);
+        if (rendered === 0 && !parsed.leadingText) rationale.textContent = raw;
+      }
+
       function clearHighlights() {
         if (!nodeEls) return;
         for (const el of Object.values(nodeEls)) {
@@ -887,7 +1022,7 @@
             `Supply: P1=${frame.state.supplies?.P1 ?? "?"} P2=${frame.state.supplies?.P2 ?? "?"}`,
             `Settings: actionBudget=${replay.scenario.settings.actionBudget}, baseIncome=${replay.scenario.settings.baseIncome}, turnCapPlies=${replay.scenario.settings.turnCapPlies}`,
           ].join("\n");
-          rationale.textContent = "—";
+          renderRationaleText(undefined);
           actions.textContent = "—";
           events.textContent = "—";
           clearHighlights();
@@ -966,7 +1101,7 @@
           .filter(Boolean)
           .join("\n");
 
-        rationale.textContent = t.rationaleText ?? "—";
+        renderRationaleText(t.rationaleText);
         actions.textContent =
           Array.isArray(t.actions) && t.actions.length > 0 ? t.actions.map((a, i) => `${i + 1}. ${formatAction(a)}`).join("\n") : "—";
         events.textContent =

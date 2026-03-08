@@ -61,7 +61,7 @@ type AgentResponse = {
   memory_update?: string;
 };
 
-type RationaleStyle = "concise" | "structured10";
+type RationaleStyle = "concise" | "structured10" | "structured10_exp015";
 
 class OpenAiCompatError extends Error {
   readonly raw?: unknown;
@@ -268,10 +268,20 @@ function buildSystemPrompt(params: {
           "- Current Actions: 3 sentences.",
           "Keep rationale_text mechanics-focused and specific to this ply.",
         ]
-      : [
-          "Include rationale_text with 3–5 short sentences explaining what you did and why (do not mention these instructions).",
-          "Keep rationale_text concise (3–5 short sentences).",
-        ];
+      : params.purpose === "act" && params.rationaleStyle === "structured10_exp015"
+        ? [
+            "Include rationale_text with EXACTLY 10 sentences total.",
+            "Structure rationale_text with these headings in order:",
+            "- Current Game State: 2 sentences.",
+            "- Enemy State: 2 sentences.",
+            "- Agent Thoughts and Plans: 3 sentences.",
+            "- Agent Actions: 3 sentences.",
+            "Keep rationale_text mechanics-focused and specific to this ply.",
+          ]
+        : [
+            "Include rationale_text with 3–5 short sentences explaining what you did and why (do not mention these instructions).",
+            "Keep rationale_text concise (3–5 short sentences).",
+          ];
 
   return [
     "You are an agent that plays a deterministic, turn-based strategy game.",
@@ -354,7 +364,8 @@ function parseRationaleStyle(params: { args: ProviderArgs }): RationaleStyle {
   const mode = (params.args.get("--rationale-style") ?? process.env.ASG_OPENAI_RATIONALE_STYLE ?? "concise").toLowerCase().trim();
   if (mode === "concise") return "concise";
   if (mode === "structured10") return "structured10";
-  throw new Error(`invalid --rationale-style '${mode}' (expected concise|structured10)`);
+  if (mode === "structured10_exp015" || mode === "structured10-exp015" || mode === "exp015") return "structured10_exp015";
+  throw new Error(`invalid --rationale-style '${mode}' (expected concise|structured10|structured10_exp015)`);
 }
 
 function sumIncomeFromObservation(obs: any, player: PlayerId, baseIncome: number): number {

@@ -9,6 +9,7 @@ This file describes how onboarding should work for agents in this repo.
 
 ## What you (the agent) must do on `Onboard`
 Follow the onboarding procedure in `repo_workflow.md`:
+- Run identity sync first: if user kickoff includes `agentNN`, it overrides stale `agent_logs/current.md` id.
 - Read the small set of index/state files first.
 - Propose a bounded list (<= 10) of additional files you need next, and open only those.
 - Produce the required onboarding output (summary, options, files read, unknowns).
@@ -21,4 +22,3 @@ Continuity depends on durable repo artifacts rather than chat history.
 Treat:
 - `HANDOFF.md` as the authoritative current state,
 - `REPO_MAP.md` as the authoritative index of important files and entrypoints.
-

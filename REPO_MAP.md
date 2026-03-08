@@ -18,6 +18,7 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/PROMPT_CONTEXT_TOKEN_BASELINE.md` — measured prompt/context token budget baseline and representation cost breakdown.
 - `docs/planning/V06_EXPERIMENTS.md` — v06 backlog of agent-improvement experiments (warmup/memory/repair loops).
 - `docs/planning/V07_COMPLEXITY_EXPERIMENT.md` — v07 plan: behavior-focused experiments in current setup (harness/prompt/context), with model qualification by reliability/latency/telemetry.
+- `docs/planning/FUTURE_EXPERIMENT_IDEAS.md` — queued experiment ideas to run later (parking lot).
 - `docs/planning/IMPLEMENTATION_PLAN.md` — milestone plan.
 - `docs/planning/ROADMAP.md` — post-MVP direction.
 - `docs/diagnostics/2026-01-27_oss_openai_compat_debugging.md` — OSS provider debugging notes (failure modes + tests).
@@ -86,3 +87,4 @@ Keep this file short. Update it only when something important changes.
 - `src/cli/experimentPack.ts` — experiment pack generator with one-key ablation guard.
 - `src/cli/reportExperiment.ts` — experiment comparison + interpretation report generator.
 - `src/experiments/indexRegistry.ts` — shared experiment registry updater.
+- `docs/planning/FUTURE_EXPERIMENT_IDEAS.md` — queued experiment parking lot (includes EXP_016 enemy-supply salience sentence idea).

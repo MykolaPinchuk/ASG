@@ -29,6 +29,24 @@ Where:
 
 If you create a commit outside the `checkpoint`/`handoff` skills, still follow the same format.
 
+## Agent identity authority (mandatory)
+Prevent ID drift between chat kickoff tags and repo state.
+
+- Identity sources:
+  - Session kickoff tag in user text (pattern `agentNN`, e.g. `[ASG ... agent12]`)
+  - `agent_logs/current.md` -> `## Agent` -> `id: agentNN`
+- Precedence rule:
+  - If kickoff tag is present for this chat cycle, it is authoritative and MUST override stale `current.md` id.
+  - If kickoff tag is absent, use `current.md` id.
+- Mandatory onboarding sync:
+  - During `Onboard`, compare kickoff tag vs `current.md` id.
+  - If mismatch, update `current.md` id before any other logging/commits.
+  - Append a log line in `agent_logs/current.md`:
+    - `Identity sync: session_tag=<...> current_md_before=<...> current_md_after=<...> synced=<true|false>`
+- Commit guard:
+  - Before the first commit in a cycle, verify commit prefix `agentNN:` matches the current synced `current.md` id.
+  - If mismatch, stop and sync `current.md` first.
+
 ## Triggers
 - User message **exactly**: `Onboard`
   - Perform the onboarding procedure below.
@@ -61,6 +79,7 @@ Note: agents may also create additional safe checkpoint commits after coherent m
    - unknowns / risks (<= 5 bullets)
 
 4) Logging:
+   - First, perform the mandatory identity sync step above.
    - Append a short entry to `agent_logs/current.md` capturing understanding and intended next steps.
 
 ## Logging (during work)
@@ -71,3 +90,7 @@ Write an entry:
 - after any failure worth remembering
 - after important new information was discovered/learnt
 - in general log anything which future agents may potentially find useful
+
+Note on rotated logs:
+- Filenames like `agent_logs/YYYY-MM-DD_agentNN.md` are historical cycle artifacts.
+- Do not infer active chat identity from those filenames; active identity is only `agent_logs/current.md` after onboarding sync.
