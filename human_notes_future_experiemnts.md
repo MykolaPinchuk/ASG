@@ -1,3 +1,133 @@
+## Experiment taxonomy and priority
+
+### 1. Memory / statefulness
+
+Goal: move beyond the current fully stateless harness and test whether carrying forward information across plies materially improves rule-following, tactical coherence, and exploit detection.
+
+Why this matters:
+- This is the clearest known limitation of the current setup.
+- It changes agent capability, not just wording.
+- It should be explored in the current simple environment before changing game rules.
+
+Candidate directions:
+- inline memory update appended each turn
+- bounded rolling history of states/actions/rationales
+- separate warmup / pre-play exploration phase
+- self-written notes passed into future turns
+- post-play reflection, critique, and suggestions
+- provide full logs of several games to a Thinker agent and ask to analysze them, both agent behavior, and opponent behavior.
+
+Priority: highest near-term category.
+
+### 2. Prompt simplification
+
+Goal: reduce instruction heaviness and identify the minimum prompt that still preserves strong behavior.
+
+Why this matters:
+- Current prompt may be effective but over-specified.
+- This is important for robustness and future transfer to stronger models.
+
+Candidate directions:
+- remove or soften chain-direction guidance
+- remove or soften action-budget-use reminders
+- simplify explicit tactical wording while keeping format/mechanics clear
+
+Priority: medium.
+
+### 3. Behavior probes
+
+Goal: test narrow hypotheses about specific agent weaknesses in the current setup.
+
+Why this matters:
+- These experiments are cheap and interpretable.
+- They help identify which missing behaviors are actually causal.
+
+Candidate directions:
+- tell agent to use full action budget unless there is a reason not to
+- tell agent to inspect enemy positioning and exploit weak points
+- add enemy-supply salience reminder
+- tell agent how `greedy` works and test whether it exploits this
+
+Priority: medium-high, especially after or alongside early memory work.
+
+### 4. Harness / control mechanics
+
+Goal: improve runtime behavior without changing core game rules.
+
+Why this matters:
+- Some gains may come from better control policy rather than prompt wording.
+- This can reduce provider noise and improve observability.
+
+Candidate directions:
+- retry / repair loop changes
+- timeout budget tuning
+- reasoning-effort or rationale-style changes
+- provider-routing controls
+
+Priority: medium, but not the main scientific question right now.
+
+### 5. New game setups / rules
+
+Goal: test whether findings transfer once the environment becomes meaningfully different.
+
+Why this matters:
+- Long-term this is necessary.
+- Short-term it is higher variance and easier to misread.
+
+Candidate directions:
+- larger or differently structured maps
+- altered supply or combat rules
+- more complex action space
+- future partial observability or fog-of-war
+
+Priority: later, after at least one stronger agent setup exists in the current environment.
+
+### 6. Agent-vs-agent evaluation
+
+Goal: test behavior against adaptive opponents rather than only fixed scripted baselines.
+
+Why this matters:
+- Agent-vs-greedy can hide weaknesses.
+- Self-play or agent-vs-agent is closer to the long-run target.
+
+Candidate directions:
+- current agent vs current agent
+- model A vs model B
+- self-play under fixed seeds
+
+Priority: later. Useful once one stack is stable enough to be a meaningful benchmark.
+
+## Recommended order
+
+1. Memory / statefulness in the current setup.
+2. Targeted behavior probes on top of that baseline.
+3. Prompt simplification once we know which guidance is still needed.
+4. Harness/control tuning where it clearly improves reliability or observability.
+5. New game setups / rules.
+6. Agent-vs-agent evaluation.
+
+## Shortlist of near-term experiments
+
+### Tier 1: do soon
+
+- Memory A: append a short structured memory update each ply, generated inline by the acting model.
+- Memory B: append a bounded rolling history of recent states/actions/rationales.
+- Behavior probe: explicitly tell the agent to use full action budget unless there is a concrete reason not to.
+- Behavior probe: explicitly tell the agent to inspect enemy supply nodes and cheap recapture opportunities.
+
+### Tier 2: do after first memory signal
+
+- Behavior probe: tell the agent to inspect enemy positioning for immediate exploit opportunities.
+- Opponent-model probe: tell the agent how `greedy` behaves and test whether it exploits this.
+- Prompt simplification: remove some explicit chain-direction/helpful tactical wording from the current baseline and measure degradation.
+
+### Tier 3: later / broader scope
+
+- Replay-analysis loop: provide one successful and one unsuccessful game history and ask for targeted improvement advice.
+- Larger-scale replay analysis: provide a batch of games and ask the model to produce future-agent instructions.
+- New map/rule experiments.
+- Agent-vs-agent baselines.
+
 ## some experiemnts to try:
 
 - [recorded 2026-03-09] `EXP_034_mimo_low_explicit_vs_less_explicit_s6` (post-EXP024 rules): Mimo low (Xiaomi-only, timeout120) went 6/6 under both prompts, but current explicit baseline was materially more efficient than older less-explicit instructions (avg plies 7.0 vs 11.33; lower latency/tokens per turn).
