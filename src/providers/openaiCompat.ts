@@ -4,6 +4,7 @@ import {
   loadOssModelsConfig,
   normalizeBaseUrl,
 } from "../llm/models.js";
+import { readFile } from "node:fs/promises";
 
 type PlayerId = "P1" | "P2";
 
@@ -62,6 +63,7 @@ type AgentResponse = {
 };
 
 type RationaleStyle = "concise" | "structured10" | "structured10_exp015";
+type CombatTiePromptMode = "current" | "pre_exp024";
 
 class OpenAiCompatError extends Error {
   readonly raw?: unknown;
@@ -256,6 +258,7 @@ function buildSystemPrompt(params: {
   allowMemoryUpdate: boolean;
   purpose: "act" | "repair" | "warmup";
   rationaleStyle: RationaleStyle;
+  combatTiePromptMode: CombatTiePromptMode;
 }) {
   const rationaleGuidance =
     params.purpose === "act" && params.rationaleStyle === "structured10"
@@ -315,12 +318,16 @@ function buildSystemPrompt(params: {
     "- Move transfers forces along an edge. You cannot move more forces than you have at the 'from' node.",
     "- If after a move both sides have forces at the destination, combat resolves immediately with randomness:",
     "  let A=attackerStrength, D=defenderStrength, n=floor(min(A,D)*combatVarianceFraction) (at least 1), noise ~ Uniform[-n, +n], delta=(A-D)+noise.",
-    "  if delta>0 attacker wins with delta remaining; if delta<0 defender wins with -delta; if delta==0 defender wins with 1 remaining.",
+    params.combatTiePromptMode === "pre_exp024"
+      ? "  if delta>0 attacker wins with delta remaining; if delta<0 defender wins with -delta; if delta==0 coin flip winner with 1 remaining."
+      : "  if delta>0 attacker wins with delta remaining; if delta<0 defender wins with -delta; if delta==0 defender wins with 1 remaining.",
     "  This exact combat rule is applied each time a chained move enters a contested node in the same ply.",
     "  Chained moves can be used for very fast wins.",
     "  You can move forces at any directions. This allows you to attack from any valid direction and bypass large enemy forces.",
     "  (Optional mechanics math) attacker win probability:",
-    "  let deltaBase=A-D. Attacker wins if noise > -deltaBase. Since noise is uniform over integers [-n..+n], you can compute this exactly if you want.",
+    params.combatTiePromptMode === "pre_exp024"
+      ? "  let deltaBase=A-D. Attacker wins if noise > -deltaBase; tie (noise == -deltaBase) is 50/50. Since noise is uniform over integers [-n..+n], you can compute this exactly if you want."
+      : "  let deltaBase=A-D. Attacker wins if noise > -deltaBase. Since noise is uniform over integers [-n..+n], you can compute this exactly if you want.",
     "- After combat (or if no defender forces), if you have forces>0 and enemy has 0 at a node, you capture it (owner becomes you).",
     "- You WIN immediately if you capture the enemy HQ node.",
     "Rules reminders:",
@@ -369,6 +376,28 @@ function parseRationaleStyle(params: { args: ProviderArgs }): RationaleStyle {
   if (mode === "structured10") return "structured10";
   if (mode === "structured10_exp015" || mode === "structured10-exp015" || mode === "exp015") return "structured10_exp015";
   throw new Error(`invalid --rationale-style '${mode}' (expected concise|structured10|structured10_exp015)`);
+}
+
+function parseCombatTiePromptMode(raw: string | undefined): CombatTiePromptMode {
+  const mode = (raw ?? "current").toLowerCase().trim();
+  if (mode === "current" || mode === "post_exp024" || mode === "post-exp024") return "current";
+  if (mode === "pre_exp024" || mode === "pre-exp024" || mode === "legacy") return "pre_exp024";
+  throw new Error(`invalid --combat-tie-prompt-mode '${raw}' (expected current|pre_exp024)`);
+}
+
+async function resolveSystemPromptOverride(params: { args: ProviderArgs }): Promise<string | undefined> {
+  const filePath = params.args.get("--system-prompt-file") ?? process.env.ASG_OPENAI_SYSTEM_PROMPT_FILE ?? undefined;
+  if (!filePath) return undefined;
+  const cached = systemPromptFileCache.get(filePath);
+  if (cached !== undefined) return cached;
+  try {
+    const text = await readFile(filePath, "utf8");
+    systemPromptFileCache.set(filePath, text);
+    return text;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`failed to read --system-prompt-file '${filePath}': ${msg}`);
+  }
 }
 
 function sumIncomeFromObservation(obs: any, player: PlayerId, baseIncome: number): number {
@@ -618,19 +647,32 @@ export function buildOpenAiCompatPromptSnapshot(params: {
   purpose: "act" | "repair" | "warmup";
   thinkHint: boolean;
   rationaleStyle: RationaleStyle;
+  combatTiePromptMode?: CombatTiePromptMode | string;
+  systemPromptOverrideText?: string;
   memory?: string;
   repairFeedback?: unknown;
 }): {
   systemPrompt: string;
   userPrompt: string;
 } {
+  const combatTiePromptMode = parseCombatTiePromptMode(
+    typeof params.combatTiePromptMode === "string" ? params.combatTiePromptMode : process.env.ASG_COMBAT_TIE_PROMPT_MODE,
+  );
   const advertisedSec = Math.min(40, Math.max(1, Math.floor(params.timeoutMs / 1000)));
   const softSec = Math.max(1, advertisedSec - 2);
-  const systemPrompt = [
-    buildSystemPrompt({ allowMemoryUpdate: params.allowMemoryUpdate, purpose: params.purpose, rationaleStyle: params.rationaleStyle }),
-    `Time limit: you must output the JSON within ${advertisedSec} seconds (prefer within ${softSec} seconds). If you fail to respond within ${advertisedSec} seconds, you will likely lose the game.`,
-    ...(params.thinkHint ? ["Think silently and choose legal actions."] : []),
-  ].join("\n");
+  const systemPrompt =
+    typeof params.systemPromptOverrideText === "string"
+      ? params.systemPromptOverrideText
+      : [
+          buildSystemPrompt({
+            allowMemoryUpdate: params.allowMemoryUpdate,
+            purpose: params.purpose,
+            rationaleStyle: params.rationaleStyle,
+            combatTiePromptMode,
+          }),
+          `Time limit: you must output the JSON within ${advertisedSec} seconds (prefer within ${softSec} seconds). If you fail to respond within ${advertisedSec} seconds, you will likely lose the game.`,
+          ...(params.thinkHint ? ["Think silently and choose legal actions."] : []),
+        ].join("\n");
 
   const userPrompt =
     params.promptMode === "compact"
@@ -655,6 +697,7 @@ export function buildOpenAiCompatPromptSnapshot(params: {
 const resolvedModelCache = new Map<string, string>();
 const autoCandidateCache = new Map<string, string[]>();
 const deniedAutoModels = new Map<string, Map<string, { untilMs: number; reason: string }>>();
+const systemPromptFileCache = new Map<string, string>();
 
 const DEFAULT_OSS_BASELINES_CONFIG_PATH = "configs/oss_baselines.json";
 const AUTO_MODEL_DENY_TTL_MS = 5 * 60 * 1000;
@@ -1010,15 +1053,22 @@ export async function openAiCompatAct(params: {
   // (This keeps runs bounded even when providers are slow, and improves comparability.)
   const advertisedSec = Math.min(40, Math.max(1, Math.floor(timeoutMs / 1000)));
   const softSec = Math.max(1, advertisedSec - 2);
-  const system = [
-    buildSystemPrompt({
-      allowMemoryUpdate: !!params.allowMemoryUpdate,
-      purpose: params.purpose ?? "act",
-      rationaleStyle: parseRationaleStyle({ args }),
-    }),
-    `Time limit: you must output the JSON within ${advertisedSec} seconds (prefer within ${softSec} seconds). If you fail to respond within ${advertisedSec} seconds, you will likely lose the game.`,
-    ...(shouldAddThinkingHint({ args }) ? ["Think silently and choose legal actions."] : []),
-  ].join("\n");
+  const combatTiePromptMode = parseCombatTiePromptMode(
+    args.get("--combat-tie-prompt-mode") ?? process.env.ASG_COMBAT_TIE_PROMPT_MODE,
+  );
+  const systemPromptOverrideText = await resolveSystemPromptOverride({ args });
+  const system =
+    systemPromptOverrideText ??
+    [
+      buildSystemPrompt({
+        allowMemoryUpdate: !!params.allowMemoryUpdate,
+        purpose: params.purpose ?? "act",
+        rationaleStyle: parseRationaleStyle({ args }),
+        combatTiePromptMode,
+      }),
+      `Time limit: you must output the JSON within ${advertisedSec} seconds (prefer within ${softSec} seconds). If you fail to respond within ${advertisedSec} seconds, you will likely lose the game.`,
+      ...(shouldAddThinkingHint({ args }) ? ["Think silently and choose legal actions."] : []),
+    ].join("\n");
   const promptMode = (args.get("--prompt-mode") ?? process.env.ASG_OPENAI_PROMPT_MODE ?? "compact").toLowerCase();
   if (promptMode !== "full" && promptMode !== "compact") {
     throw new Error(`invalid --prompt-mode '${promptMode}' (expected full|compact)`);

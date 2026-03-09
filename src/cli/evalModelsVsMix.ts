@@ -337,6 +337,7 @@ async function evalOneModel(params: {
   reasoningEffort?: string;
   rationaleStyle?: string;
   reasoningSplit?: string;
+  systemPromptFile?: string;
   openrouterProviderOnly?: string;
   openrouterProviderOrder?: string;
   openrouterAllowFallbacks?: string;
@@ -405,6 +406,7 @@ async function evalOneModel(params: {
   if (params.reasoningEffort) serverArgs.push("--reasoning-effort", params.reasoningEffort);
   if (params.rationaleStyle) serverArgs.push("--rationale-style", params.rationaleStyle);
   if (params.reasoningSplit) serverArgs.push("--reasoning-split", params.reasoningSplit);
+  if (params.systemPromptFile) serverArgs.push("--system-prompt-file", params.systemPromptFile);
   if (params.openrouterProviderOnly) serverArgs.push("--openrouter-provider-only", params.openrouterProviderOnly);
   if (params.openrouterProviderOrder) serverArgs.push("--openrouter-provider-order", params.openrouterProviderOrder);
   if (params.openrouterAllowFallbacks) serverArgs.push("--openrouter-allow-fallbacks", params.openrouterAllowFallbacks);
@@ -793,6 +795,7 @@ async function main() {
   const reasoningEffort = args.get("--reasoning-effort") ?? undefined;
   const rationaleStyle = args.get("--rationale-style") ?? undefined;
   const reasoningSplit = args.get("--reasoning-split") ?? undefined;
+  const systemPromptFile = args.get("--system-prompt-file") ?? undefined;
   const openrouterProviderOnly = args.get("--openrouter-provider-only") ?? undefined;
   const openrouterProviderOrder = args.get("--openrouter-provider-order") ?? undefined;
   const openrouterAllowFallbacks = args.get("--openrouter-allow-fallbacks") ?? undefined;
@@ -943,6 +946,7 @@ async function main() {
   const memoryEnabled = parseOnOff(memory, false);
   const warmupMode = (warmup ?? "off").toLowerCase();
   const rationaleStyleResolved = parseRationaleStyle(rationaleStyle);
+  const systemPromptOverrideText = systemPromptFile ? await readFile(systemPromptFile, "utf8") : undefined;
   const promptSnapshot = buildOpenAiCompatPromptSnapshot({
     request: {
       api_version: "0.1",
@@ -961,6 +965,7 @@ async function main() {
     purpose: "act",
     thinkHint: thinkHintResolved,
     rationaleStyle: rationaleStyleResolved,
+    systemPromptOverrideText,
   });
   const systemPromptSha256 = sha256Hex(promptSnapshot.systemPrompt);
   let baselineSystemPromptSha256: string | undefined = undefined;
@@ -1051,6 +1056,7 @@ async function main() {
         reasoningEffort,
         rationaleStyle,
         reasoningSplit,
+        systemPromptFile,
         openrouterProviderOnly,
         openrouterProviderOrder,
         openrouterAllowFallbacks,

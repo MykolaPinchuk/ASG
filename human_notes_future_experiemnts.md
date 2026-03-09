@@ -1,5 +1,9 @@
 ## some experiemnts to try:
 
+- [recorded 2026-03-09] `EXP_034_mimo_low_explicit_vs_less_explicit_s6` (post-EXP024 rules): Mimo low (Xiaomi-only, timeout120) went 6/6 under both prompts, but current explicit baseline was materially more efficient than older less-explicit instructions (avg plies 7.0 vs 11.33; lower latency/tokens per turn).
+- [recorded 2026-03-09] Cross-model status (post-EXP024 rules): we have Mimo explicit+less-explicit and Gemini explicit (`EXP_024`) in comparable epoch, but **Gemini less-explicit in post-EXP024 epoch is still missing**, so strict 2x2 model comparison is incomplete.
+- [recorded 2026-03-09] Model-role decision: keep `xiaomi/mimo-v2-flash` as a **secondary** model for now; we may promote it to primary later if needed. Cost note: Mimo is estimated around **60% cheaper** than `google/gemini-3.1-flash-lite-preview`.
+
 - [recorded 2026-03-08] Adopt EXP023 as new prompt baseline for this model family (faster wins + better win delta vs legacy baseline).
 - [concern, recorded 2026-03-08] Guidance may be becoming too explicit/instruction-heavy. Keep this as pragmatic baseline for now, but revisit when testing stronger models.
 - [future check] For stronger models, run A/B where explicit chain-direction guidance is removed/reduced to test whether similar performance can emerge without hand-holding.
@@ -8,10 +12,6 @@
 - [recorded 2026-03-08] EXP022 (EXP021 + "chained moves can be used for very fast wins") did not meet expectation: wins stayed high, but captures dropped more and provider-error turns increased vs baseline.
 
 - [tried as exp015, no clear improvement] structured thinking: try better ordering. game state, then enemy state, then plans, then actions. and Have them display clearly as headlines in the UI. Do it as a harness-level parsing if posisble.
-
-- add one sentence to instructions to make it clear that combat rules apply any number of times per turn and are compatible with chained moves.
-
-- change combat resolution mechanics. delta=0 should be a win for defender. Defender should survive with 1 force left.
 
 - separately, try minimax m2.1 out.
 
