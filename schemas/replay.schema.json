@@ -276,6 +276,58 @@
       ]
     },
 
+    "ActionResultStatus": {
+      "type": "string",
+      "enum": ["applied", "invalid", "ignored_budget", "sanitized"]
+    },
+
+    "ActionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "submitted", "status", "events"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "submitted": { "$ref": "#/$defs/Action" },
+        "status": { "$ref": "#/$defs/ActionResultStatus" },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/Event" } },
+        "message": { "type": "string" }
+      }
+    },
+
+    "OwnerChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "from", "to"],
+      "properties": {
+        "location": { "$ref": "#/$defs/LocationId" },
+        "from": { "$ref": "#/$defs/Owner" },
+        "to": { "$ref": "#/$defs/Owner" }
+      }
+    },
+
+    "SupplyDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["P1", "P2"],
+      "properties": {
+        "P1": { "type": "integer" },
+        "P2": { "type": "integer" }
+      }
+    },
+
+    "TurnSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["captures", "combatCount", "invalidCount", "ownerChanges", "supplyDelta"],
+      "properties": {
+        "captures": { "type": "array", "items": { "$ref": "#/$defs/LocationId" } },
+        "combatCount": { "type": "integer", "minimum": 0 },
+        "invalidCount": { "type": "integer", "minimum": 0 },
+        "ownerChanges": { "type": "array", "items": { "$ref": "#/$defs/OwnerChange" } },
+        "supplyDelta": { "$ref": "#/$defs/SupplyDelta" }
+      }
+    },
+
     "GameResult": {
       "oneOf": [
         {
@@ -442,8 +494,12 @@
             "P2": { "$ref": "#/$defs/Observation" }
           }
         },
+        "submittedActions": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
         "actions": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
+        "actionResults": { "type": "array", "items": { "$ref": "#/$defs/ActionResult" } },
+        "summary": { "$ref": "#/$defs/TurnSummary" },
         "rationaleText": { "type": "string" },
+        "memoryUpdate": { "type": "string" },
         "latencyMs": { "type": "integer", "minimum": 0 },
         "controllerId": { "type": "string", "minLength": 1 },
         "diagnostics": { "$ref": "#/$defs/DecisionDiagnostics" },

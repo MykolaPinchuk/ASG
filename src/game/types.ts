@@ -74,6 +74,24 @@ export type Event =
       firstUpstreamStatus?: number;
     };
 
+export type ActionResultStatus = "applied" | "invalid" | "ignored_budget" | "sanitized";
+
+export interface ActionResult {
+  index: number;
+  submitted: Action;
+  status: ActionResultStatus;
+  events: Event[];
+  message?: string;
+}
+
+export interface TurnSummary {
+  captures: LocationId[];
+  combatCount: number;
+  invalidCount: number;
+  ownerChanges: Array<{ location: LocationId; from: Owner; to: Owner }>;
+  supplyDelta: Record<PlayerId, number>;
+}
+
 export type GameResult =
   | { type: "win"; winner: PlayerId; reason: "hq_captured" }
   | { type: "draw"; reason: "turn_cap" };
@@ -151,8 +169,12 @@ export interface TurnRecord {
   ply: number;
   player: PlayerId;
   observations: Record<PlayerId, Observation>;
+  submittedActions: Action[];
   actions: Action[];
+  actionResults: ActionResult[];
+  summary: TurnSummary;
   rationaleText?: string;
+  memoryUpdate?: string;
   latencyMs: number;
   controllerId?: string;
   diagnostics?: DecisionDiagnostics;

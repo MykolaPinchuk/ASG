@@ -57,9 +57,13 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
     turns.push({
       ply: observations[player].ply,
       player,
+      submittedActions: decision.actions,
       observations: { P1: observations.P1, P2: observations.P2 },
       actions: decision.actions,
+      actionResults: applied.actionResults,
+      summary: applied.summary,
       rationaleText: decision.rationaleText,
+      memoryUpdate: decision.memoryUpdate,
       latencyMs,
       controllerId: controller.id,
       diagnostics: decision.diagnostics,

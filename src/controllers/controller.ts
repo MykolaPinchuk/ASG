@@ -3,6 +3,7 @@ import type { Action, DecisionDiagnostics, Observation } from "../game/types.js"
 export interface ControllerOutput {
   actions: Action[];
   rationaleText?: string;
+  memoryUpdate?: string;
   latencyMs?: number;
   diagnostics?: DecisionDiagnostics;
 }

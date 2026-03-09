@@ -17,6 +17,7 @@ type AgentResponse = {
   api_version: string;
   actions: Action[];
   rationale_text?: string;
+  memory_update?: string;
   agent_info?: {
     provider?: string;
     baseUrl?: string;
@@ -303,7 +304,8 @@ function parseAgentResponse(json: unknown, expectedApiVersion: string): AgentRes
     }
   }
 
-  return { api_version: json.api_version, actions: actions as Action[], rationale_text, agent_info, server_diagnostics };
+  const memory_update = typeof json.memory_update === "string" ? json.memory_update : undefined;
+  return { api_version: json.api_version, actions: actions as Action[], rationale_text, memory_update, agent_info, server_diagnostics };
 }
 
 export type HttpAgentControllerParams = {
@@ -434,6 +436,7 @@ export class HttpAgentController implements Controller {
     return {
       actions: parsedResponse.actions,
       rationaleText: parsedResponse.rationale_text,
+      memoryUpdate: parsedResponse.memory_update,
       latencyMs,
       diagnostics: {
         httpStatus,
