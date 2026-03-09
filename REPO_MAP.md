@@ -54,6 +54,8 @@ Keep this file short. Update it only when something important changes.
 - `src/controllers/httpAgentController.ts` — game runner → HTTP agent API.
 - `src/cli/agentServer.ts` — HTTP agent server (providers: `stub`, `openai_compat`).
 - `src/providers/openaiCompat.ts` — OpenAI-compatible client + parsing/tooling behavior.
+  - Supports prompt override for controlled A/Bs: `--system-prompt-file` / `ASG_OPENAI_SYSTEM_PROMPT_FILE`.
+  - Supports OpenRouter provider routing controls: `--openrouter-provider-only`, `--openrouter-provider-order`, `--openrouter-allow-fallbacks`.
   - Note: per-turn retry metadata is recorded in replay diagnostics (`usedRetry`) and also injected as an `agent_retry` event for visibility in the viewer.
   - Note: per-turn token usage is now recorded in replay diagnostics (`diagnostics.tokenUsage`) when provider usage is available.
 
@@ -68,6 +70,7 @@ Keep this file short. Update it only when something important changes.
 ## Utility scripts
 - `src/cli/reportBatch.ts` — batch metrics report (`npm run report`).
 - `src/cli/analyzeReplays.ts` — summarize replay folders + paired A/B deltas (`npm run analyze:replays`).
+- `src/cli/evalModelsVsMix.ts` — primary eval harness (`npm run agent:eval-vs-mix`), including prompt-ablation guard and passthrough for provider-routing/prompt-override flags.
 - `src/cli/experimentPack.ts` — materialize experiment pack from control/variant manifests (`npm run exp:pack`).
 - `src/cli/reportExperiment.ts` — comprehensive experiment report + interpretation (`npm run exp:report`).
 - `src/cli/indexExperimentRuns.ts` — build run-level registry from `runs/experiment_logs/**/summary.json` (`npm run exp:index-runs`).

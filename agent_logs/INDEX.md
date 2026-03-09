@@ -18,3 +18,4 @@ Format:
 - 2026-03-05_agent00.md — v07 model qualification pivot: OpenRouter Gemini medium primary + Grok low secondary; AI Studio fallback only
 - 2026-03-07_agent00.md — EXP014 extension (+3/+3), viewer token diagnostics, prompt/context token baseline, handoff prep
 - 2026-03-08_agent00.md — EXP021/022/023 prompt ablations, EXP023 baseline adoption, handoff for game-setup changes
+- 2026-03-09_agent00.md — agent13 cycle: tie-rule change + Mimo secondary policy + prompt explicitness A/B
