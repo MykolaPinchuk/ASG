@@ -16,6 +16,7 @@ Keep this file short. Update it only when something important changes.
 - `docs/planning/EXPERIMENT_LOGGING_SPEC.md` — required logging artifacts/fields for iterative ablation workflows.
 - `docs/planning/EXPERIMENT_PACK_SPEC.md` — committed experiment-pack layout for baseline vs variant state + artifacts.
 - `docs/planning/PROMPT_CONTEXT_TOKEN_BASELINE.md` — measured prompt/context token budget baseline and representation cost breakdown.
+- `docs/planning/ACTION_LOG_MEMORY_REPRESENTATION.md` — proposed separation between canonical per-ply action logs, derived full-turn memory, and minimal prompt-memory payloads.
 - `docs/planning/V06_EXPERIMENTS.md` — v06 backlog of agent-improvement experiments (warmup/memory/repair loops).
 - `docs/planning/V07_COMPLEXITY_EXPERIMENT.md` — v07 plan: behavior-focused experiments in current setup (harness/prompt/context), with model qualification by reliability/latency/telemetry.
 - `docs/planning/FUTURE_EXPERIMENT_IDEAS.md` — queued experiment ideas to run later (parking lot).
