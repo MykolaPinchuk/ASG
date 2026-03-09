@@ -28,3 +28,12 @@
 - Adopted baseline prompt file for prompt-ablation guards:
   - `experiments/baselines/system_prompt_act_exp023.txt`
 - When moving to stronger models, explicitly re-test whether high performance holds with less explicit guidance.
+
+## Current Model Roles (as of 2026-03-08)
+
+- Primary model for prompt/rules ablations:
+  - OpenRouter `google/gemini-3.1-flash-lite-preview` with `reasoning-effort=medium`.
+- Secondary model (fallback qualifier):
+  - OpenRouter `xiaomi/mimo-v2-flash` with `reasoning-effort=low`.
+  - Force Xiaomi routing in evals: `--openrouter-provider-only xiaomi --openrouter-allow-fallbacks false`.
+  - Use extended runtime budget for this model: `--timeout-ms 120000 --agent-timeout-ms 130000`.

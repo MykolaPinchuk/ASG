@@ -337,6 +337,9 @@ async function evalOneModel(params: {
   reasoningEffort?: string;
   rationaleStyle?: string;
   reasoningSplit?: string;
+  openrouterProviderOnly?: string;
+  openrouterProviderOrder?: string;
+  openrouterAllowFallbacks?: string;
   memory?: string;
   memoryMaxChars?: string;
   warmup?: string;
@@ -402,6 +405,9 @@ async function evalOneModel(params: {
   if (params.reasoningEffort) serverArgs.push("--reasoning-effort", params.reasoningEffort);
   if (params.rationaleStyle) serverArgs.push("--rationale-style", params.rationaleStyle);
   if (params.reasoningSplit) serverArgs.push("--reasoning-split", params.reasoningSplit);
+  if (params.openrouterProviderOnly) serverArgs.push("--openrouter-provider-only", params.openrouterProviderOnly);
+  if (params.openrouterProviderOrder) serverArgs.push("--openrouter-provider-order", params.openrouterProviderOrder);
+  if (params.openrouterAllowFallbacks) serverArgs.push("--openrouter-allow-fallbacks", params.openrouterAllowFallbacks);
   if (params.memory) serverArgs.push("--memory", params.memory);
   if (params.memoryMaxChars) serverArgs.push("--memory-max-chars", params.memoryMaxChars);
   if (params.warmup) serverArgs.push("--warmup", params.warmup);
@@ -787,6 +793,9 @@ async function main() {
   const reasoningEffort = args.get("--reasoning-effort") ?? undefined;
   const rationaleStyle = args.get("--rationale-style") ?? undefined;
   const reasoningSplit = args.get("--reasoning-split") ?? undefined;
+  const openrouterProviderOnly = args.get("--openrouter-provider-only") ?? undefined;
+  const openrouterProviderOrder = args.get("--openrouter-provider-order") ?? undefined;
+  const openrouterAllowFallbacks = args.get("--openrouter-allow-fallbacks") ?? undefined;
 
   const modelsRaw = args.get("--models") ?? "";
   const modelsFile = args.get("--models-file");
@@ -1042,6 +1051,9 @@ async function main() {
         reasoningEffort,
         rationaleStyle,
         reasoningSplit,
+        openrouterProviderOnly,
+        openrouterProviderOrder,
+        openrouterAllowFallbacks,
         memory,
         memoryMaxChars,
         warmup,

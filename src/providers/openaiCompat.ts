@@ -806,6 +806,49 @@ function parseReasoningSplit(params: { args: ProviderArgs; provider: string }): 
   throw new Error(`invalid --reasoning-split '${raw}' (expected auto|true|false)`);
 }
 
+function parseCsvList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function parseOptionalBool(raw: string | undefined, flagName: string): boolean | undefined {
+  if (raw === undefined) return undefined;
+  const v = raw.toLowerCase().trim();
+  if (v === "true" || v === "1" || v === "yes" || v === "on") return true;
+  if (v === "false" || v === "0" || v === "no" || v === "off") return false;
+  throw new Error(`invalid ${flagName} '${raw}' (expected true|false)`);
+}
+
+function parseOpenRouterProviderRouting(params: {
+  args: ProviderArgs;
+  provider: string;
+  baseUrl: string;
+}): { only?: string[]; order?: string[]; allow_fallbacks?: boolean } | null {
+  const isOpenRouter =
+    params.provider.toLowerCase() === "openrouter" || normalizeBaseUrl(params.baseUrl).includes("openrouter.ai");
+  if (!isOpenRouter) return null;
+
+  const onlyRaw = params.args.get("--openrouter-provider-only") ?? process.env.ASG_OPENROUTER_PROVIDER_ONLY ?? undefined;
+  const orderRaw = params.args.get("--openrouter-provider-order") ?? process.env.ASG_OPENROUTER_PROVIDER_ORDER ?? undefined;
+  const allowFallbacksRaw =
+    params.args.get("--openrouter-allow-fallbacks") ?? process.env.ASG_OPENROUTER_ALLOW_FALLBACKS ?? undefined;
+
+  const only = parseCsvList(onlyRaw);
+  const order = parseCsvList(orderRaw);
+  const allow_fallbacks = parseOptionalBool(allowFallbacksRaw, "--openrouter-allow-fallbacks");
+
+  if (only.length === 0 && order.length === 0 && allow_fallbacks === undefined) return null;
+
+  const provider: { only?: string[]; order?: string[]; allow_fallbacks?: boolean } = {};
+  if (only.length > 0) provider.only = only;
+  if (order.length > 0) provider.order = order;
+  if (allow_fallbacks !== undefined) provider.allow_fallbacks = allow_fallbacks;
+  return provider;
+}
+
 async function resolveOpenAiCompatModel(params: {
   args: ProviderArgs;
   keys: Map<string, string>;
@@ -1006,6 +1049,12 @@ export async function openAiCompatAct(params: {
     payload.extra_body = { ...(isObject(payload.extra_body) ? payload.extra_body : {}), reasoning_split: reasoningSplit };
   }
   const streamMode = parseStreamMode({ args });
+  const openRouterProviderRouting = parseOpenRouterProviderRouting({
+    args,
+    provider: providerNameRaw,
+    baseUrl,
+  });
+  if (openRouterProviderRouting) payload.provider = openRouterProviderRouting;
 
   const headers: Record<string, string> = {
     "content-type": "application/json",

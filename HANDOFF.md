@@ -12,6 +12,10 @@ Primary model/setup used in recent runs:
 - Opponent: `greedy`
 - Runtime defaults used in experiments: `reasoning-effort=medium`, `rationale-style=concise`, tools off, stream off.
 
+Secondary model/setup (fallback qualifier):
+- Provider/model: OpenRouter `xiaomi/mimo-v2-flash`
+- Routing/runtime defaults: `--openrouter-provider-only xiaomi`, `--openrouter-allow-fallbacks false`, `reasoning-effort=low`, `rationale-style=concise`, `timeout-ms=120000`, `agent-timeout-ms=130000`, tools off, stream off.
+
 ## What Changed This Cycle
 - Adopted EXP023 prompt as the practical baseline for future prompt-ablation experiments.
 - Added explicit prompt-ablation isolation guard in eval CLI (required baseline prompt file + expected line diff).
