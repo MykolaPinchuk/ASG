@@ -345,7 +345,7 @@ async function materializePromptAndRuleArtifacts(params: {
     adjacency,
     promptMode,
     timeoutMs,
-    allowMemoryUpdate: memoryEnabled && warmupMode === "inline",
+    allowMemoryUpdate: memoryEnabled,
     purpose: "act",
     thinkHint,
     rationaleStyle,

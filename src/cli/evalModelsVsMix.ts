@@ -961,7 +961,7 @@ async function main() {
     adjacency,
     promptMode: promptModeResolved,
     timeoutMs: timeoutMsResolved,
-    allowMemoryUpdate: memoryEnabled && warmupMode === "inline",
+    allowMemoryUpdate: memoryEnabled,
     purpose: "act",
     thinkHint: thinkHintResolved,
     rationaleStyle: rationaleStyleResolved,
