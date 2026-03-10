@@ -346,8 +346,9 @@ function buildSystemPrompt(params: {
         ]),
     ...(params.allowMemoryUpdate
       ? [
-          "If you want to update your short persistent plan for this match, include memory_update as a single short string (<= 2 sentences).",
-          "If no update is needed, omit memory_update.",
+          "Use memory_update as a short carry-forward note for your future turns.",
+          "You MUST include memory_update as a single short string (<= 2 sentences) whenever your plan changed, any tactical thread remains unresolved, or any fact is likely to help on your next turn.",
+          "Omit memory_update only if there is truly nothing useful to carry forward beyond the current board state.",
         ]
       : []),
     ...(params.purpose === "warmup"
