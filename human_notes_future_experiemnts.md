@@ -130,6 +130,12 @@ Priority: later. Useful once one stack is stable enough to be a meaningful bench
 
 ## some experiemnts to try:
 
+- [recorded 2026-03-09] `EXP_035_gemini_memory_last_full_turn_s3` (Gemini, seeds 301-303): adding derived `lastFullTurn` memory preserved 3/3 wins and 0 provider-error turns, improved captures slightly (7.67 -> 8.33), but worsened plies/win (9.33 -> 10.67). Direction: mixed / inconclusive.
+- [recorded 2026-03-09] `EXP_036_gemini_memory_required_update_s3` (Gemini, seeds 301-303): stricter wording for `memory_update` still did **not** produce emitted `memoryUpdate` fields in replays. Variant stayed 3/3 with 0 provider-error turns, captures improved further (to 9.00), but plies/win worsened again (11.67). This was still effectively a derived-memory-only experiment.
+- [recorded 2026-03-09] `EXP_037_mimo_memory_required_update_s3` (Mimo low, Xiaomi-only, seeds 301-303): stricter memory variant also produced **no** emitted `memoryUpdate` fields. Variant stayed 3/3 with 0 provider-error turns, improved captures (6.33 -> 7.67), reduced avg latency materially, but worsened plies/win (4.33 -> 5.67). Direction: mixed.
+- [recorded 2026-03-09] Cross-model memory lesson so far: both Gemini and Mimo ignored optional/conditional free-text `memory_update`, even after stricter prompt wording. If we want to test agent-authored memory seriously, we likely need a **required structured field**, not just stronger wording.
+- [recorded 2026-03-09] Current evidence for derived `lastFullTurn` memory alone: it may increase captures, but it has not improved win rate and has tended to worsen plies/win in both tested models. Do not oversell it as a clear improvement.
+
 - [recorded 2026-03-09] `EXP_034_mimo_low_explicit_vs_less_explicit_s6` (post-EXP024 rules): Mimo low (Xiaomi-only, timeout120) went 6/6 under both prompts, but current explicit baseline was materially more efficient than older less-explicit instructions (avg plies 7.0 vs 11.33; lower latency/tokens per turn).
 - [recorded 2026-03-09] Cross-model status (post-EXP024 rules): we have Mimo explicit+less-explicit and Gemini explicit (`EXP_024`) in comparable epoch, but **Gemini less-explicit in post-EXP024 epoch is still missing**, so strict 2x2 model comparison is incomplete.
 - [recorded 2026-03-09] Model-role decision: keep `xiaomi/mimo-v2-flash` as a **secondary** model for now; we may promote it to primary later if needed. Cost note: Mimo is estimated around **60% cheaper** than `google/gemini-3.1-flash-lite-preview`.

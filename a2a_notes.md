@@ -37,3 +37,12 @@
   - OpenRouter `xiaomi/mimo-v2-flash` with `reasoning-effort=low`.
   - Force Xiaomi routing in evals: `--openrouter-provider-only xiaomi --openrouter-allow-fallbacks false`.
   - Use extended runtime budget for this model: `--timeout-ms 120000 --agent-timeout-ms 130000`.
+
+## Memory Experiment Lesson (as of 2026-03-09)
+
+- `EXP_035` / `EXP_036` / `EXP_037` tested derived last-full-turn memory and stricter `memory_update` wording.
+- Both Gemini and Mimo ignored the free-text `memory_update` field even when prompt wording said it MUST be included whenever next-turn-useful.
+- Conclusion: optional/conditional free-text memory fields are not a reliable test of agent-authored memory here.
+- If continuing memory work, prefer:
+  - required structured memory fields in the response schema, or
+  - purely code-derived memory blocks without depending on model-authored note fields.
