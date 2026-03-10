@@ -1,4 +1,25 @@
-import type { Action, DecisionDiagnostics, Observation } from "../game/types.js";
+import type { Action, DecisionDiagnostics, Observation, TurnSummary } from "../game/types.js";
+
+export interface FullTurnMemory {
+  turn: number;
+  me: {
+    actions: Action[];
+    summary: TurnSummary;
+  };
+  enemy: {
+    actions: Action[];
+    summary: TurnSummary;
+  };
+}
+
+export interface MemoryContext {
+  persistentNote?: string;
+  lastFullTurn?: FullTurnMemory;
+}
+
+export interface ControllerTurnContext {
+  memoryContext?: MemoryContext;
+}
 
 export interface ControllerOutput {
   actions: Action[];
@@ -10,5 +31,5 @@ export interface ControllerOutput {
 
 export interface Controller {
   id: string;
-  decide(observation: Observation): Promise<ControllerOutput> | ControllerOutput;
+  decide(observation: Observation, context?: ControllerTurnContext): Promise<ControllerOutput> | ControllerOutput;
 }

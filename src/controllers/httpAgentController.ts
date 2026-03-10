@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Controller, ControllerOutput } from "./controller.js";
+import type { Controller, ControllerOutput, MemoryContext, ControllerTurnContext } from "./controller.js";
 import type { Action, Observation, PlayerId } from "../game/types.js";
 
 type AgentRequest = {
@@ -11,6 +11,7 @@ type AgentRequest = {
   ply: number;
   action_budget: number;
   observation: object;
+  memory_context?: MemoryContext;
 };
 
 type AgentResponse = {
@@ -361,7 +362,7 @@ export class HttpAgentController implements Controller {
     return this.decisionTelemetry;
   }
 
-  async decide(observation: Observation): Promise<ControllerOutput> {
+  async decide(observation: Observation, context?: ControllerTurnContext): Promise<ControllerOutput> {
     const request: AgentRequest = {
       api_version: this.apiVersion,
       match_id: this.matchId,
@@ -370,6 +371,7 @@ export class HttpAgentController implements Controller {
       ply: observation.ply,
       action_budget: this.actionBudget,
       observation: observation as unknown as object,
+      ...(context?.memoryContext ? { memory_context: context.memoryContext } : {}),
     };
 
     const startedAt = Date.now();

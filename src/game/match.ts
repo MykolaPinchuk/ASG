@@ -1,7 +1,7 @@
 import { PRNG } from "./prng.js";
 import { applyTurn, createInitialState, deriveObservation, type EngineContext } from "./engine.js";
-import type { Controller } from "../controllers/controller.js";
-import type { GameResult, Replay, TurnRecord } from "./types.js";
+import type { Controller, FullTurnMemory } from "../controllers/controller.js";
+import { otherPlayer, type GameResult, type Replay, type TurnRecord } from "./types.js";
 import { pacificIsoString } from "../utils/pacificTime.js";
 
 export interface RunMatchParams {
@@ -16,6 +16,9 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
 
   let state = createInitialState(ctx);
   const turns: TurnRecord[] = [];
+  const pendingOwnTurn: Partial<Record<"P1" | "P2", TurnRecord>> = {};
+  const persistentNoteByPlayer: Partial<Record<"P1" | "P2", string>> = {};
+  const lastFullTurnByPlayer: Partial<Record<"P1" | "P2", FullTurnMemory>> = {};
   let result: GameResult | undefined;
 
   while (!result) {
@@ -27,7 +30,14 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
     } as const;
 
     const startedAt = Date.now();
-    const decision = await controller.decide(observations[player]);
+    const memoryContext =
+      persistentNoteByPlayer[player] || lastFullTurnByPlayer[player]
+        ? {
+            ...(persistentNoteByPlayer[player] ? { persistentNote: persistentNoteByPlayer[player] } : {}),
+            ...(lastFullTurnByPlayer[player] ? { lastFullTurn: lastFullTurnByPlayer[player] } : {}),
+          }
+        : undefined;
+    const decision = await controller.decide(observations[player], memoryContext ? { memoryContext } : undefined);
     const measuredLatencyMs = Date.now() - startedAt;
     const latencyMs = decision.latencyMs ?? measuredLatencyMs;
     if (!Number.isFinite(latencyMs) || latencyMs < 0) throw new Error(`invalid latencyMs (${latencyMs}) from controller=${controller.id}`);
@@ -54,7 +64,7 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
       });
     }
 
-    turns.push({
+    const turnRecord: TurnRecord = {
       ply: observations[player].ply,
       player,
       submittedActions: decision.actions,
@@ -69,7 +79,27 @@ export async function runMatch(params: RunMatchParams): Promise<Replay> {
       diagnostics: decision.diagnostics,
       events,
       stateAfter: state,
-    });
+    };
+    turns.push(turnRecord);
+
+    if (decision.memoryUpdate) persistentNoteByPlayer[player] = decision.memoryUpdate;
+
+    const completedFor = otherPlayer(player);
+    const waitingTurn = pendingOwnTurn[completedFor];
+    if (waitingTurn) {
+      lastFullTurnByPlayer[completedFor] = {
+        turn: Math.floor(waitingTurn.ply / 2) + 1,
+        me: {
+          actions: waitingTurn.submittedActions,
+          summary: waitingTurn.summary,
+        },
+        enemy: {
+          actions: turnRecord.submittedActions,
+          summary: turnRecord.summary,
+        },
+      };
+    }
+    pendingOwnTurn[player] = turnRecord;
   }
 
   return {

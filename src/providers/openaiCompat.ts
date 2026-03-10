@@ -16,6 +16,7 @@ type AgentRequest = {
   ply: number;
   action_budget: number;
   observation: any;
+  memory_context?: unknown;
 };
 
 type ProviderArgs = Map<string, string>;
@@ -457,7 +458,7 @@ function buildUserPromptCompact(params: {
   request: AgentRequest;
   scenario: Scenario;
   adjacency: Record<string, string[]>;
-  memory?: string;
+  memory?: unknown;
   repairFeedback?: unknown;
 }) {
   const { request, scenario, adjacency } = params;
@@ -555,7 +556,7 @@ function buildUserPrompt(params: {
   request: AgentRequest;
   scenario: Scenario;
   adjacency: Record<string, string[]>;
-  memory?: string;
+  memory?: unknown;
   repairFeedback?: unknown;
 }) {
   const { request, scenario, adjacency } = params;
@@ -649,7 +650,7 @@ export function buildOpenAiCompatPromptSnapshot(params: {
   rationaleStyle: RationaleStyle;
   combatTiePromptMode?: CombatTiePromptMode | string;
   systemPromptOverrideText?: string;
-  memory?: string;
+  memory?: unknown;
   repairFeedback?: unknown;
 }): {
   systemPrompt: string;
@@ -963,7 +964,7 @@ export async function openAiCompatAct(params: {
   scenario: Scenario;
   adjacency: Record<string, string[]>;
   args: ProviderArgs;
-  memory?: string;
+  memory?: unknown;
   allowMemoryUpdate?: boolean;
   purpose?: "act" | "repair" | "warmup";
   repairFeedback?: unknown;

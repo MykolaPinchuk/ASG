@@ -15,6 +15,7 @@ type AgentRequest = {
   ply: number;
   action_budget: number;
   observation: any;
+  memory_context?: unknown;
 };
 
 type Action =
@@ -589,6 +590,17 @@ function clampMemoryText(text: string, maxChars: number): string {
   return t.slice(0, maxChars).replace(/\s+\S*$/, "").trim();
 }
 
+function buildPromptMemory(params: { persistentText?: string; requestMemoryContext?: unknown }): unknown {
+  const { persistentText, requestMemoryContext } = params;
+  const persistentNote = typeof persistentText === "string" && persistentText.trim().length > 0 ? persistentText.trim() : undefined;
+  const requestContext = isObject(requestMemoryContext) ? requestMemoryContext : undefined;
+
+  if (!persistentNote && !requestContext) return undefined;
+  if (!requestContext) return { persistentNote };
+  if (!persistentNote) return requestContext;
+  return { ...requestContext, persistentNote };
+}
+
 function fnv1a32(input: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
@@ -909,6 +921,7 @@ async function main() {
 
     const memoryKey = `${request.match_id}|${request.player}`;
     const existingMemory = memoryEnabled ? memoryByKey.get(memoryKey) : undefined;
+    const requestMemoryContext = isObject(request.memory_context) ? request.memory_context : undefined;
 
     if (provider === "openai_compat") {
       const providerNameRaw = args.get("--provider-name") ?? process.env.ASG_OPENAI_PROVIDER ?? "openai";
@@ -964,7 +977,8 @@ async function main() {
         }
 
         const memoryNow = memoryEnabled ? memoryByKey.get(memoryKey)?.text : undefined;
-        const allowMemoryUpdate = memoryEnabled && warmupMode === "inline" && !memoryNow && request.ply === 0;
+        const memoryPayload = buildPromptMemory({ persistentText: memoryNow, requestMemoryContext });
+        const allowMemoryUpdate = memoryEnabled;
         const requestOk = request;
         if (!requestOk) throw new Error("server: internal error (missing request)");
 
@@ -984,7 +998,7 @@ async function main() {
               scenario,
               adjacency,
               args: params.argsForCall,
-              memory: memoryNow,
+              memory: memoryPayload,
               allowMemoryUpdate,
               purpose: "act",
             });
@@ -1041,7 +1055,7 @@ async function main() {
                 scenario,
                 adjacency,
                 args: candArgs,
-                memory: memoryNow,
+                memory: memoryPayload,
                 allowMemoryUpdate: false,
                 purpose: "act",
               });
@@ -1113,7 +1127,7 @@ async function main() {
               modelMode: (args.get("--model") ?? process.env.ASG_OPENAI_MODEL ?? "").toLowerCase() === "auto" ? "auto" : "explicit",
             };
 
-            if (memoryEnabled && allowMemoryUpdate && typeof response.memory_update === "string") {
+            if (memoryEnabled && typeof response.memory_update === "string") {
               const clamped = clampMemoryText(response.memory_update, memoryMaxChars);
               if (clamped) memoryByKey.set(memoryKey, { text: clamped, updatedAtPly: request.ply });
             }
@@ -1179,7 +1193,7 @@ async function main() {
             config: buildAgentConfigFromArgs(args),
           };
 
-          if (memoryEnabled && allowMemoryUpdate && typeof response.memory_update === "string") {
+          if (memoryEnabled && typeof response.memory_update === "string") {
             const clamped = clampMemoryText(response.memory_update, memoryMaxChars);
             if (clamped) memoryByKey.set(memoryKey, { text: clamped, updatedAtPly: request.ply });
           }
@@ -1224,12 +1238,13 @@ async function main() {
       try {
         const { openAiCompatAct } = await import("../providers/openaiCompat.js");
         const memoryNow = memoryEnabled ? memoryByKey.get(memoryKey)?.text : undefined;
+        const memoryPayload = buildPromptMemory({ persistentText: memoryNow, requestMemoryContext });
         const repairOut = await openAiCompatAct({
           request,
           scenario,
           adjacency,
           args: repairArgs,
-          memory: memoryNow,
+          memory: memoryPayload,
           allowMemoryUpdate: false,
           purpose: "repair",
           repairFeedback: feedback,
